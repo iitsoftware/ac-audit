@@ -9,7 +9,7 @@ npm install
 npm start
 ```
 
-Open http://localhost:8080. That's it — no build step, no external database.
+Open http://localhost:8090. That's it — no build step, no external database.
 
 ## Features
 
@@ -32,7 +32,7 @@ Open http://localhost:8080. That's it — no build step, no external database.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8080` | HTTP server port |
+| `PORT` | `8090` | HTTP server port |
 
 ```bash
 PORT=3000 npm start
