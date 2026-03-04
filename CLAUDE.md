@@ -4,185 +4,105 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ac-audit is an Audit Management System with audit tracking, compliance management, report generation, and user activity logging.
+ac-audit is an EASA Audit Management System with audit tracking, compliance management, and hierarchical question trees with compliance state aggregation.
 
 ## Tech Stack
 
-- **Backend**: Java 21 + Vert.x 4.x (reactive, non-blocking)
-- **Frontend**: Vue.js 3 + Vite + TypeScript + PrimeVue
-- **Database**: PostgreSQL with Flyway migrations
-- **Build**: Maven (backend), npm (frontend)
+- **Backend**: Node.js + Express
+- **Database**: SQLite via `better-sqlite3` (embedded, single file)
+- **Frontend**: Server-rendered EJS templates + vanilla JS
+- **CSS**: Custom CSS with auto dark/light mode (blue theme)
+- **Single process**: `npm start` runs everything
 
-## Configuration
+## Dependencies (4 total)
 
-All configuration files reside in `config/`:
-- `config/config.json` - Application settings (HTTP port, database credentials)
-- `config/logback.xml` - Logging configuration
+- `express` — HTTP server + routing
+- `better-sqlite3` — synchronous SQLite
+- `ejs` — HTML templates
+- `uuid` — UUID generation
 
-Default database credentials: user `trading`, password `trading`
-
-## Build Commands
-
-### Backend
-
-```bash
-# Build the backend
-cd backend && mvn clean package
-
-# Run the backend (starts on port 8080, reads config/config.json)
-cd backend && mvn exec:java
-
-# Run with custom logback config
-cd backend && mvn exec:java -Dlogback.configurationFile=config/logback.xml
-
-# Run a single test
-cd backend && mvn test -Dtest=TestClassName#methodName
-
-# Run all tests
-cd backend && mvn test
-```
-
-### Frontend
+## Commands
 
 ```bash
 # Install dependencies
-cd frontend && npm install
+npm install
 
-# Start dev server (port 3000, proxies /api to backend)
-cd frontend && npm run dev
+# Start the server (default port 8080)
+npm start
 
-# Build for production
-cd frontend && npm run build
-
-# Type check
-cd frontend && vue-tsc -b
+# Start on a custom port
+PORT=3000 npm start
 ```
 
-### Database
-
-PostgreSQL must be running. Default connection: localhost:5432/acaudit (user: trading, password: trading)
-
-```bash
-# Create database
-createdb acaudit
-
-# Migrations run automatically on backend startup via Flyway
-```
+No build step. No external database server.
 
 ## Architecture
 
 ```
 ac-audit/
-├── config/                     # Configuration files
-│   ├── config.json             # App config (db, http port)
-│   └── logback.xml             # Logging config
-├── backend/                    # Java/Vert.x backend
-│   └── src/main/java/com/iitsoftware/acaudit/
-│       ├── MainVerticle.java   # Entry point, loads config, HTTP server
-│       ├── api/                # REST API handlers
-│       ├── config/             # DatabaseConfig (reads from config.json)
-│       ├── model/              # Domain records (AuditEntry, ComplianceRule, etc.)
-│       ├── repository/         # Database access (Vert.x Pg Client)
-│       └── service/            # Business logic
-├── frontend/                   # Vue.js 3 frontend
-│   └── src/
-│       ├── api/client.ts       # API client with types
-│       ├── router/             # Vue Router
-│       └── views/              # Page components
-└── db/migrations/              # Flyway SQL migrations
+├── package.json
+├── server.js              # Express app, all routes, page rendering
+├── db.js                  # SQLite setup, prepared statements
+├── schema.sql             # All tables (CREATE IF NOT EXISTS)
+├── public/                # Static files
+│   ├── style.css          # Custom CSS (blue theme, dark/light auto)
+│   ├── app.js             # Shared: fetchJSON, escapeHtml, toast
+│   └── companies.js       # Companies page logic
+├── views/                 # EJS templates
+│   ├── layout.ejs         # Base HTML (nav, CSS, scripts)
+│   └── companies.ejs      # Companies page (left pane + detail)
+└── data/                  # SQLite DB file (gitignored)
+    └── acaudit.db
+```
+
+## Data Model
+
+```
+Company (id, name, street, postal_code, city, logo BLOB, created_at, updated_at)
+  └── Department (id, company_id FK, name, easa_permission_number, created_at, updated_at)
+       └── AuditPlan (id, department_id FK, name, year, created_at, updated_at)
 ```
 
 ## API Endpoints
 
-- `GET/POST /api/audits` - Audit entries
-- `GET/POST/PUT/DELETE /api/compliance/rules` - Compliance rules
-- `GET /api/compliance/status` - Compliance status
-- `GET /api/reports/templates`, `POST /api/reports/generate`, `POST /api/reports/export/:format` - Reports
-- `GET/POST /api/activities` - User activities
-- `GET /health` - Health check
+### Companies
+- `GET /api/companies` — list all (includes has_logo flag)
+- `GET /api/companies/:id` — single company detail
+- `POST /api/companies` — create (JSON, optional base64 logo)
+- `PUT /api/companies/:id` — update fields
+- `DELETE /api/companies/:id` — delete (CASCADE deletes departments)
+- `GET /api/companies/:id/logo` — serve logo image
+- `PUT /api/companies/:id/logo` — upload/remove logo (base64 JSON)
+
+### Departments
+- `GET /api/companies/:companyId/departments` — list for a company
+- `POST /api/companies/:companyId/departments` — create
+- `PUT /api/departments/:id` — update name + description
+- `DELETE /api/departments/:id` — delete
+
+### Audit Plans
+- `GET /api/departments/:departmentId/audit-plans` — list for a department
+- `POST /api/departments/:departmentId/audit-plans` — create
+- `PUT /api/audit-plans/:id` — update name + year
+- `DELETE /api/audit-plans/:id` — delete
+
+### Other
+- `GET /health` — Health check
 
 ## Key Patterns
 
-- Backend uses Vert.x Future for async operations
-- Configuration loaded from `config/config.json` using Vert.x ConfigRetriever
-- All API handlers follow the pattern: parse request -> call service -> return JSON
-- Frontend uses Composition API with `<script setup>`
-- PrimeVue components for UI (DataTable, Dialog, Card, etc.)
-- Clickable text pattern: `cursor-pointer hover:text-primary`
+- Database schema runs on every startup with `CREATE TABLE IF NOT EXISTS`
+- SQLite pragmas: `foreign_keys = ON`, `journal_mode = WAL`
+- All API handlers in `server.js` follow: parse request → call db → return JSON
+- Frontend pages: EJS template (HTML shell) + vanilla JS file (fetch data, render, handle events)
+- Page rendering: `renderPage()` helper renders page EJS into layout
+- Modals: native `<dialog>` element (`.showModal()` / `.close()`)                                                              
+- Logo stored as BLOB in SQLite, served via dedicated endpoint
+- Logo upload: file → base64 in browser → JSON to API → Buffer in DB
+- Left pane: company list with inline logo, name/city, hover edit/delete icons
+- Right pane: department list for selected company
+- CSS auto dark/light mode via `@media (prefers-color-scheme: dark)`
 
-## Current Data Hierarchy
+## Database Tables
 
-```
-Company → Department → Audit Instance → Question → SubQuestion → ComplianceState
-                    → Audit Template → Question → SubQuestion
-```
-
-## Hierarchical Audit API Endpoints
-
-- `GET/POST /api/companies`, `GET/PUT/DELETE /api/companies/:id`
-- `GET/POST /api/companies/:companyId/departments`, `GET/PUT/DELETE /api/departments/:id`
-- `GET/POST /api/audit-templates`, `GET/PUT/DELETE /api/audit-templates/:id`
-- `GET/POST /api/audit-templates/:templateId/questions`, `PUT/DELETE /api/audit-templates/:templateId/questions/:questionId`
-- `GET/POST /api/audit-instances`, `GET/PUT/DELETE /api/audit-instances/:id`
-- `GET/POST /api/audit-instances/:auditId/questions`, `PUT/DELETE /api/audit-instances/:auditId/questions/:questionId`
-- `GET/PUT /api/audit-instances/:auditId/questions/:questionId/compliance`
-- `GET /api/audit-instances/:auditId/progress`
-
----
-
-## NEXT TASK: Integrate Audit Templates into Organization Tree
-
-**Goal:** Move audit templates under departments in the OrganizationView tree:
-```
-Company
-  └── Department
-        └── Audit Template (NEW LEVEL)
-```
-
-### Required Changes
-
-#### 1. Database (V4__template_department_fk.sql)
-```sql
-ALTER TABLE audit_template ADD COLUMN department_id UUID REFERENCES department(id) ON DELETE CASCADE;
-CREATE INDEX idx_audit_template_department_id ON audit_template(department_id);
-```
-
-#### 2. Backend Updates
-- `AuditTemplate.java` - add `departmentId` field
-- `AuditTemplateRepository.java` - add `findByDepartmentId()`, update SQL
-- `AuditTemplateService.java` - update methods
-- `AuditTemplateApiHandler.java` - update endpoints
-- `client.ts` - add `departmentId` to `AuditTemplate` interface
-
-#### 3. Frontend Updates
-- `OrganizationView.vue`:
-  - Add `'template'` type to `TreeNode` interface
-  - Add `departmentId` to TreeNode
-  - Load templates for each department in `loadData()`
-  - Add expand/collapse for departments
-  - Add template CRUD within tree (create, edit, delete buttons)
-  - Click template name to open editor
-
-#### 4. Consider
-- Remove or repurpose `AuditTemplateListView.vue`
-- Keep `AuditTemplateEditorView.vue` for editing questions (navigate from tree)
-
----
-
-## Recent Changes Completed
-
-### Removed Unused Columns (V3 migration):
-- `company.active`
-- `department.active`
-- `audit_template.description`, `version`, `active`
-- `template_question.required`
-- `audit_question.required`
-
-### UI Changes:
-- Delete buttons grey when audits exist (with tooltip showing count)
-- Tooltip directive registered globally in `main.ts`
-- Template description removed from list and editor
-- OrganizationView converted to tree structure (Company → Department)
-- Progress computed from root questions
-- Parent questions show aggregated compliance state
-- Compliance not editable for parent questions (computed from children)
+company, department, audit_plan

@@ -1,0 +1,275 @@
+<div class="app-layout">
+  <!-- Left pane: company list -->
+  <aside class="left-pane">
+    <div class="pane-header" style="justify-content:flex-end">
+      <button class="btn-icon" id="btn-add" title="Firma hinzuf&uuml;gen">+</button>
+    </div>
+    <div class="pane-list" id="company-list"></div>
+  </aside>
+
+  <!-- Right pane: breadcrumb drill-down -->
+  <main class="main-content" id="main-content">
+    <div class="empty-state" id="empty-state">Firma ausw&auml;hlen</div>
+    <div id="right-pane-content" style="display:none">
+      <nav class="breadcrumb" id="breadcrumb"></nav>
+      <div class="pane-content-header" id="pane-content-header"></div>
+      <div id="pane-content-list"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Company Add / Edit dialog -->
+<dialog id="company-dialog">
+  <div class="dialog-header" id="dialog-title">Firma hinzuf&uuml;gen</div>
+  <form id="company-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="form-id">
+      <div class="form-group">
+        <label for="form-name">Name *</label>
+        <input type="text" id="form-name" required>
+      </div>
+      <div class="form-group">
+        <label for="form-street">Stra&szlig;e</label>
+        <input type="text" id="form-street">
+      </div>
+      <div class="form-group">
+        <label for="form-postal">PLZ</label>
+        <input type="text" id="form-postal">
+      </div>
+      <div class="form-group">
+        <label for="form-city">Stadt</label>
+        <input type="text" id="form-city">
+      </div>
+      <div class="form-group">
+        <label for="form-logo">Logo</label>
+        <input type="file" id="form-logo" accept="image/*">
+        <div class="logo-preview-row" id="logo-preview-row" style="display:none">
+          <img id="logo-preview" class="logo-preview">
+          <button type="button" class="remove-logo-btn" id="remove-logo-btn">Entfernen</button>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Company Delete confirmation dialog -->
+<dialog id="delete-dialog">
+  <div class="dialog-header">Firma l&ouml;schen</div>
+  <div class="dialog-body">
+    <p>Soll <strong id="delete-name"></strong> wirklich gel&ouml;scht werden?</p>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="delete-cancel">Abbrechen</button>
+    <button class="btn btn-danger" id="delete-confirm">L&ouml;schen</button>
+  </div>
+</dialog>
+
+<!-- Department Add / Edit dialog -->
+<dialog id="dept-dialog">
+  <div class="dialog-header" id="dept-dialog-title">Abteilung hinzuf&uuml;gen</div>
+  <form id="dept-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="dept-form-id">
+      <div class="form-group">
+        <label for="dept-form-name">Name *</label>
+        <input type="text" id="dept-form-name" required>
+      </div>
+      <div class="form-group">
+        <label for="dept-form-easa">EASA Genehmigungsnummer</label>
+        <input type="text" id="dept-form-easa">
+      </div>
+      <div class="form-group">
+        <label for="dept-form-regulation">Regulation</label>
+        <input type="text" id="dept-form-regulation">
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="dept-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="dept-btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Audit Plan Add / Edit dialog -->
+<dialog id="plan-dialog">
+  <div class="dialog-header" id="plan-dialog-title">Auditplan hinzuf&uuml;gen</div>
+  <form id="plan-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="plan-form-id">
+      <div class="form-group">
+        <label for="plan-form-year">Jahr *</label>
+        <input type="number" id="plan-form-year" required min="2000" max="2099">
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="plan-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="plan-btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- New Audit Plan options dialog -->
+<dialog id="new-plan-dialog">
+  <div class="dialog-header">Neuer Auditplan</div>
+  <div class="dialog-body">
+    <div class="new-plan-options">
+      <button class="btn btn-primary new-plan-option" id="new-plan-revision">Neue Revision</button>
+      <button class="btn btn-secondary new-plan-option" id="new-plan-template">Von Vorlage</button>
+      <button class="btn btn-secondary new-plan-option" id="new-plan-empty">Neu (leer)</button>
+    </div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="new-plan-cancel">Abbrechen</button>
+  </div>
+</dialog>
+
+<!-- Revision select dialog -->
+<dialog id="revision-select-dialog">
+  <div class="dialog-header">Plan f&uuml;r neue Revision w&auml;hlen</div>
+  <div class="dialog-body dialog-body-scroll">
+    <div class="template-list" id="revision-select-list"></div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="revision-select-cancel">Abbrechen</button>
+  </div>
+</dialog>
+
+<!-- Template select dialog -->
+<dialog id="template-select-dialog">
+  <div class="dialog-header">Vorlage w&auml;hlen</div>
+  <div class="dialog-body dialog-body-scroll">
+    <div class="template-list" id="template-select-list"></div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="template-select-cancel">Abbrechen</button>
+  </div>
+</dialog>
+
+<!-- Audit Plan Delete confirmation dialog -->
+<dialog id="plan-delete-dialog">
+  <div class="dialog-header">Auditplan l&ouml;schen</div>
+  <div class="dialog-body">
+    <p>Soll <strong id="plan-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="plan-delete-cancel">Abbrechen</button>
+    <button class="btn btn-danger" id="plan-delete-confirm">L&ouml;schen</button>
+  </div>
+</dialog>
+
+<!-- Department Delete confirmation dialog -->
+<dialog id="dept-delete-dialog">
+  <div class="dialog-header">Abteilung l&ouml;schen</div>
+  <div class="dialog-body">
+    <p>Soll <strong id="dept-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="dept-delete-cancel">Abbrechen</button>
+    <button class="btn btn-danger" id="dept-delete-confirm">L&ouml;schen</button>
+  </div>
+</dialog>
+
+<!-- Themenbereich Delete confirmation dialog -->
+<dialog id="line-delete-dialog">
+  <div class="dialog-header">Themenbereich l&ouml;schen</div>
+  <div class="dialog-body">
+    <p>Soll dieser Themenbereich wirklich gel&ouml;scht werden?</p>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="line-delete-cancel">Abbrechen</button>
+    <button class="btn btn-danger" id="line-delete-confirm">L&ouml;schen</button>
+  </div>
+</dialog>
+
+<!-- Checklist Item Add / Edit dialog -->
+<dialog id="checklist-item-dialog">
+  <div class="dialog-header" id="checklist-item-dialog-title">Checklist-Eintrag hinzuf&uuml;gen</div>
+  <form id="checklist-item-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="ci-form-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ci-form-section">Bereich</label>
+          <select id="ci-form-section">
+            <option value="THEORETICAL">Theoretical / Documentation Verification</option>
+            <option value="PRACTICAL">Practical Review</option>
+            <option value="PROCEDURE">Procedure</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="ci-form-sort-order">#</label>
+          <input type="number" id="ci-form-sort-order" min="0" value="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="ci-form-regulation-ref">Regulation Ref.</label>
+        <input type="text" id="ci-form-regulation-ref">
+      </div>
+      <div class="form-group">
+        <label for="ci-form-compliance-check">Compliance Check</label>
+        <input type="text" id="ci-form-compliance-check">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ci-form-evaluation">Bewertung</label>
+          <select id="ci-form-evaluation">
+            <option value="">--</option>
+            <option value="C">C (Compliant)</option>
+            <option value="NA">NA (Not Applicable)</option>
+            <option value="O">O (Observation)</option>
+            <option value="L1">L1 (Level 1)</option>
+            <option value="L2">L2 (Level 2)</option>
+            <option value="L3">L3 (Level 3)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="ci-form-doc-ref">Dokument Ref.</label>
+          <input type="text" id="ci-form-doc-ref">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="ci-form-comment">Kommentar</label>
+        <textarea id="ci-form-comment" rows="2"></textarea>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="ci-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="ci-btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Hidden file input for .docx import -->
+<input type="file" id="import-file-input" accept=".docx" style="display:none">
+
+<!-- Hidden file input for .xlsx bulk import -->
+<input type="file" id="import-audits-input" accept=".xlsx" multiple style="display:none">
+
+<!-- Import Results dialog -->
+<dialog id="import-results-dialog" class="dialog-wide">
+  <div class="dialog-header" id="import-results-header">Import-Ergebnis</div>
+  <div class="dialog-body dialog-body-scroll" id="import-results-body"></div>
+  <div class="dialog-footer" id="import-mapping-footer" style="display:none">
+    <button class="btn btn-secondary" id="import-mapping-cancel">Abbrechen</button>
+    <button class="btn btn-primary" id="import-mapping-confirm">Importieren</button>
+  </div>
+  <div class="dialog-footer" id="import-results-footer" style="display:none">
+    <button class="btn btn-primary" id="import-results-close">Schlie&szlig;en</button>
+  </div>
+</dialog>
+
+<!-- Checklist Item Delete confirmation dialog -->
+<dialog id="checklist-item-delete-dialog">
+  <div class="dialog-header">Checklist-Eintrag l&ouml;schen</div>
+  <div class="dialog-body">
+    <p>Soll dieser Eintrag wirklich gel&ouml;scht werden?</p>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="ci-delete-cancel">Abbrechen</button>
+    <button class="btn btn-danger" id="ci-delete-confirm">L&ouml;schen</button>
+  </div>
+</dialog>
