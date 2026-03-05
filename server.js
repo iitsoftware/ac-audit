@@ -213,8 +213,8 @@ app.patch('/api/audit-plans/:id/status', (req, res) => {
 app.patch('/api/audit-plans/:id/dates', (req, res) => {
   const existing = stmts.getAuditPlan.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Audit plan not found' });
-  const { approved_at, submitted_at } = req.body;
-  stmts.updateAuditPlanDates.run(approved_at || null, submitted_at || null, existing.status, req.params.id);
+  const { approved_at, submitted_planned_at, submitted_at } = req.body;
+  stmts.updateAuditPlanDates.run(approved_at || null, submitted_planned_at || null, submitted_at || null, existing.status, req.params.id);
   res.json(stmts.getAuditPlan.get(req.params.id));
 });
 
@@ -861,6 +861,277 @@ app.get('/api/checklist-evidence-files/:id', (req, res) => {
 app.delete('/api/checklist-evidence-files/:id', (req, res) => {
   stmts.deleteChecklistEvidenceFile.run(req.params.id);
   res.status(204).end();
+});
+
+// ── API: Audit Plan PDF Export ───────────────────────────────
+const PDFDocument = require('pdfkit');
+
+app.get('/api/audit-plans/:id/pdf', (req, res) => {
+  const type = req.query.type || 'open';
+  if (type === 'closed') {
+    return res.status(501).json({ error: 'Geschlossener Plan ist noch nicht implementiert' });
+  }
+  if (type !== 'open') {
+    return res.status(400).json({ error: 'type must be open or closed' });
+  }
+
+  const plan = stmts.getAuditPlan.get(req.params.id);
+  if (!plan) return res.status(404).json({ error: 'Audit plan not found' });
+
+  const dept = stmts.getDepartment.get(plan.department_id);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
+
+  const company = stmts.getCompany.get(dept.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+
+  const logoRow = stmts.getCompanyLogo.get(company.id);
+  let lines = stmts.getAuditPlanLinesByPlan.all(plan.id);
+  const filter = req.query.filter;
+  if (filter === 'planned') {
+    lines = lines.filter(l => l.planned_window && l.planned_window.trim());
+  }
+
+  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="Auditplan_${plan.year}.pdf"`);
+  doc.pipe(res);
+
+  // ── Header: Logo then text below ──
+  let headerY = 50;
+  if (logoRow && logoRow.logo) {
+    try {
+      doc.image(logoRow.logo, 50, headerY, { height: 50 });
+      headerY += 60;
+    } catch {
+      // logo unreadable, skip
+    }
+  }
+  doc.fontSize(16).font('Helvetica-Bold').text(company.name, 50, headerY);
+  headerY += 25;
+
+  // ── Sub-header: Department + EASA number ──
+  doc.fontSize(10).font('Helvetica');
+  let subLine = dept.name;
+  if (dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
+  if (dept.regulation) subLine += `  |  ${dept.regulation}`;
+  doc.text(subLine, 50, headerY);
+  headerY += 40;
+
+  // ── Title ──
+  const title = `Auditplan ${plan.year} - Geplante Audits`;
+  doc.fontSize(14).font('Helvetica-Bold').text(title, 50, headerY);
+  headerY += 30;
+
+  // ── Table ──
+  const tableTop = headerY;
+  const colX = [50, 80, 250, 370];  // Nr, Thema, Bezug, Geplant
+  const colW = [30, 170, 120, 125]; // widths
+  const pageW = 595.28;
+  const marginRight = 50;
+  const tableRight = pageW - marginRight;
+
+  // Header row
+  doc.fontSize(9).font('Helvetica-Bold');
+  doc.rect(50, tableTop, tableRight - 50, 18).fill('#2563eb');
+  doc.fillColor('#ffffff');
+  doc.text('Nr.', colX[0] + 4, tableTop + 4, { width: colW[0], align: 'left' });
+  doc.text('Thema', colX[1] + 4, tableTop + 4, { width: colW[1], align: 'left' });
+  doc.text('Bezug', colX[2] + 4, tableTop + 4, { width: colW[2], align: 'left' });
+  doc.text('Geplant', colX[3] + 4, tableTop + 4, { width: colW[3], align: 'left' });
+  doc.fillColor('#000000');
+
+  let y = tableTop + 18;
+  doc.font('Helvetica').fontSize(8);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Calculate row height based on content
+    const subjectH = doc.heightOfString(line.subject || '', { width: colW[1] - 8 });
+    const regsH = doc.heightOfString(line.regulations || '', { width: colW[2] - 8 });
+    const plannedH = doc.heightOfString(line.planned_window || '', { width: colW[3] - 8 });
+    const rowH = Math.max(16, subjectH + 8, regsH + 8, plannedH + 8);
+
+    // New page if needed
+    if (y + rowH > 760) {
+      doc.addPage();
+      y = 50;
+    }
+
+    // Zebra striping
+    if (i % 2 === 0) {
+      doc.rect(50, y, tableRight - 50, rowH).fill('#f0f4ff');
+      doc.fillColor('#000000');
+    }
+
+    // Cell borders (light)
+    doc.strokeColor('#d0d0d0').lineWidth(0.5);
+    doc.rect(50, y, tableRight - 50, rowH).stroke();
+
+    // Cell content
+    doc.text(line.audit_no || String(i + 1), colX[0] + 4, y + 4, { width: colW[0] - 8 });
+    doc.text(line.subject || '', colX[1] + 4, y + 4, { width: colW[1] - 8 });
+    doc.text(line.regulations || '', colX[2] + 4, y + 4, { width: colW[2] - 8 });
+    doc.text(line.planned_window || '', colX[3] + 4, y + 4, { width: colW[3] - 8 });
+
+    y += rowH;
+  }
+
+  // ── Signature table ──
+  // Load persons for this company/department
+  const personsAll = stmts.getPersonsByCompany.all(company.id);
+  const qmPerson = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+  const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
+  const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
+
+  // Dynamic label for Abteilungsleiter based on regulation
+  const deptText = `${dept.name} ${dept.regulation || ''}`.toLowerCase();
+  let alLabel = 'Abteilungsleiter';
+  if (deptText.includes('145')) alLabel = 'Maintenance Manager';
+  else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
+  else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
+
+  const sigRowH = 50;
+  const sigTableH = 18 + sigRowH; // header + content
+  if (y + sigTableH + 20 > 760) {
+    doc.addPage();
+    y = 50;
+  }
+  y += 16; // spacing
+
+  const sigCols = 5;
+  const sigColW = (tableRight - 50) / sigCols;
+  const sigHeaders = ['Freigabe', 'Weitergabe LBA', 'Quality Manager', alLabel, 'Accountable Manager'];
+
+  // Header row
+  doc.fontSize(7).font('Helvetica-Bold');
+  doc.rect(50, y, tableRight - 50, 18).fill('#2563eb');
+  doc.fillColor('#ffffff');
+  for (let c = 0; c < sigCols; c++) {
+    doc.text(sigHeaders[c], 50 + c * sigColW + 4, y + 4, { width: sigColW - 8, align: 'center' });
+  }
+  doc.fillColor('#000000');
+  y += 18;
+
+  // Content row
+  doc.strokeColor('#d0d0d0').lineWidth(0.5);
+  doc.rect(50, y, tableRight - 50, sigRowH).stroke();
+  for (let c = 1; c < sigCols; c++) {
+    doc.moveTo(50 + c * sigColW, y).lineTo(50 + c * sigColW, y + sigRowH).stroke();
+  }
+
+  function formatDateDE(isoStr) {
+    if (!isoStr) return '';
+    const d = isoStr.substring(0, 10).split('-');
+    if (d.length !== 3) return isoStr;
+    return `${d[2]}.${d[1]}.${d[0]}`;
+  }
+
+  doc.font('Helvetica').fontSize(9);
+
+  // Col 0: Freigabe date
+  doc.text(formatDateDE(plan.approved_at), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
+
+  // Col 1: Weitergabe LBA (geplant)
+  doc.text(formatDateDE(plan.submitted_planned_at), 50 + sigColW + 4, y + 4, { width: sigColW - 8, align: 'center' });
+
+  // Col 2-4: Signatures
+  const sigPersons = [qmPerson, alPerson, accPerson];
+  for (let c = 0; c < 3; c++) {
+    const person = sigPersons[c];
+    const cx = 50 + (c + 2) * sigColW;
+    if (person) {
+      const sigRow = stmts.getPersonSignature.get(person.id);
+      if (sigRow && sigRow.signature) {
+        try {
+          doc.image(sigRow.signature, cx + 4, y + 2, { width: sigColW - 8, height: sigRowH - 4, fit: [sigColW - 8, sigRowH - 12] });
+        } catch { /* unreadable */ }
+      }
+      // Name below signature
+      const name = `${person.first_name} ${person.last_name}`.trim();
+      if (name) {
+        doc.fontSize(6).text(name, cx + 4, y + sigRowH - 10, { width: sigColW - 8, align: 'center' });
+      }
+    }
+  }
+
+  y += sigRowH;
+
+  // Footer on every page
+  const pages = doc.bufferedPageRange();
+  for (let p = pages.start; p < pages.start + pages.count; p++) {
+    doc.switchToPage(p);
+    const footerY = 770;
+    doc.strokeColor('#000000').lineWidth(0.5);
+    doc.moveTo(50, footerY).lineTo(tableRight, footerY).stroke();
+    doc.fontSize(7).fillColor('#000000').font('Helvetica');
+    doc.text('Erstellt mit ac-audit', 50, footerY + 4, { lineBreak: false });
+    const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
+    doc.text(pageLabel, 50, footerY + 4, { width: tableRight - 50, align: 'right', lineBreak: false });
+  }
+
+  doc.end();
+});
+
+// ── API: Persons ──────────────────────────────────────────────
+
+const COMPANY_ROLES = ['ACCOUNTABLE'];
+const DEPT_ROLES = ['QM', 'ABTEILUNGSLEITER'];
+const ALL_ROLES = [...COMPANY_ROLES, ...DEPT_ROLES];
+
+app.get('/api/companies/:companyId/persons', (req, res) => {
+  const company = stmts.getCompany.get(req.params.companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  res.json(stmts.getPersonsByCompany.all(req.params.companyId));
+});
+
+app.post('/api/companies/:companyId/persons', (req, res) => {
+  const company = stmts.getCompany.get(req.params.companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  const { role, first_name, last_name, department_id } = req.body;
+  if (!role || !ALL_ROLES.includes(role)) return res.status(400).json({ error: 'Invalid role' });
+  if (DEPT_ROLES.includes(role) && !department_id) return res.status(400).json({ error: 'department_id required for department roles' });
+  const deptId = DEPT_ROLES.includes(role) ? department_id : null;
+  const existing = deptId
+    ? stmts.getPersonByRoleDept.get(req.params.companyId, role, deptId)
+    : stmts.getPersonByRoleCompany.get(req.params.companyId, role);
+  if (existing) return res.status(409).json({ error: 'Role already assigned' });
+  const id = uuidv4();
+  const { email } = req.body;
+  stmts.createPerson.run(id, req.params.companyId, deptId, role, first_name || '', last_name || '', email || '');
+  res.status(201).json(stmts.getPerson.get(id));
+});
+
+app.put('/api/persons/:id', (req, res) => {
+  const person = stmts.getPerson.get(req.params.id);
+  if (!person) return res.status(404).json({ error: 'Person not found' });
+  const { first_name, last_name, email } = req.body;
+  stmts.updatePerson.run(first_name || '', last_name || '', email || '', req.params.id);
+  res.json(stmts.getPerson.get(req.params.id));
+});
+
+app.delete('/api/persons/:id', (req, res) => {
+  const person = stmts.getPerson.get(req.params.id);
+  if (!person) return res.status(404).json({ error: 'Person not found' });
+  stmts.deletePerson.run(req.params.id);
+  res.status(204).end();
+});
+
+app.put('/api/persons/:id/signature', (req, res) => {
+  const person = stmts.getPerson.get(req.params.id);
+  if (!person) return res.status(404).json({ error: 'Person not found' });
+  const { signature } = req.body;
+  const sigBuf = signature ? Buffer.from(signature, 'base64') : null;
+  stmts.updatePersonSignature.run(sigBuf, req.params.id);
+  res.json({ ok: true });
+});
+
+app.get('/api/persons/:id/signature', (req, res) => {
+  const row = stmts.getPersonSignature.get(req.params.id);
+  if (!row || !row.signature) return res.status(404).json({ error: 'No signature' });
+  res.set('Content-Type', 'image/png');
+  res.set('Cache-Control', 'no-cache');
+  res.send(row.signature);
 });
 
 // ── Health ──────────────────────────────────────────────────

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS audit_plan (
   approved_by TEXT DEFAULT '',
   approved_at TEXT,
   submitted_to TEXT DEFAULT '',
+  submitted_planned_at TEXT,
   submitted_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
@@ -96,6 +97,19 @@ CREATE TABLE IF NOT EXISTS cap_evidence_file (
   mime_type TEXT DEFAULT 'image/png',
   data BLOB NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS person (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES company(id) ON DELETE CASCADE,
+  department_id TEXT REFERENCES department(id) ON DELETE SET NULL,
+  role TEXT NOT NULL,
+  first_name TEXT DEFAULT '',
+  last_name TEXT DEFAULT '',
+  email TEXT DEFAULT '',
+  signature BLOB,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS checklist_evidence_file (

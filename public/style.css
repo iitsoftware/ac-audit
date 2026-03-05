@@ -942,6 +942,26 @@ dialog.dialog-wide {
   font-size: 15px;
 }
 
+/* ── PDF Export Options ─────────────────────────────────── */
+.pdf-export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.pdf-export-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.pdf-export-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding-left: 0.25rem;
+}
+
 /* ── Template List ──────────────────────────────────────── */
 .template-list {
   display: flex;
@@ -1446,6 +1466,25 @@ dialog.dialog-wide {
   border-radius: 3px;
   padding: 2px 6px;
   margin-bottom: 2px;
+}
+
+
+/* ── Signature Upload ─────────────────────────────────────────── */
+.sig-upload-row {
+  margin-top: 6px;
+}
+
+.sig-file-input {
+  font-size: 12px;
+}
+
+.sig-preview {
+  max-width: 120px;
+  max-height: 48px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+  background: var(--bg);
 }
 
 .evidence-pdf-name {

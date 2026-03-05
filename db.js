@@ -36,6 +36,7 @@ const auditPlanMigrations = [
   { name: 'approved_at', sql: "ALTER TABLE audit_plan ADD COLUMN approved_at TEXT" },
   { name: 'comment', sql: "ALTER TABLE audit_plan ADD COLUMN comment TEXT DEFAULT ''" },
   { name: 'submitted_to', sql: "ALTER TABLE audit_plan ADD COLUMN submitted_to TEXT DEFAULT ''" },
+  { name: 'submitted_planned_at', sql: "ALTER TABLE audit_plan ADD COLUMN submitted_planned_at TEXT" },
   { name: 'submitted_at', sql: "ALTER TABLE audit_plan ADD COLUMN submitted_at TEXT" },
 ];
 
@@ -59,6 +60,13 @@ try {
   db.prepare('SELECT regulation FROM department LIMIT 1').get();
 } catch {
   try { db.exec("ALTER TABLE department ADD COLUMN regulation TEXT DEFAULT ''"); } catch { /* already exists */ }
+}
+
+// Migration: add email to person
+try {
+  db.prepare('SELECT email FROM person LIMIT 1').get();
+} catch {
+  try { db.exec("ALTER TABLE person ADD COLUMN email TEXT DEFAULT ''"); } catch { /* already exists */ }
 }
 
 // Migration: rename statuses DRAFT → ENTWURF, ACTIVE → AKTIV
@@ -174,7 +182,7 @@ const stmts = {
 
   // Audit Plan
   getAuditPlansByDepartment: db.prepare(
-    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_at, created_at, updated_at FROM audit_plan WHERE department_id = ? ORDER BY year DESC'
+    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, created_at, updated_at FROM audit_plan WHERE department_id = ? ORDER BY year DESC'
   ),
   getAuditPlanProgress: db.prepare(
     `SELECT audit_plan_id,
@@ -185,7 +193,7 @@ const stmts = {
      GROUP BY audit_plan_id`
   ),
   getAuditPlan: db.prepare(
-    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_at, created_at, updated_at FROM audit_plan WHERE id = ?'
+    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, created_at, updated_at FROM audit_plan WHERE id = ?'
   ),
   createAuditPlan: db.prepare(
     "INSERT INTO audit_plan (id, department_id, name, year, status, revision) VALUES (?, ?, '', ?, ?, ?)"
@@ -200,7 +208,7 @@ const stmts = {
     `UPDATE audit_plan SET submitted_to = ?, submitted_at = ?, updated_at = datetime('now') WHERE id = ?`
   ),
   updateAuditPlanDates: db.prepare(
-    `UPDATE audit_plan SET approved_at = ?, submitted_at = ?, status = ?, updated_at = datetime('now') WHERE id = ?`
+    `UPDATE audit_plan SET approved_at = ?, submitted_planned_at = ?, submitted_at = ?, status = ?, updated_at = datetime('now') WHERE id = ?`
   ),
   archiveActiveByDepartment: db.prepare(
     `UPDATE audit_plan SET status = 'ARCHIV', updated_at = datetime('now') WHERE department_id = ? AND status = 'AKTIV'`
@@ -351,6 +359,38 @@ const stmts = {
   ),
   deleteChecklistEvidenceFile: db.prepare(
     'DELETE FROM checklist_evidence_file WHERE id = ?'
+  ),
+
+  // Persons
+  getPersonsByCompany: db.prepare(
+    `SELECT id, company_id, department_id, role, first_name, last_name, email,
+            CASE WHEN signature IS NOT NULL THEN 1 ELSE 0 END AS has_signature,
+            created_at, updated_at
+     FROM person WHERE company_id = ? ORDER BY role, created_at`
+  ),
+  getPerson: db.prepare(
+    'SELECT id, company_id, department_id, role, first_name, last_name, email, created_at, updated_at FROM person WHERE id = ?'
+  ),
+  getPersonByRoleCompany: db.prepare(
+    'SELECT id FROM person WHERE company_id = ? AND role = ? AND department_id IS NULL'
+  ),
+  getPersonByRoleDept: db.prepare(
+    'SELECT id FROM person WHERE company_id = ? AND role = ? AND department_id = ?'
+  ),
+  createPerson: db.prepare(
+    'INSERT INTO person (id, company_id, department_id, role, first_name, last_name, email) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ),
+  updatePerson: db.prepare(
+    `UPDATE person SET first_name = ?, last_name = ?, email = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  deletePerson: db.prepare(
+    'DELETE FROM person WHERE id = ?'
+  ),
+  updatePersonSignature: db.prepare(
+    `UPDATE person SET signature = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  getPersonSignature: db.prepare(
+    'SELECT signature FROM person WHERE id = ?'
   ),
 
   getCapSummaryByPlan: db.prepare(

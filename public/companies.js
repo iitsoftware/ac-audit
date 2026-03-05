@@ -53,6 +53,8 @@
   const revisionSelectDialog = document.getElementById('revision-select-dialog');
   const templateSelectDialog = document.getElementById('template-select-dialog');
 
+  let persons = [];
+
   const MONTH_ORDER = {
     'Januar': 1, 'Februar': 2, 'März': 3, 'April': 4,
     'Mai': 5, 'Juni': 6, 'Juli': 7, 'August': 8,
@@ -301,8 +303,76 @@
     });
   }
 
+  // ── Helper: save person for a role ────────────────────────
+  // sigState: { base64, remove } or null
+  async function savePerson(companyId, role, deptId, firstName, lastName, email, sigState) {
+    const p = persons.find(pr => pr.role === role && (deptId ? pr.department_id === deptId : !pr.department_id));
+    let personId;
+    if (p) {
+      await fetchJSON(`/api/persons/${p.id}`, { method: 'PUT', body: { first_name: firstName, last_name: lastName, email } });
+      personId = p.id;
+    } else if (firstName || lastName || email) {
+      const created = await fetchJSON(`/api/companies/${companyId}/persons`, {
+        method: 'POST',
+        body: { role, first_name: firstName, last_name: lastName, email, department_id: deptId }
+      });
+      personId = created.id;
+    }
+    if (personId && sigState) {
+      if (sigState.base64) {
+        await fetchJSON(`/api/persons/${personId}/signature`, { method: 'PUT', body: { signature: sigState.base64 } });
+      } else if (sigState.remove) {
+        await fetchJSON(`/api/persons/${personId}/signature`, { method: 'PUT', body: { signature: null } });
+      }
+    }
+  }
+
+  // Signature state per key (e.g. 'acc', 'mm', 'dept-qm', 'dept-al')
+  const sigStates = {};
+
+  function setupSigInput(key) {
+    sigStates[key] = null;
+    const fileInput = document.getElementById(key.startsWith('dept-') ? `dept-form-${key.replace('dept-','')}-sig` : `form-${key}-sig`);
+    const previewRow = document.getElementById(key.startsWith('dept-') ? `dept-form-${key.replace('dept-','')}-sig-preview-row` : `form-${key}-sig-preview-row`);
+    const previewImg = document.getElementById(key.startsWith('dept-') ? `dept-form-${key.replace('dept-','')}-sig-preview` : `form-${key}-sig-preview`);
+
+    fileInput.value = '';
+    fileInput.onchange = () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        sigStates[key] = { base64: reader.result.split(',')[1] };
+        previewImg.src = reader.result;
+        previewRow.style.display = 'flex';
+      };
+      reader.readAsDataURL(file);
+    };
+
+    return { previewRow, previewImg };
+  }
+
+  // Remove buttons for all signature previews
+  document.querySelectorAll('.remove-logo-btn[data-sig]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.sig;
+      sigStates[key] = { remove: true };
+      const previewRow = btn.closest('.logo-preview-row');
+      previewRow.style.display = 'none';
+      const fileInput = document.getElementById(key.startsWith('dept-') ? `dept-form-${key.replace('dept-','')}-sig` : `form-${key}-sig`);
+      fileInput.value = '';
+    });
+  });
+
+  async function loadPersons() {
+    if (!selectedId) return;
+    try {
+      persons = await fetchJSON(`/api/companies/${selectedId}/persons`);
+    } catch { persons = []; }
+  }
+
   // ── Company Dialog (Add / Edit) ───────────────────────────
-  function openDialog(company) {
+  async function openDialog(company) {
     const isEdit = !!company;
     document.getElementById('dialog-title').textContent = isEdit ? 'Firma bearbeiten' : 'Firma hinzuf\u00fcgen';
     document.getElementById('form-id').value = isEdit ? company.id : '';
@@ -320,6 +390,30 @@
       previewRow.style.display = 'flex';
     } else {
       previewRow.style.display = 'none';
+    }
+
+    // Person fields — only show when editing
+    const personsSection = document.getElementById('company-persons-section');
+    if (isEdit) {
+      await loadPersons();
+      const acc = persons.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
+      document.getElementById('form-acc-firstname').value = acc ? acc.first_name : '';
+      document.getElementById('form-acc-lastname').value = acc ? acc.last_name : '';
+      document.getElementById('form-acc-email').value = acc ? (acc.email || '') : '';
+
+      // Signatures
+      for (const { key, person } of [{ key: 'acc', person: acc }]) {
+        const { previewRow, previewImg } = setupSigInput(key);
+        if (person && person.has_signature) {
+          previewImg.src = `/api/persons/${person.id}/signature?t=${Date.now()}`;
+          previewRow.style.display = 'flex';
+        } else {
+          previewRow.style.display = 'none';
+        }
+      }
+      personsSection.style.display = '';
+    } else {
+      personsSection.style.display = 'none';
     }
 
     dialog.showModal();
@@ -369,6 +463,12 @@
         } else if (removeLogo) {
           await fetchJSON(`/api/companies/${id}/logo`, { method: 'PUT', body: { logo: null } });
         }
+        // Save company-level persons
+        await savePerson(id, 'ACCOUNTABLE', null,
+          document.getElementById('form-acc-firstname').value.trim(),
+          document.getElementById('form-acc-lastname').value.trim(),
+          document.getElementById('form-acc-email').value.trim(),
+          sigStates.acc);
         toast('Firma aktualisiert');
       } else {
         if (logoBase64) data.logo = logoBase64;
@@ -408,13 +508,50 @@
   });
 
   // ── Department Dialog (Add / Edit) ────────────────────────
-  function openDeptDialog(dept) {
+  async function openDeptDialog(dept) {
     const isEdit = !!dept;
     document.getElementById('dept-dialog-title').textContent = isEdit ? 'Abteilung bearbeiten' : 'Abteilung hinzuf\u00fcgen';
     document.getElementById('dept-form-id').value = isEdit ? dept.id : '';
     document.getElementById('dept-form-name').value = isEdit ? dept.name : '';
     document.getElementById('dept-form-easa').value = isEdit ? (dept.easa_permission_number || '') : '';
     document.getElementById('dept-form-regulation').value = isEdit ? (dept.regulation || '') : '';
+
+    // Person fields — only show when editing
+    const personsSection = document.getElementById('dept-persons-section');
+    if (isEdit) {
+      await loadPersons();
+      const qm = persons.find(p => p.role === 'QM' && p.department_id === dept.id);
+      const al = persons.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
+      document.getElementById('dept-form-qm-firstname').value = qm ? qm.first_name : '';
+      document.getElementById('dept-form-qm-lastname').value = qm ? qm.last_name : '';
+      document.getElementById('dept-form-qm-email').value = qm ? (qm.email || '') : '';
+      document.getElementById('dept-form-al-firstname').value = al ? al.first_name : '';
+      document.getElementById('dept-form-al-lastname').value = al ? al.last_name : '';
+      document.getElementById('dept-form-al-email').value = al ? (al.email || '') : '';
+
+      // Dynamic label for Abteilungsleiter based on regulation
+      const deptText = `${dept.name} ${dept.regulation || ''}`.toLowerCase();
+      let alLabel = 'Abteilungsleiter';
+      if (deptText.includes('145')) alLabel = 'Maintenance Manager';
+      else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
+      else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
+      document.getElementById('dept-form-al-label').textContent = alLabel;
+
+      // Signatures
+      for (const { key, person } of [{ key: 'dept-qm', person: qm }, { key: 'dept-al', person: al }]) {
+        const { previewRow, previewImg } = setupSigInput(key);
+        if (person && person.has_signature) {
+          previewImg.src = `/api/persons/${person.id}/signature?t=${Date.now()}`;
+          previewRow.style.display = 'flex';
+        } else {
+          previewRow.style.display = 'none';
+        }
+      }
+      personsSection.style.display = '';
+    } else {
+      personsSection.style.display = 'none';
+    }
+
     deptDialog.showModal();
     document.getElementById('dept-form-name').focus();
   }
@@ -435,6 +572,17 @@
     try {
       if (id) {
         await fetchJSON(`/api/departments/${id}`, { method: 'PUT', body: data });
+        // Save department-level persons
+        await savePerson(selectedId, 'QM', id,
+          document.getElementById('dept-form-qm-firstname').value.trim(),
+          document.getElementById('dept-form-qm-lastname').value.trim(),
+          document.getElementById('dept-form-qm-email').value.trim(),
+          sigStates['dept-qm']);
+        await savePerson(selectedId, 'ABTEILUNGSLEITER', id,
+          document.getElementById('dept-form-al-firstname').value.trim(),
+          document.getElementById('dept-form-al-lastname').value.trim(),
+          document.getElementById('dept-form-al-email').value.trim(),
+          sigStates['dept-al']);
         toast('Abteilung aktualisiert');
       } else {
         await fetchJSON(`/api/companies/${selectedId}/departments`, { method: 'POST', body: data });
@@ -754,6 +902,7 @@
     `;
 
     const approvedDisplay = formatDateDE(currentPlan.approved_at);
+    const submittedPlannedDisplay = formatDateDE(currentPlan.submitted_planned_at);
     const submittedDisplay = formatDateDE(currentPlan.submitted_at);
 
     let html = `<div class="plan-detail">`;
@@ -761,7 +910,8 @@
     // Meta info as inline editable row
     html += `<div class="plan-meta">`;
     html += `<div class="plan-meta-item"><span class="plan-meta-label">Datum Freigabe</span> <input type="text" class="plan-date-input" id="plan-approved-at" value="${escapeHtml(approvedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
-    html += `<div class="plan-meta-item"><span class="plan-meta-label">Datum Weitergabe LBA</span> <input type="text" class="plan-date-input" id="plan-submitted-at" value="${escapeHtml(submittedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
+    html += `<div class="plan-meta-item"><span class="plan-meta-label">Weitergabe LBA (geplant)</span> <input type="text" class="plan-date-input" id="plan-submitted-planned-at" value="${escapeHtml(submittedPlannedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
+    html += `<div class="plan-meta-item"><span class="plan-meta-label">Weitergabe LBA (durchgef\u00fchrt)</span> <input type="text" class="plan-date-input" id="plan-submitted-at" value="${escapeHtml(submittedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
     html += `</div>`;
 
     // Lines are already sorted by audit_no from the server
@@ -800,6 +950,7 @@
     html += `<div class="plan-lines-header">
       <h3>Themenbereiche</h3>
       <div style="display:flex;gap:0.25rem">
+        <button class="btn-icon" id="btn-pdf-export" title="PDF exportieren">\u{1F4C4}</button>
         <button class="btn-icon" id="btn-import-audits" title="Audit-Checklisten importieren (.xlsx)">\u{1F4E5}</button>
         <button class="btn-icon" id="btn-add-line" title="Themenbereich hinzuf\u00fcgen">+</button>
       </div>
@@ -913,18 +1064,20 @@
       return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
     }
 
-    // Save both dates (no auto-status)
+    // Save all dates (no auto-status)
     async function savePlanDates() {
       const approvedRaw = document.getElementById('plan-approved-at').value;
+      const submittedPlannedRaw = document.getElementById('plan-submitted-planned-at').value;
       const submittedRaw = document.getElementById('plan-submitted-at').value;
       const approvedIso = parseDateInput(approvedRaw);
+      const submittedPlannedIso = parseDateInput(submittedPlannedRaw);
       const submittedIso = parseDateInput(submittedRaw);
-      if (approvedIso === undefined || submittedIso === undefined) return;
+      if (approvedIso === undefined || submittedPlannedIso === undefined || submittedIso === undefined) return;
 
       try {
         currentPlan = await fetchJSON(`/api/audit-plans/${currentPlan.id}/dates`, {
           method: 'PATCH',
-          body: { approved_at: approvedIso, submitted_at: submittedIso }
+          body: { approved_at: approvedIso, submitted_planned_at: submittedPlannedIso, submitted_at: submittedIso }
         });
       } catch (err) {
         toast(err.message, 'error');
@@ -932,10 +1085,13 @@
     }
 
     const planApprovedInput = document.getElementById('plan-approved-at');
+    const planSubmittedPlannedInput = document.getElementById('plan-submitted-planned-at');
     const planSubmittedInput = document.getElementById('plan-submitted-at');
     initDateAutoFormat(planApprovedInput);
+    initDateAutoFormat(planSubmittedPlannedInput);
     initDateAutoFormat(planSubmittedInput);
     planApprovedInput.addEventListener('blur', savePlanDates);
+    planSubmittedPlannedInput.addEventListener('blur', savePlanDates);
     planSubmittedInput.addEventListener('blur', savePlanDates);
 
     // Bind add line: create empty line, then navigate to detail
@@ -963,6 +1119,11 @@
         navPath.push({ type: 'audit-plan-line', id: line.id, name: line.subject || 'Themenbereich' });
         renderCurrentLevel();
       });
+    });
+
+    // Bind PDF export button
+    document.getElementById('btn-pdf-export').addEventListener('click', () => {
+      document.getElementById('pdf-export-dialog').showModal();
     });
 
     // Bind import audits button
@@ -1463,6 +1624,16 @@
   document.getElementById('import-results-close').addEventListener('click', () => {
     importResultsDialog.close();
     if (currentPlan) loadAuditPlanDetail(currentPlan.id);
+  });
+
+  // ── PDF Export Dialog ──────────────────────────────────────
+  const pdfExportDialog = document.getElementById('pdf-export-dialog');
+  document.getElementById('pdf-export-cancel').addEventListener('click', () => pdfExportDialog.close());
+  document.getElementById('pdf-export-open').addEventListener('click', () => {
+    if (currentPlan) {
+      window.open(`/api/audit-plans/${currentPlan.id}/pdf?type=open&filter=planned`, '_blank');
+    }
+    pdfExportDialog.close();
   });
 
   // ── CAP Section ──────────────────────────────────────────
