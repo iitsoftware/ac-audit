@@ -14,10 +14,12 @@ Open http://localhost:8090. No build step, no external database.
 ## Features
 
 - **Company & Department Management** — Organize by company with logo, address, and EASA permission numbers
+- **Persons & Roles** — Accountable Manager (company level), Quality Manager and Abteilungsleiter (department level) with name, email, and signature upload. Abteilungsleiter label auto-derived from department type (Part-145 → Maintenance Manager, CAMO → Leiter CAMO, Flugbetrieb → Flugbetriebsleiter)
 - **Audit Plans** — Yearly plans with revision tracking, status workflow (Entwurf / Aktiv / Archiv), and approval/submission dates
 - **Audit Plan Lines** — Subject areas with planned/performed dates, auditor team, auditee, and document references
 - **Audit Checklists** — Per-line checklists with Theoretical, Practical, and Procedure sections; evaluations (C, NA, O, L1, L2, L3)
 - **Corrective Action Plan (CAP)** — Auto-generated for findings/observations, inline detail with deadline, root cause, corrective/preventive actions, and status tracking
+- **PDF Export** — Audit plan PDF with signature table (Freigabe, Weitergabe LBA, QM/MM/AM signatures), page numbers
 - **Evidence Upload** — Attach images to CAP items as proof of corrective actions
 - **Import** — Import audit plans from .docx, bulk-import audit checklists from .xlsx
 - **Copy & Revision** — Create new plan revisions or copy plans as templates across departments
@@ -47,7 +49,9 @@ PORT=3000 npm start
 
 ```
 Company
+  ├── Person (Accountable Manager — company level)
   └── Department
+       ├── Person (Quality Manager, Abteilungsleiter — department level)
        └── Audit Plan (year, revision, status)
             └── Audit Plan Line (subject area, audit metadata)
                  └── Audit Checklist Item (regulation ref, evaluation)
@@ -61,7 +65,7 @@ Company
 ac-audit/
 ├── server.js        # Express app, all routes and API endpoints
 ├── db.js            # SQLite setup, migrations, prepared statements
-├── schema.sql       # Database schema (7 tables)
+├── schema.sql       # Database schema (8 tables)
 ├── package.json
 ├── public/          # Static files
 │   ├── style.css    # Custom CSS (blue theme, dark/light auto)

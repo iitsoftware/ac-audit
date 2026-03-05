@@ -1044,7 +1044,7 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
       const sigRow = stmts.getPersonSignature.get(person.id);
       if (sigRow && sigRow.signature) {
         try {
-          doc.image(sigRow.signature, cx + 4, y + 2, { width: sigColW - 8, height: sigRowH - 4, fit: [sigColW - 8, sigRowH - 12] });
+          doc.image(sigRow.signature, cx + 4, y + 2, { fit: [sigColW - 8, sigRowH - 14], align: 'center', valign: 'center' });
         } catch { /* unreadable */ }
       }
       // Name below signature
