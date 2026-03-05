@@ -835,6 +835,34 @@ app.delete('/api/evidence-files/:id', (req, res) => {
   res.status(204).end();
 });
 
+// ── API: Checklist Evidence Files ────────────────────────────
+
+app.get('/api/checklist-items/:id/evidence-files', (req, res) => {
+  res.json(stmts.getEvidenceFilesByChecklistItem.all(req.params.id));
+});
+
+app.post('/api/checklist-items/:id/evidence-files', (req, res) => {
+  const { filename, mime_type, data } = req.body;
+  if (!data) return res.status(400).json({ error: 'data is required' });
+  const id = uuidv4();
+  const buf = Buffer.from(data, 'base64');
+  stmts.createChecklistEvidenceFile.run(id, req.params.id, filename || '', mime_type || 'image/png', buf);
+  res.status(201).json({ id, filename, mime_type });
+});
+
+app.get('/api/checklist-evidence-files/:id', (req, res) => {
+  const row = stmts.getChecklistEvidenceFile.get(req.params.id);
+  if (!row || !row.data) return res.status(404).json({ error: 'Not found' });
+  res.set('Content-Type', row.mime_type || 'image/png');
+  res.set('Cache-Control', 'no-cache');
+  res.send(row.data);
+});
+
+app.delete('/api/checklist-evidence-files/:id', (req, res) => {
+  stmts.deleteChecklistEvidenceFile.run(req.params.id);
+  res.status(204).end();
+});
+
 // ── Health ──────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

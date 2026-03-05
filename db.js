@@ -339,6 +339,20 @@ const stmts = {
     'DELETE FROM cap_evidence_file WHERE id = ?'
   ),
 
+  // Checklist Evidence Files
+  getEvidenceFilesByChecklistItem: db.prepare(
+    'SELECT id, filename, mime_type FROM checklist_evidence_file WHERE checklist_item_id = ? ORDER BY created_at'
+  ),
+  getChecklistEvidenceFile: db.prepare(
+    'SELECT id, filename, mime_type, data FROM checklist_evidence_file WHERE id = ?'
+  ),
+  createChecklistEvidenceFile: db.prepare(
+    'INSERT INTO checklist_evidence_file (id, checklist_item_id, filename, mime_type, data) VALUES (?, ?, ?, ?, ?)'
+  ),
+  deleteChecklistEvidenceFile: db.prepare(
+    'DELETE FROM checklist_evidence_file WHERE id = ?'
+  ),
+
   getCapSummaryByPlan: db.prepare(
     `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN c.status = 'CLOSED' THEN 1 ELSE 0 END), 0) AS closed
      FROM cap_item c

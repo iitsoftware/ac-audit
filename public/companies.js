@@ -1241,6 +1241,16 @@
     document.getElementById('ci-form-evaluation').value = isEdit ? (item.evaluation || '') : '';
     document.getElementById('ci-form-doc-ref').value = isEdit ? (item.document_ref || '') : '';
     document.getElementById('ci-form-comment').value = isEdit ? (item.auditor_comment || '') : '';
+    // Evidence section: show only in edit mode
+    const evSection = document.getElementById('ci-evidence-section');
+    const evThumbs = document.getElementById('ci-evidence-thumbs');
+    evThumbs.innerHTML = '';
+    if (isEdit) {
+      evSection.style.display = '';
+      loadChecklistEvidenceThumbs(item.id);
+    } else {
+      evSection.style.display = 'none';
+    }
     ciDialog.showModal();
     document.getElementById('ci-form-regulation-ref').focus();
   }
@@ -1601,9 +1611,9 @@
 
     // Evidence images
     html += `<div class="audit-section">
-      <div class="audit-section-header"><h3>Bilder</h3></div>
+      <div class="audit-section-header"><h3>Nachweise</h3></div>
       <div class="cap-evidence-thumbs" id="cap-evidence-thumbs"></div>
-      <input type="file" id="cap-evidence-upload" accept="image/*" multiple style="margin-top:0.5rem">
+      <input type="file" id="cap-evidence-upload" accept="image/png,image/jpeg,.pdf" multiple style="margin-top:0.5rem">
     </div>`;
 
     html += '</div>';
@@ -1632,7 +1642,7 @@
             method: 'POST',
             body: { filename: file.name, mime_type: file.type || 'image/png', data: base64 }
           });
-          addEvidenceThumb(container, created);
+          addEvidenceThumb(container, created, '/api/evidence-files');
         } catch (err) { toast(err.message, 'error'); }
       }
       e.target.value = '';
@@ -1675,17 +1685,34 @@
     container.innerHTML = '';
     try {
       const files = await fetchJSON(`/api/cap-items/${capItemId}/evidence-files`);
-      files.forEach(f => addEvidenceThumb(container, f));
+      files.forEach(f => addEvidenceThumb(container, f, '/api/evidence-files'));
     } catch { /* ignore */ }
   }
 
-  function addEvidenceThumb(container, file) {
+  function addEvidenceThumb(container, file, apiPrefix) {
+    apiPrefix = apiPrefix || '/api/evidence-files';
     const wrap = document.createElement('div');
     wrap.className = 'cap-evidence-thumb';
-    const img = document.createElement('img');
-    img.src = `/api/evidence-files/${file.id}`;
-    img.alt = file.filename || '';
-    img.addEventListener('click', () => window.open(img.src, '_blank'));
+    const isPdf = (file.mime_type || '').toLowerCase() === 'application/pdf';
+    const fileUrl = `${apiPrefix}/${file.id}`;
+    if (isPdf) {
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.target = '_blank';
+      link.className = 'evidence-pdf-link';
+      link.innerHTML = '<span class="evidence-pdf-icon">PDF</span>';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'evidence-pdf-name';
+      nameSpan.textContent = file.filename || 'Dokument.pdf';
+      link.appendChild(nameSpan);
+      wrap.appendChild(link);
+    } else {
+      const img = document.createElement('img');
+      img.src = fileUrl;
+      img.alt = file.filename || '';
+      img.addEventListener('click', () => window.open(img.src, '_blank'));
+      wrap.appendChild(img);
+    }
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'cap-evidence-remove';
@@ -1693,13 +1720,40 @@
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       try {
-        await fetchJSON(`/api/evidence-files/${file.id}`, { method: 'DELETE' });
+        await fetchJSON(`${apiPrefix}/${file.id}`, { method: 'DELETE' });
         wrap.remove();
       } catch (err) { toast(err.message, 'error'); }
     });
-    wrap.append(img, btn);
+    wrap.appendChild(btn);
     container.appendChild(wrap);
   }
+
+  async function loadChecklistEvidenceThumbs(checklistItemId) {
+    const container = document.getElementById('ci-evidence-thumbs');
+    if (!container) return;
+    container.innerHTML = '';
+    try {
+      const files = await fetchJSON(`/api/checklist-items/${checklistItemId}/evidence-files`);
+      files.forEach(f => addEvidenceThumb(container, f, '/api/checklist-evidence-files'));
+    } catch { /* ignore */ }
+  }
+
+  document.getElementById('ci-evidence-upload').addEventListener('change', async (e) => {
+    const ciId = document.getElementById('ci-form-id').value;
+    if (!ciId) return;
+    const container = document.getElementById('ci-evidence-thumbs');
+    for (const file of e.target.files) {
+      try {
+        const base64 = await fileToBase64(file);
+        const created = await fetchJSON(`/api/checklist-items/${ciId}/evidence-files`, {
+          method: 'POST',
+          body: { filename: file.name, mime_type: file.type || 'image/png', data: base64 }
+        });
+        addEvidenceThumb(container, created, '/api/checklist-evidence-files');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+    e.target.value = '';
+  });
 
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {

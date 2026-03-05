@@ -97,3 +97,12 @@ CREATE TABLE IF NOT EXISTS cap_evidence_file (
   data BLOB NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS checklist_evidence_file (
+  id TEXT PRIMARY KEY,
+  checklist_item_id TEXT NOT NULL REFERENCES audit_checklist_item(id) ON DELETE CASCADE,
+  filename TEXT DEFAULT '',
+  mime_type TEXT DEFAULT 'image/png',
+  data BLOB NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
