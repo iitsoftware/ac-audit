@@ -921,7 +921,9 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
   // ── Title ──
   const title = `Auditplan ${plan.year} - Geplante Audits`;
   doc.fontSize(14).font('Helvetica-Bold').text(title, 50, headerY);
-  headerY += 30;
+  headerY += 20;
+  doc.fontSize(10).font('Helvetica').text(`Rev. ${plan.revision || 0}`, 50, headerY);
+  headerY += 20;
 
   // ── Table ──
   const tableTop = headerY;
