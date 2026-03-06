@@ -912,6 +912,7 @@
       { key: 'observation',    label: 'OBSERVATIONS', css: 'tag-observation',    test: l => l.observation_count > 0 },
       { key: 'recommendation', label: 'EMPFEHLUNG',   css: 'tag-recommendation', test: l => !!l.recommendation },
       { key: 'checklist',      label: 'CHECKLISTE',  css: 'tag-checklist',      test: l => l.checklist_count > 0 },
+      { key: 'evidence',       label: 'BEWEISE',     css: 'tag-evidence',       test: l => l.evidence_count > 0 },
     ];
 
     function getLineTags(line) {
@@ -978,6 +979,7 @@
           if (t.key === 'finding') label += ` (${line.finding_count})`;
           if (t.key === 'observation') label += ` (${line.observation_count})`;
           if (t.key === 'checklist') label += ` (${line.checklist_count})`;
+          if (t.key === 'evidence') label += ` (${line.evidence_count})`;
           tagsHtml += `<span class="audit-tag ${t.css}">${label}</span>`;
         }
 
@@ -1004,6 +1006,11 @@
 
     // Load and render CAP section
     loadCapSection(currentPlan.id);
+
+    // Remove stale filters that no longer match any line
+    for (const f of [...auditLineFilters]) {
+      if (!presentTagKeys.has(f)) auditLineFilters.delete(f);
+    }
 
     // Filter bar handlers
     const filterBar = document.getElementById('audit-filter-bar');
@@ -1178,6 +1185,7 @@
 
     headerEl.innerHTML = `
       <h2>${escapeHtml(currentLine.subject || 'Themenbereich')}</h2>
+      <button class="icon-btn" title="Audit Checklist PDF" onclick="window.open('/api/audit-plan-lines/${currentLine.id}/pdf')" style="font-size:1rem;cursor:pointer;">&#128196;</button>
     `;
 
     const monthOptions = ['', 'Januar', 'Februar', 'M\u00e4rz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
@@ -1238,15 +1246,17 @@
       } else {
         html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
           <colgroup>
-            <col style="width:36px"><col style="width:11%"><col style="width:25%"><col style="width:90px"><col style="width:10%"><col style="width:auto"><col style="width:36px">
+            <col style="width:36px"><col style="width:30px"><col style="width:11%"><col style="width:25%"><col style="width:90px"><col style="width:10%"><col style="width:auto"><col style="width:36px">
           </colgroup>
           <thead><tr>
-            <th>#</th><th>Regulation</th><th>Compliance Check</th><th>Bewertung</th><th>Dok. Ref.</th><th>Kommentar</th><th></th>
+            <th>#</th><th>A</th><th>Regulation</th><th>Compliance Check</th><th>Bewertung</th><th>Dok. Ref.</th><th>Kommentar</th><th></th>
           </tr></thead><tbody>`;
         items.forEach((item, idx) => {
           const evalClass = item.evaluation ? `eval-${item.evaluation}` : '';
+          const clipIcon = item.evidence_count > 0 ? `<span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
           html += `<tr class="ci-row-clickable" data-id="${item.id}">
             <td>${idx + 1}</td>
+            <td class="ci-clip-cell">${clipIcon}</td>
             <td>${escapeHtml(item.regulation_ref)}</td>
             <td class="wrap-cell">${escapeHtml(item.compliance_check)}</td>
             <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(item.evaluation)}</span>` : ''}</td>

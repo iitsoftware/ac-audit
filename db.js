@@ -308,6 +308,21 @@ const stmts = {
   ),
 
   // CAP Items
+  getEvidenceCountsByLine: db.prepare(
+    `SELECT checklist_item_id, COUNT(*) AS evidence_count
+     FROM checklist_evidence_file
+     WHERE checklist_item_id IN (SELECT id FROM audit_checklist_item WHERE audit_plan_line_id = ?)
+     GROUP BY checklist_item_id`
+  ),
+
+  getEvidenceCountsByPlan: db.prepare(
+    `SELECT ci.audit_plan_line_id, COUNT(*) AS evidence_count
+     FROM checklist_evidence_file cef
+     JOIN audit_checklist_item ci ON ci.id = cef.checklist_item_id
+     WHERE ci.audit_plan_line_id IN (SELECT id FROM audit_plan_line WHERE audit_plan_id = ?)
+     GROUP BY ci.audit_plan_line_id`
+  ),
+
   getCapItemsByPlan: db.prepare(
     `SELECT c.id, c.checklist_item_id, c.deadline, c.responsible_person, c.root_cause,
             c.corrective_action, c.preventive_action, c.status, c.completion_date, c.evidence,

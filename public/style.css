@@ -1105,6 +1105,15 @@ dialog.dialog-wide {
   background: var(--primary-tint);
 }
 
+.ci-clip-cell {
+  text-align: center;
+}
+
+.ci-clip {
+  font-size: 14px;
+  color: #dc2626;
+}
+
 /* ── Audit Filter Bar ──────────────────────────────────────── */
 .audit-filter-bar {
   display: flex;
@@ -1223,6 +1232,7 @@ dialog.dialog-wide {
 .tag-observation { background: #fef9c3; color: #854d0e; }
 .tag-recommendation { background: #ede9fe; color: #5b21b6; }
 .tag-checklist  { background: #ccfbf1; color: #0f766e; }
+.tag-evidence   { background: #e0e7ff; color: #3730a3; }
 
 @media (prefers-color-scheme: dark) {
   .tag-open       { background: #374151; color: #d1d5db; }
@@ -1233,6 +1243,7 @@ dialog.dialog-wide {
   .tag-observation { background: #422006; color: #fde68a; }
   .tag-recommendation { background: #2e1065; color: #c4b5fd; }
   .tag-checklist  { background: #042f2e; color: #5eead4; }
+  .tag-evidence   { background: #1e1b4b; color: #a5b4fc; }
 }
 
 /* ── CAP Section ──────────────────────────────────────────── */

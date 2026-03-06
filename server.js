@@ -436,11 +436,15 @@ app.get('/api/audit-plans/:auditPlanId/lines', (req, res) => {
   const counts = stmts.getChecklistCountsByPlan.all(req.params.auditPlanId);
   const countMap = {};
   for (const c of counts) countMap[c.audit_plan_line_id] = c;
+  const evidenceCounts = stmts.getEvidenceCountsByPlan.all(req.params.auditPlanId);
+  const evidenceMap = {};
+  for (const e of evidenceCounts) evidenceMap[e.audit_plan_line_id] = e.evidence_count;
   for (const line of lines) {
     const c = countMap[line.id];
     line.checklist_count = c ? c.checklist_count : 0;
     line.finding_count = c ? c.finding_count : 0;
     line.observation_count = c ? c.observation_count : 0;
+    line.evidence_count = evidenceMap[line.id] || 0;
   }
   res.json(lines);
 });
@@ -505,7 +509,12 @@ app.delete('/api/audit-plan-lines/:id', (req, res) => {
 app.get('/api/audit-plan-lines/:lineId/checklist-items', (req, res) => {
   const line = stmts.getAuditPlanLine.get(req.params.lineId);
   if (!line) return res.status(404).json({ error: 'Audit plan line not found' });
-  res.json(stmts.getChecklistItemsByLine.all(req.params.lineId));
+  const items = stmts.getChecklistItemsByLine.all(req.params.lineId);
+  const evCounts = stmts.getEvidenceCountsByLine.all(req.params.lineId);
+  const evMap = {};
+  for (const e of evCounts) evMap[e.checklist_item_id] = e.evidence_count;
+  for (const item of items) item.evidence_count = evMap[item.id] || 0;
+  res.json(items);
 });
 
 app.post('/api/audit-plan-lines/:lineId/checklist-items', (req, res) => {
@@ -1126,6 +1135,340 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
   y += sigRowH;
 
   // Footer on every page
+  const pages = doc.bufferedPageRange();
+  for (let p = pages.start; p < pages.start + pages.count; p++) {
+    doc.switchToPage(p);
+    const footerY = 770;
+    doc.strokeColor('#000000').lineWidth(0.5);
+    doc.moveTo(50, footerY).lineTo(tableRight, footerY).stroke();
+    doc.fontSize(7).fillColor('#000000').font('Helvetica');
+    doc.text('Erstellt mit ac-audit', 50, footerY + 4, { lineBreak: false });
+    const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
+    doc.text(pageLabel, 50, footerY + 4, { width: tableRight - 50, align: 'right', lineBreak: false });
+  }
+
+  doc.end();
+});
+
+// ── API: Audit Checklist PDF (Einzelaudit) ───────────────────
+app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
+  const line = stmts.getAuditPlanLine.get(req.params.id);
+  if (!line) return res.status(404).json({ error: 'Audit plan line not found' });
+
+  const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+  if (!plan) return res.status(404).json({ error: 'Audit plan not found' });
+
+  const dept = stmts.getDepartment.get(plan.department_id);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
+
+  const company = stmts.getCompany.get(dept.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+
+  const logoRow = stmts.getCompanyLogo.get(company.id);
+  const checklistItems = stmts.getChecklistItemsByLine.all(line.id);
+  const personsAll = stmts.getPersonsByCompany.all(company.id);
+
+  function formatDateDE(isoStr) {
+    if (!isoStr) return '';
+    const d = isoStr.substring(0, 10).split('-');
+    if (d.length !== 3) return isoStr;
+    return `${d[2]}.${d[1]}.${d[0]}`;
+  }
+
+  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+  const pageW = 595.28;
+  const tableRight = pageW - 50;
+
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="Audit_${line.audit_no || 'X'}_${(line.subject || 'Checklist').replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
+  doc.pipe(res);
+
+  // ── Header ──
+  let y = 50;
+
+  if (logoRow && logoRow.logo) {
+    try {
+      doc.image(logoRow.logo, 50, y, { height: 45 });
+      y += 55;
+    } catch { y += 10; }
+  }
+
+  doc.fontSize(14).font('Helvetica-Bold').text(company.name, 50, y);
+  y += 20;
+  doc.fontSize(9).font('Helvetica');
+  let subLine = dept.name;
+  if (dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
+  if (dept.regulation) subLine += `  |  ${dept.regulation}`;
+  doc.text(subLine, 50, y);
+  y += 25;
+
+  // ── Title ──
+  doc.fontSize(14).font('Helvetica-Bold').text('Audit Checklist', 50, y);
+  y += 25;
+
+  // ── Audit Information table ──
+  doc.fontSize(10).font('Helvetica-Bold').text('Audit Information', 50, y);
+  y += 16;
+
+  const infoItems = [
+    ['Auditplan', plan.year || ''],
+    ['Audit Nr.', line.audit_no || ''],
+    ['Thema', line.subject || ''],
+    ['Auditor Team', line.auditor_team || ''],
+    ['Auditee', line.auditee || ''],
+    ['Audit Start', formatDateDE(line.audit_start_date)],
+    ['Audit End', formatDateDE(line.audit_end_date)],
+    ['Location', line.audit_location || ''],
+    ['Document Ref', line.document_ref || ''],
+    ['Iss/Rev', line.document_iss_rev || ''],
+    ['Rev Date', formatDateDE(line.document_rev_date)],
+  ];
+
+  doc.fontSize(8);
+  const labelW = 100;
+  const valW = tableRight - 50 - labelW;
+  for (const [label, value] of infoItems) {
+    doc.rect(50, y, labelW, 16).fill('#f0f4ff');
+    doc.rect(50 + labelW, y, valW, 16).stroke();
+    doc.rect(50, y, labelW, 16).stroke();
+    doc.fillColor('#000000').font('Helvetica-Bold').text(label, 54, y + 3, { width: labelW - 8 });
+    doc.font('Helvetica').text(value, 50 + labelW + 4, y + 3, { width: valW - 8 });
+    y += 16;
+  }
+  y += 15;
+
+  // ── Checklist sections ──
+  const sections = [
+    { key: 'THEORETICAL', label: 'Theoretical / Documentation Verification' },
+    { key: 'PRACTICAL', label: 'Practical Review' },
+    { key: 'PROCEDURE', label: 'Procedure / MOE Review' },
+  ];
+
+  const evalColors = {
+    'C': '#d4edda', 'NA': '#e2e3e5', 'O': '#fff3cd',
+    'L1': '#f8d7da', 'L2': '#f5c6cb', 'L3': '#f1b0b7'
+  };
+
+  const clColX = [50, 70, 140, 290, 330, 400];
+  const clColW = [20, 70, 150, 40, 70, 95.28];
+  const clHeaders = ['Nr', 'Regulation Ref', 'Compliance Check', 'Eval', 'Auditor Comment', 'Document Ref'];
+
+  for (const section of sections) {
+    const items = checklistItems.filter(i => i.section === section.key);
+
+    if (items.length === 0) {
+      if (y + 34 > 740) { doc.addPage(); y = 50; }
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text(section.label, 50, y);
+      y += 16;
+      doc.fontSize(8).font('Helvetica').fillColor('#888888').text('No items', 50, y);
+      doc.fillColor('#000000');
+      y += 18;
+      continue;
+    }
+
+    // Compute first row height to ensure title + header + first row fit on same page
+    doc.font('Helvetica').fontSize(7);
+    const firstItem = items[0];
+    const firstCompH = doc.heightOfString(firstItem.compliance_check || '', { width: clColW[2] - 6 });
+    const firstCommH = doc.heightOfString(firstItem.auditor_comment || '', { width: clColW[4] - 6 });
+    const firstRowH = Math.max(14, firstCompH + 6, firstCommH + 6);
+    // Section title (16) + table header (16) + first row
+    if (y + 16 + 16 + firstRowH > 740) { doc.addPage(); y = 50; }
+
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text(section.label, 50, y);
+    y += 16;
+
+    // Table header
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.rect(50, y, tableRight - 50, 16).fill('#2563eb');
+    doc.fillColor('#ffffff');
+    for (let c = 0; c < clHeaders.length; c++) {
+      doc.text(clHeaders[c], clColX[c] + 3, y + 3, { width: clColW[c] - 6 });
+    }
+    doc.fillColor('#000000');
+    y += 16;
+
+    doc.font('Helvetica').fontSize(7);
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const compH = doc.heightOfString(item.compliance_check || '', { width: clColW[2] - 6 });
+      const commH = doc.heightOfString(item.auditor_comment || '', { width: clColW[4] - 6 });
+      const rowH = Math.max(14, compH + 6, commH + 6);
+
+      if (y + rowH > 740) {
+        doc.addPage();
+        y = 50;
+        // Re-draw header on new page
+        doc.fontSize(7).font('Helvetica-Bold');
+        doc.rect(50, y, tableRight - 50, 16).fill('#2563eb');
+        doc.fillColor('#ffffff');
+        for (let c = 0; c < clHeaders.length; c++) {
+          doc.text(clHeaders[c], clColX[c] + 3, y + 3, { width: clColW[c] - 6 });
+        }
+        doc.fillColor('#000000');
+        y += 16;
+        doc.font('Helvetica').fontSize(7);
+      }
+
+      // Zebra
+      if (i % 2 === 0) {
+        doc.rect(50, y, tableRight - 50, rowH).fill('#f8f9fa');
+        doc.fillColor('#000000');
+      }
+
+      // Eval color highlight
+      const evalVal = (item.evaluation || '').trim().toUpperCase();
+      if (evalColors[evalVal]) {
+        doc.rect(clColX[3], y, clColW[3], rowH).fill(evalColors[evalVal]);
+        doc.fillColor('#000000');
+      }
+
+      doc.strokeColor('#d0d0d0').lineWidth(0.5);
+      doc.rect(50, y, tableRight - 50, rowH).stroke();
+      for (let c = 1; c < clColX.length; c++) {
+        doc.moveTo(clColX[c], y).lineTo(clColX[c], y + rowH).stroke();
+      }
+
+      doc.text(String(i + 1), clColX[0] + 3, y + 3, { width: clColW[0] - 6 });
+      doc.text(item.regulation_ref || '', clColX[1] + 3, y + 3, { width: clColW[1] - 6 });
+      doc.text(item.compliance_check || '', clColX[2] + 3, y + 3, { width: clColW[2] - 6 });
+      doc.text(item.evaluation || '', clColX[3] + 3, y + 3, { width: clColW[3] - 6 });
+      doc.text(item.auditor_comment || '', clColX[4] + 3, y + 3, { width: clColW[4] - 6 });
+      doc.text(item.document_ref || '', clColX[5] + 3, y + 3, { width: clColW[5] - 6 });
+
+      y += rowH;
+    }
+    y += 12;
+  }
+
+  // ── Summary ──
+  if (y + 50 > 740) { doc.addPage(); y = 50; }
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Summary', 50, y);
+  y += 16;
+
+  let totalQ = checklistItems.length;
+  let cCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'C').length;
+  let naCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'NA').length;
+  let oCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'O').length;
+  let l1Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L1').length;
+  let l2Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L2').length;
+  let l3Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L3').length;
+
+  const sumHeaders = ['Total Questions', 'Conformities', 'Not Applicable', 'Observation', 'Level 1', 'Level 2', 'Level 3'];
+  const sumValues = [totalQ, cCount, naCount, oCount, l1Count, l2Count, l3Count];
+  const sumColW = (tableRight - 50) / sumHeaders.length;
+
+  // Header
+  doc.fontSize(7).font('Helvetica-Bold');
+  doc.rect(50, y, tableRight - 50, 16).fill('#2563eb');
+  doc.fillColor('#ffffff');
+  for (let c = 0; c < sumHeaders.length; c++) {
+    doc.text(sumHeaders[c], 50 + c * sumColW + 2, y + 3, { width: sumColW - 4, align: 'center' });
+  }
+  doc.fillColor('#000000');
+  y += 16;
+
+  // Values
+  doc.fontSize(9).font('Helvetica');
+  doc.strokeColor('#d0d0d0').lineWidth(0.5);
+  doc.rect(50, y, tableRight - 50, 18).stroke();
+  for (let c = 1; c < sumHeaders.length; c++) {
+    doc.moveTo(50 + c * sumColW, y).lineTo(50 + c * sumColW, y + 18).stroke();
+  }
+  for (let c = 0; c < sumValues.length; c++) {
+    doc.text(String(sumValues[c]), 50 + c * sumColW + 2, y + 4, { width: sumColW - 4, align: 'center' });
+  }
+  y += 30;
+
+  // ── Recommendation ──
+  if (y + 40 > 740) { doc.addPage(); y = 50; }
+  doc.fontSize(10).font('Helvetica-Bold').text('Recommendation for Management', 50, y);
+  y += 16;
+  doc.fontSize(8).font('Helvetica');
+  const recText = line.recommendation || '—';
+  doc.rect(50, y, tableRight - 50, Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10)).stroke();
+  doc.text(recText, 55, y + 5, { width: tableRight - 60 });
+  y += Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10) + 15;
+
+  // ── Signature table ──
+  const qmPerson = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+  const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
+  const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
+
+  const deptText = `${dept.name} ${dept.regulation || ''}`.toLowerCase();
+  let alLabel = 'Abteilungsleiter';
+  if (deptText.includes('145')) alLabel = 'Maintenance Manager';
+  else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
+  else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
+
+  const sigCols = 4;
+  const sigColW = (tableRight - 50) / sigCols;
+  const sigHeaderH = 20;
+  const sigRowH = 50;
+
+  if (y + sigHeaderH + sigRowH + 10 > 740) { doc.addPage(); y = 50; }
+
+  const sigHeaders = ['Date', 'Auditor', alLabel, 'Accountable Manager'];
+
+  doc.fontSize(7).font('Helvetica-Bold');
+  doc.rect(50, y, tableRight - 50, sigHeaderH).fill('#2563eb');
+  doc.fillColor('#ffffff');
+  for (let c = 0; c < sigCols; c++) {
+    doc.text(sigHeaders[c], 50 + c * sigColW + 4, y + 5, { width: sigColW - 8, align: 'center' });
+  }
+  doc.fillColor('#000000');
+  y += sigHeaderH;
+
+  doc.strokeColor('#d0d0d0').lineWidth(0.5);
+  doc.rect(50, y, tableRight - 50, sigRowH).stroke();
+  for (let c = 1; c < sigCols; c++) {
+    doc.moveTo(50 + c * sigColW, y).lineTo(50 + c * sigColW, y + sigRowH).stroke();
+  }
+
+  // Date column
+  doc.fontSize(8).font('Helvetica');
+  doc.text(formatDateDE(line.audit_end_date), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
+
+  // Signatures: Auditor (QM), Abteilungsleiter, Accountable
+  const sigPersons = [qmPerson, alPerson, accPerson];
+  for (let c = 0; c < 3; c++) {
+    const person = sigPersons[c];
+    const cx = 50 + (c + 1) * sigColW;
+    if (person) {
+      const sigRow = stmts.getPersonSignature.get(person.id);
+      if (sigRow && sigRow.signature) {
+        try {
+          doc.image(sigRow.signature, cx + 4, y + 2, { fit: [sigColW - 8, sigRowH - 14], align: 'center', valign: 'center' });
+        } catch { /* unreadable */ }
+      }
+      const name = `${person.first_name} ${person.last_name}`.trim();
+      if (name) {
+        doc.fontSize(6).text(name, cx + 4, y + sigRowH - 10, { width: sigColW - 8, align: 'center' });
+      }
+    }
+  }
+  y += sigRowH + 15;
+
+  // ── Legend ──
+  if (y + 60 > 740) { doc.addPage(); y = 50; }
+  doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000').text('Legend', 50, y);
+  y += 14;
+  doc.fontSize(7).font('Helvetica').fillColor('#444444');
+  const legendItems = [
+    'C - Conform: The requirement is fully met',
+    'NA - Not Applicable: The requirement does not apply',
+    'O - Observation: No finding, recommendation for improvement',
+    'Level 1 - Non-conformity: Finding to be resolved within 5 working days',
+    'Level 2 - Non-conformity: Finding to be resolved within 60 working days',
+    'Level 3 - Not just a recommendation, must be implemented or adapted (at or with the next revision)',
+  ];
+  for (const item of legendItems) {
+    doc.text(item, 58, y, { width: tableRight - 58 });
+    y += doc.heightOfString(item, { width: tableRight - 58 }) + 2;
+  }
+  doc.fillColor('#000000');
+
+  // ── Footer on every page ──
   const pages = doc.bufferedPageRange();
   for (let p = pages.start; p < pages.start + pages.count; p++) {
     doc.switchToPage(p);
