@@ -77,6 +77,8 @@ app.put('/api/companies/:id', (req, res) => {
 app.delete('/api/companies/:id', (req, res) => {
   const existing = stmts.getCompany.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Company not found' });
+  const { cnt } = stmts.countAuditPlansByCompany.get(req.params.id);
+  if (cnt > 0) return res.status(409).json({ error: 'Firma kann nicht gelöscht werden, da Auditpläne vorhanden sind' });
   stmts.deleteCompany.run(req.params.id);
   res.status(204).end();
 });
@@ -868,12 +870,10 @@ const PDFDocument = require('pdfkit');
 
 app.get('/api/audit-plans/:id/pdf', (req, res) => {
   const type = req.query.type || 'open';
-  if (type === 'closed') {
-    return res.status(501).json({ error: 'Geschlossener Plan ist noch nicht implementiert' });
-  }
-  if (type !== 'open') {
+  if (type !== 'open' && type !== 'closed') {
     return res.status(400).json({ error: 'type must be open or closed' });
   }
+  const isClosed = type === 'closed';
 
   const plan = stmts.getAuditPlan.get(req.params.id);
   if (!plan) return res.status(404).json({ error: 'Audit plan not found' });
@@ -890,11 +890,22 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
   if (filter === 'planned') {
     lines = lines.filter(l => l.planned_window && l.planned_window.trim());
   }
+  if (isClosed) {
+    lines = lines.filter(l => l.audit_end_date);
+  }
+
+  function formatDateDE(isoStr) {
+    if (!isoStr) return '';
+    const d = isoStr.substring(0, 10).split('-');
+    if (d.length !== 3) return isoStr;
+    return `${d[2]}.${d[1]}.${d[0]}`;
+  }
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
 
+  const suffix = isClosed ? 'Durchgefuehrte' : 'Geplante';
   res.set('Content-Type', 'application/pdf');
-  res.set('Content-Disposition', `attachment; filename="Auditplan_${plan.year}.pdf"`);
+  res.set('Content-Disposition', `attachment; filename="Auditplan_${plan.year}_${suffix}.pdf"`);
   doc.pipe(res);
 
   // ── Header: Logo then text below ──
@@ -919,7 +930,8 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
   headerY += 40;
 
   // ── Title ──
-  const title = `Auditplan ${plan.year} - Geplante Audits`;
+  const titleLabel = isClosed ? 'Durchgeführte Audits' : 'Geplante Audits';
+  const title = `Auditplan ${plan.year} - ${titleLabel}`;
   doc.fontSize(14).font('Helvetica-Bold').text(title, 50, headerY);
   headerY += 20;
   doc.fontSize(10).font('Helvetica').text(`Rev. ${plan.revision || 0}`, 50, headerY);
@@ -927,20 +939,35 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
 
   // ── Table ──
   const tableTop = headerY;
-  const colX = [50, 80, 250, 370];  // Nr, Thema, Bezug, Geplant
-  const colW = [30, 170, 120, 125]; // widths
   const pageW = 595.28;
   const marginRight = 50;
   const tableRight = pageW - marginRight;
+
+  // Load finding details for closed PDF
+  let findingMap = {};
+  if (isClosed) {
+    const findings = stmts.getFindingDetailsByPlan.all(plan.id);
+    for (const f of findings) findingMap[f.audit_plan_line_id] = f;
+  }
+
+  let colX, colW, colHeaders;
+  if (isClosed) {
+    colX = [50, 75, 190, 290, 360, 415];
+    colW = [25, 115, 100, 70, 55, 80];
+    colHeaders = ['Nr.', 'Thema', 'Bezug', 'Geplant', 'Auditiert', 'Findings'];
+  } else {
+    colX = [50, 80, 250, 370];
+    colW = [30, 170, 120, 125];
+    colHeaders = ['Nr.', 'Thema', 'Bezug', 'Geplant'];
+  }
 
   // Header row
   doc.fontSize(9).font('Helvetica-Bold');
   doc.rect(50, tableTop, tableRight - 50, 18).fill('#2563eb');
   doc.fillColor('#ffffff');
-  doc.text('Nr.', colX[0] + 4, tableTop + 4, { width: colW[0], align: 'left' });
-  doc.text('Thema', colX[1] + 4, tableTop + 4, { width: colW[1], align: 'left' });
-  doc.text('Bezug', colX[2] + 4, tableTop + 4, { width: colW[2], align: 'left' });
-  doc.text('Geplant', colX[3] + 4, tableTop + 4, { width: colW[3], align: 'left' });
+  for (let c = 0; c < colHeaders.length; c++) {
+    doc.text(colHeaders[c], colX[c] + 4, tableTop + 4, { width: colW[c], align: 'left' });
+  }
   doc.fillColor('#000000');
 
   let y = tableTop + 18;
@@ -975,8 +1002,41 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
     doc.text(line.subject || '', colX[1] + 4, y + 4, { width: colW[1] - 8 });
     doc.text(line.regulations || '', colX[2] + 4, y + 4, { width: colW[2] - 8 });
     doc.text(line.planned_window || '', colX[3] + 4, y + 4, { width: colW[3] - 8 });
+    if (isClosed) {
+      doc.text(formatDateDE(line.audit_end_date), colX[4] + 4, y + 4, { width: colW[4] - 8 });
+      const fd = findingMap[line.id];
+      if (fd) {
+        const parts = [];
+        if (fd.obs) parts.push(`O:${fd.obs}`);
+        if (fd.l1) parts.push(`L1:${fd.l1}`);
+        if (fd.l2) parts.push(`L2:${fd.l2}`);
+        if (fd.l3) parts.push(`L3:${fd.l3}`);
+        doc.text(parts.join(' '), colX[5] + 4, y + 4, { width: colW[5] - 8 });
+      }
+    }
 
     y += rowH;
+  }
+
+  // ── Findings legend (only for closed PDF) ──
+  if (isClosed) {
+    y += 10;
+    if (y + 60 > 760) { doc.addPage(); y = 50; }
+    doc.fontSize(8).font('Helvetica-Bold').fillColor('#000000');
+    doc.text('Legende:', 50, y);
+    y += 12;
+    doc.fontSize(7).font('Helvetica').fillColor('#444444');
+    const legendItems = [
+      'O - Beobachtung, kein Finding, lediglich Empfehlung zur Verbesserung',
+      'Level 1 - Nichtkonformit\u00e4t, das Finding wird innerhalb von 5 Arbeitstagen behoben',
+      'Level 2 - Nichtkonformit\u00e4t, Behebung des Findings innerhalb von 60 Arbeitstagen',
+      'Level 3 - Nicht nur eine Empfehlung, muss umgesetzt oder angepasst werden (bei oder mit der n\u00e4chsten Revision)',
+    ];
+    for (const item of legendItems) {
+      doc.text(item, 58, y, { width: tableRight - 58 });
+      y += doc.heightOfString(item, { width: tableRight - 58 }) + 2;
+    }
+    doc.fillColor('#000000');
   }
 
   // ── Signature table ──
@@ -994,7 +1054,8 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
   else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
 
   const sigRowH = 50;
-  const sigTableH = 18 + sigRowH; // header + content
+  const sigHeaderH = 28;
+  const sigTableH = sigHeaderH + sigRowH;
   if (y + sigTableH + 20 > 760) {
     doc.addPage();
     y = 50;
@@ -1003,17 +1064,20 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
 
   const sigCols = 5;
   const sigColW = (tableRight - 50) / sigCols;
-  const sigHeaders = ['Freigabe', 'Weitergabe LBA', 'Quality Manager', alLabel, 'Accountable Manager'];
+
+  // First column: "Freigabe" for open, "Erledigt" for closed
+  const sigCol0Label = isClosed ? 'Erledigt' : 'Freigabe';
+  const sigHeaders = [sigCol0Label, 'Weitergabe LBA', 'Compliance Monitoring Manager', alLabel, 'Accountable Manager'];
 
   // Header row
   doc.fontSize(7).font('Helvetica-Bold');
-  doc.rect(50, y, tableRight - 50, 18).fill('#2563eb');
+  doc.rect(50, y, tableRight - 50, sigHeaderH).fill('#2563eb');
   doc.fillColor('#ffffff');
   for (let c = 0; c < sigCols; c++) {
     doc.text(sigHeaders[c], 50 + c * sigColW + 4, y + 4, { width: sigColW - 8, align: 'center' });
   }
   doc.fillColor('#000000');
-  y += 18;
+  y += sigHeaderH;
 
   // Content row
   doc.strokeColor('#d0d0d0').lineWidth(0.5);
@@ -1022,20 +1086,22 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
     doc.moveTo(50 + c * sigColW, y).lineTo(50 + c * sigColW, y + sigRowH).stroke();
   }
 
-  function formatDateDE(isoStr) {
-    if (!isoStr) return '';
-    const d = isoStr.substring(0, 10).split('-');
-    if (d.length !== 3) return isoStr;
-    return `${d[2]}.${d[1]}.${d[0]}`;
-  }
-
   doc.font('Helvetica').fontSize(9);
 
-  // Col 0: Freigabe date
-  doc.text(formatDateDE(plan.approved_at), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
+  // Col 0: Freigabe date or Erledigt (max audit_end_date)
+  if (isClosed) {
+    let maxDate = '';
+    for (const l of lines) {
+      if (l.audit_end_date && l.audit_end_date > maxDate) maxDate = l.audit_end_date;
+    }
+    doc.text(formatDateDE(maxDate), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
+  } else {
+    doc.text(formatDateDE(plan.approved_at), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
+  }
 
-  // Col 1: Weitergabe LBA (geplant)
-  doc.text(formatDateDE(plan.submitted_planned_at), 50 + sigColW + 4, y + 4, { width: sigColW - 8, align: 'center' });
+  // Col 1: Weitergabe LBA
+  const lbaDate = isClosed ? plan.submitted_at : plan.submitted_planned_at;
+  doc.text(formatDateDE(lbaDate), 50 + sigColW + 4, y + 4, { width: sigColW - 8, align: 'center' });
 
   // Col 2-4: Signatures
   const sigPersons = [qmPerson, alPerson, accPerson];

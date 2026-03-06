@@ -159,6 +159,9 @@ const stmts = {
   deleteCompany: db.prepare(
     'DELETE FROM company WHERE id = ?'
   ),
+  countAuditPlansByCompany: db.prepare(
+    `SELECT COUNT(*) AS cnt FROM audit_plan WHERE department_id IN (SELECT id FROM department WHERE company_id = ?)`
+  ),
 
   // Department
   getDepartmentsByCompany: db.prepare(
@@ -264,6 +267,18 @@ const stmts = {
             SUM(CASE WHEN evaluation = 'O' THEN 1 ELSE 0 END) AS observation_count
      FROM audit_checklist_item
      WHERE audit_plan_line_id IN (SELECT id FROM audit_plan_line WHERE audit_plan_id = ?)
+     GROUP BY audit_plan_line_id`
+  ),
+
+  getFindingDetailsByPlan: db.prepare(
+    `SELECT audit_plan_line_id,
+            SUM(CASE WHEN evaluation = 'L1' THEN 1 ELSE 0 END) AS l1,
+            SUM(CASE WHEN evaluation = 'L2' THEN 1 ELSE 0 END) AS l2,
+            SUM(CASE WHEN evaluation = 'L3' THEN 1 ELSE 0 END) AS l3,
+            SUM(CASE WHEN evaluation = 'O' THEN 1 ELSE 0 END) AS obs
+     FROM audit_checklist_item
+     WHERE audit_plan_line_id IN (SELECT id FROM audit_plan_line WHERE audit_plan_id = ?)
+       AND evaluation IN ('L1','L2','L3','O')
      GROUP BY audit_plan_line_id`
   ),
 

@@ -34,7 +34,10 @@
     } catch { return null; }
   }
 
-  const listEl = document.getElementById('company-list');
+  const companyTabsEl = document.getElementById('company-tabs');
+  const companyTabBar = document.getElementById('company-tab-bar');
+  const deptTabsEl = document.getElementById('dept-tabs');
+  const deptTabBar = document.getElementById('dept-tab-bar');
   const emptyEl = document.getElementById('empty-state');
   const rightPane = document.getElementById('right-pane-content');
   const breadcrumbEl = document.getElementById('breadcrumb');
@@ -69,50 +72,96 @@
       toast(e.message, 'error');
       companies = [];
     }
-    renderList();
+    renderCompanyTabs();
   }
 
-  function renderList() {
-    listEl.innerHTML = companies.map(c => {
-      const sel = c.id === selectedId;
-      const logoHtml = c.has_logo !== false
-        ? `<img class="pane-item-logo" src="/api/companies/${c.id}/logo?t=${Date.now()}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
-          + `<div class="pane-item-logo-placeholder" style="display:none"></div>`
-        : `<div class="pane-item-logo-placeholder"></div>`;
-
-      return `
-      <div class="pane-item ${sel ? 'selected' : ''}" data-id="${c.id}">
-        <div class="pane-item-row">
-          ${logoHtml}
-          <div class="pane-item-text">
-            <span class="item-name">${escapeHtml(c.name)}</span>
-            ${c.city ? `<span class="item-sub">${escapeHtml(c.city)}</span>` : ''}
-          </div>
-          <div class="pane-item-actions">
-            <button class="pane-action-btn" data-action="edit" data-id="${c.id}" title="Bearbeiten">&#9998;</button>
-            <button class="pane-action-btn danger" data-action="delete" data-id="${c.id}" title="L&ouml;schen">&#128465;</button>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-
-    listEl.querySelectorAll('.pane-item').forEach(el => {
-      el.addEventListener('click', (e) => {
-        if (e.target.closest('.pane-action-btn')) return;
-        selectCompany(el.dataset.id);
-      });
+  function renderCompanyTabs() {
+    let html = '';
+    companies.forEach(c => {
+      const active = c.id === selectedId ? ' tab-active' : '';
+      html += `<button class="tab${active}" data-id="${c.id}">${escapeHtml(c.name)}</button>`;
+      if (c.id === selectedId) {
+        html += `<div class="tab-menu-wrap"><button class="tab-menu-btn" data-menu-for="${c.id}">\u22ee</button>`
+              + `<div class="tab-menu" data-menu-id="${c.id}">`
+              + `<button class="tab-menu-item" data-action="edit" data-id="${c.id}">&#9998; Bearbeiten</button>`
+              + `<button class="tab-menu-item tab-menu-danger" data-action="delete" data-id="${c.id}">&#128465; L\u00f6schen</button>`
+              + `</div></div>`;
+      }
     });
+    companyTabsEl.innerHTML = html;
 
-    listEl.querySelectorAll('.pane-action-btn').forEach(btn => {
+    companyTabsEl.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => selectCompany(btn.dataset.id));
+    });
+    bindTabMenus(companyTabsEl, 'company');
+  }
+
+  function renderDeptTabs() {
+    const activeDeptId = navPath.length > 0 && navPath[0].type === 'department' ? navPath[0].id : null;
+    let html = '';
+    departments.forEach(d => {
+      const active = d.id === activeDeptId ? ' tab-active' : '';
+      html += `<button class="tab tab-secondary${active}" data-id="${d.id}">${escapeHtml(d.name)}</button>`;
+      if (d.id === activeDeptId) {
+        html += `<div class="tab-menu-wrap"><button class="tab-menu-btn" data-menu-for="${d.id}">\u22ee</button>`
+              + `<div class="tab-menu" data-menu-id="${d.id}">`
+              + `<button class="tab-menu-item" data-action="edit" data-id="${d.id}">&#9998; Bearbeiten</button>`
+              + `<button class="tab-menu-item tab-menu-danger" data-action="delete" data-id="${d.id}">&#128465; L\u00f6schen</button>`
+              + `</div></div>`;
+      }
+    });
+    deptTabsEl.innerHTML = html;
+
+    deptTabsEl.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => selectDepartment(btn.dataset.id));
+    });
+    bindTabMenus(deptTabsEl, 'department');
+  }
+
+  function bindTabMenus(container, type) {
+    container.querySelectorAll('.tab-menu-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = btn.dataset.id;
-        const company = companies.find(c => c.id === id);
-        if (!company) return;
-        if (btn.dataset.action === 'edit') openDialog(company);
-        else if (btn.dataset.action === 'delete') confirmDelete(company);
+        const menu = btn.nextElementSibling;
+        const wasOpen = menu.classList.contains('open');
+        closeAllTabMenus();
+        if (!wasOpen) {
+          const rect = btn.getBoundingClientRect();
+          menu.style.top = rect.bottom + 4 + 'px';
+          menu.style.left = rect.left + 'px';
+          menu.classList.add('open');
+        }
       });
     });
+    container.querySelectorAll('.tab-menu-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllTabMenus();
+        const id = btn.dataset.id;
+        if (btn.dataset.action === 'edit') {
+          if (type === 'company') { const c = companies.find(x => x.id === id); if (c) openDialog(c); }
+          else { const d = departments.find(x => x.id === id); if (d) openDeptDialog(d); }
+        } else if (btn.dataset.action === 'delete') {
+          if (type === 'company') { const c = companies.find(x => x.id === id); if (c) confirmDelete(c); }
+          else { const d = departments.find(x => x.id === id); if (d) confirmDeleteDept(d); }
+        }
+      });
+    });
+  }
+
+  function closeAllTabMenus() {
+    document.querySelectorAll('.tab-menu.open').forEach(m => m.classList.remove('open'));
+  }
+
+  document.addEventListener('click', closeAllTabMenus);
+
+  function selectDepartment(id) {
+    const dept = departments.find(d => d.id === id);
+    if (!dept) return;
+    navPath = [{ type: 'department', id: dept.id, name: dept.name }];
+    saveNavState();
+    renderDeptTabs();
+    renderCurrentLevel();
   }
 
   // ── Navigation ────────────────────────────────────────────
@@ -126,9 +175,12 @@
     auditLineFilters = new Set();
     capFilter = null;
     saveNavState();
-    renderList();
+    renderCompanyTabs();
     emptyEl.style.display = 'none';
     rightPane.style.display = 'block';
+    await loadDepartments();
+    deptTabBar.style.display = 'flex';
+    renderDeptTabs();
     await renderCurrentLevel();
   }
 
@@ -140,8 +192,9 @@
     saveNavState();
     emptyEl.style.display = 'flex';
     rightPane.style.display = 'none';
+    deptTabBar.style.display = 'none';
     contentEl.innerHTML = '';
-    renderList();
+    renderCompanyTabs();
   }
 
   async function navigateTo(index) {
@@ -151,6 +204,7 @@
       navPath = navPath.slice(0, index + 1);
     }
     saveNavState();
+    renderDeptTabs();
     await renderCurrentLevel();
   }
 
@@ -158,18 +212,26 @@
     const company = getSelectedCompany();
     if (!company) return;
 
-    let html = '';
-
-    if (navPath.length > 0) {
-      html += `<button class="breadcrumb-item" data-nav="-1">${escapeHtml(company.name)}</button>`;
-    } else {
-      html += `<span class="breadcrumb-current">${escapeHtml(company.name)}</span>`;
+    // Breadcrumb skips department (shown as tab)
+    // audit-plan only shown as clickable link when deeper levels exist
+    const bcSegments = navPath.filter(s => s.type !== 'department');
+    // If the only segment is audit-plan itself, don't show breadcrumb
+    if (bcSegments.length === 1 && bcSegments[0].type === 'audit-plan') {
+      breadcrumbEl.innerHTML = '';
+      return;
     }
 
-    navPath.forEach((segment, i) => {
-      html += `<span class="breadcrumb-sep">\u203a</span>`;
-      if (i < navPath.length - 1) {
-        html += `<button class="breadcrumb-item" data-nav="${i}">${escapeHtml(segment.name)}</button>`;
+    let html = '';
+    if (bcSegments.length === 0) {
+      breadcrumbEl.innerHTML = '';
+      return;
+    }
+
+    bcSegments.forEach((segment, i) => {
+      if (i > 0) html += `<span class="breadcrumb-sep">\u203a</span>`;
+      const navIdx = navPath.indexOf(segment);
+      if (i < bcSegments.length - 1) {
+        html += `<button class="breadcrumb-item" data-nav="${navIdx}">${escapeHtml(segment.name)}</button>`;
       } else {
         html += `<span class="breadcrumb-current">${escapeHtml(segment.name)}</span>`;
       }
@@ -189,7 +251,9 @@
     const lastSegment = navPath.length > 0 ? navPath[navPath.length - 1] : null;
 
     if (!lastSegment) {
-      await renderDepartmentLevel();
+      headerEl.innerHTML = '';
+      contentEl.innerHTML = '<div class="empty-state-inline">Abteilung ausw\u00e4hlen</div>';
+      return;
     } else if (lastSegment.type === 'department') {
       await renderAuditPlanLevel(lastSegment.id);
     } else if (lastSegment.type === 'audit-plan') {
@@ -204,15 +268,8 @@
   // ── Department Level ──────────────────────────────────────
   let departments = [];
 
-  async function renderDepartmentLevel() {
-    headerEl.innerHTML = `
-      <h2>Abteilungen</h2>
-      <button class="btn-icon" id="btn-add-dept" title="Abteilung hinzuf&uuml;gen">+</button>
-    `;
-    document.getElementById('btn-add-dept').addEventListener('click', () => openDeptDialog(null));
-
-    await loadDepartments();
-  }
+  // Static "+" button for dept tab bar
+  document.getElementById('btn-add-dept').addEventListener('click', () => openDeptDialog(null));
 
   async function loadDepartments() {
     if (!selectedId) return;
@@ -222,85 +279,7 @@
       toast(e.message, 'error');
       departments = [];
     }
-    renderDepartments();
-  }
-
-  async function reorderDepartments(order) {
-    try {
-      departments = await fetchJSON(`/api/companies/${selectedId}/departments/reorder`, {
-        method: 'PATCH',
-        body: { order }
-      });
-      renderDepartments();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  }
-
-  function renderDepartments() {
-    if (departments.length === 0) {
-      contentEl.innerHTML = '<div class="empty-state-inline">Keine Abteilungen vorhanden</div>';
-      return;
-    }
-    contentEl.innerHTML = departments.map((d, idx) => `
-      <div class="dept-card" data-id="${d.id}">
-        <div class="dept-card-reorder">
-          <button class="reorder-btn" data-action="move-up" data-id="${d.id}" title="Nach oben" ${idx === 0 ? 'disabled' : ''}>&uarr;</button>
-          <button class="reorder-btn" data-action="move-down" data-id="${d.id}" title="Nach unten" ${idx === departments.length - 1 ? 'disabled' : ''}>&darr;</button>
-        </div>
-        <div class="dept-card-body">
-          <span class="dept-card-name">${escapeHtml(d.name)}</span>
-          ${d.easa_permission_number ? `<span class="dept-card-desc">${escapeHtml(d.easa_permission_number)}</span>` : ''}
-          ${d.regulation ? `<span class="dept-card-desc">${escapeHtml(d.regulation)}</span>` : ''}
-        </div>
-        <div class="dept-card-actions">
-          <button class="pane-action-btn" data-action="edit-dept" data-id="${d.id}" title="Bearbeiten">&#9998;</button>
-          <button class="pane-action-btn danger" data-action="delete-dept" data-id="${d.id}" title="L&ouml;schen">&#128465;</button>
-        </div>
-      </div>
-    `).join('');
-
-    contentEl.querySelectorAll('.dept-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.pane-action-btn') || e.target.closest('.reorder-btn')) return;
-        const id = card.dataset.id;
-        const dept = departments.find(d => d.id === id);
-        if (!dept) return;
-        navPath.push({ type: 'department', id: dept.id, name: dept.name });
-        renderCurrentLevel();
-      });
-      card.style.cursor = 'pointer';
-    });
-
-    // Reorder buttons
-    contentEl.querySelectorAll('.reorder-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.dataset.id;
-        const idx = departments.findIndex(d => d.id === id);
-        if (idx < 0) return;
-        const newOrder = departments.map(d => d.id);
-        if (btn.dataset.action === 'move-up' && idx > 0) {
-          [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
-        } else if (btn.dataset.action === 'move-down' && idx < newOrder.length - 1) {
-          [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
-        } else {
-          return;
-        }
-        reorderDepartments(newOrder);
-      });
-    });
-
-    contentEl.querySelectorAll('.pane-action-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.dataset.id;
-        const dept = departments.find(d => d.id === id);
-        if (!dept) return;
-        if (btn.dataset.action === 'edit-dept') openDeptDialog(dept);
-        else if (btn.dataset.action === 'delete-dept') confirmDeleteDept(dept);
-      });
-    });
+    renderDeptTabs();
   }
 
   // ── Helper: save person for a role ────────────────────────
@@ -683,7 +662,7 @@
         const id = card.dataset.id;
         const plan = auditPlans.find(p => p.id === id);
         if (!plan) return;
-        navPath.push({ type: 'audit-plan', id: plan.id, name: String(plan.year) });
+        navPath.push({ type: 'audit-plan', id: plan.id, name: `Auditplan ${plan.year} Rev. ${plan.revision || 0}` });
         renderCurrentLevel();
       });
     });
@@ -883,6 +862,12 @@
     try {
       currentPlan = await fetchJSON(`/api/audit-plans/${planId}`);
       planLines = await fetchJSON(`/api/audit-plans/${planId}/lines`);
+      // Update navPath name to include full title
+      const seg = navPath.find(s => s.type === 'audit-plan' && s.id === planId);
+      if (seg) {
+        seg.name = `Auditplan ${currentPlan.year} Rev. ${currentPlan.revision || 0}`;
+        saveNavState();
+      }
     } catch (e) {
       toast(e.message, 'error');
       currentPlan = null;
@@ -1635,6 +1620,12 @@
     }
     pdfExportDialog.close();
   });
+  document.getElementById('pdf-export-closed').addEventListener('click', () => {
+    if (currentPlan) {
+      window.open(`/api/audit-plans/${currentPlan.id}/pdf?type=closed`, '_blank');
+    }
+    pdfExportDialog.close();
+  });
 
   // ── CAP Section ──────────────────────────────────────────
   let capItems = [];
@@ -1946,9 +1937,12 @@
       capFilter = saved.capFilter || null;
       auditLineFilters = new Set(Array.isArray(saved.auditLineFilters) ? saved.auditLineFilters : []);
 
-      renderList();
+      renderCompanyTabs();
       emptyEl.style.display = 'none';
       rightPane.style.display = 'block';
+      await loadDepartments();
+      deptTabBar.style.display = 'flex';
+      renderDeptTabs();
       await renderCurrentLevel();
     }
   }

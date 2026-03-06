@@ -1,22 +1,24 @@
-<div class="app-layout">
-  <!-- Left pane: company list -->
-  <aside class="left-pane">
-    <div class="pane-header" style="justify-content:flex-end">
-      <button class="btn-icon" id="btn-add" title="Firma hinzuf&uuml;gen">+</button>
-    </div>
-    <div class="pane-list" id="company-list"></div>
-  </aside>
-
-  <!-- Right pane: breadcrumb drill-down -->
-  <main class="main-content" id="main-content">
-    <div class="empty-state" id="empty-state">Firma ausw&auml;hlen</div>
-    <div id="right-pane-content" style="display:none">
-      <nav class="breadcrumb" id="breadcrumb"></nav>
-      <div class="pane-content-header" id="pane-content-header"></div>
-      <div id="pane-content-list"></div>
-    </div>
-  </main>
+<!-- Company Tabs -->
+<div class="tab-bar" id="company-tab-bar">
+  <div class="tab-bar-scroll" id="company-tabs"></div>
+  <button class="tab-add-btn" id="btn-add" title="Firma hinzuf&uuml;gen">+</button>
 </div>
+
+<!-- Department Tabs -->
+<div class="tab-bar tab-bar-secondary" id="dept-tab-bar" style="display:none">
+  <div class="tab-bar-scroll" id="dept-tabs"></div>
+  <button class="tab-add-btn" id="btn-add-dept" title="Abteilung hinzuf&uuml;gen">+</button>
+</div>
+
+<!-- Main Content -->
+<main class="main-content-full" id="main-content">
+  <div class="empty-state" id="empty-state">Firma ausw&auml;hlen</div>
+  <div id="right-pane-content" style="display:none">
+    <nav class="breadcrumb" id="breadcrumb"></nav>
+    <div class="pane-content-header" id="pane-content-header"></div>
+    <div id="pane-content-list"></div>
+  </div>
+</main>
 
 <!-- Company Add / Edit dialog -->
 <dialog id="company-dialog">
@@ -107,7 +109,7 @@
       <div id="dept-persons-section" style="display:none">
         <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
         <div class="form-group">
-          <label>Quality Manager</label>
+          <label>Compliance Monitoring Manager</label>
           <div class="form-row">
             <input type="text" id="dept-form-qm-firstname" placeholder="Vorname" class="form-group">
             <input type="text" id="dept-form-qm-lastname" placeholder="Nachname" class="form-group">
@@ -307,7 +309,7 @@
   <div class="dialog-body">
     <div class="new-plan-options">
       <button class="btn btn-primary new-plan-option" id="pdf-export-open">Geplante Audits</button>
-      <button class="btn btn-secondary new-plan-option" id="pdf-export-closed" disabled style="opacity:0.4;cursor:not-allowed">Durchgef&uuml;hrte Audits</button>
+      <button class="btn btn-secondary new-plan-option" id="pdf-export-closed">Durchgef&uuml;hrte Audits</button>
     </div>
   </div>
   <div class="dialog-footer">
