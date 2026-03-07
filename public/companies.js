@@ -633,7 +633,11 @@
       contentEl.innerHTML = '<div class="empty-state-inline">Keine Auditpl\u00e4ne vorhanden</div>';
       return;
     }
-    contentEl.innerHTML = auditPlans.map(p => {
+    // Sort by year desc, then revision desc
+    const sorted = [...auditPlans].sort((a, b) => b.year - a.year || (b.revision || 0) - (a.revision || 0));
+    const statusCss = { 'AKTIV': 'plan-tile-active', 'ENTWURF': 'plan-tile-draft', 'ARCHIV': 'plan-tile-archive' };
+    const statusLabel = { 'AKTIV': 'Aktiv', 'ENTWURF': 'Entwurf', 'ARCHIV': 'Archiv' };
+    contentEl.innerHTML = '<div class="plan-tile-grid">' + sorted.map(p => {
       const total = p.audit_total || 0;
       const done = p.audit_done || 0;
       const pct = total > 0 ? Math.round(done / total * 100) : 0;
@@ -643,20 +647,22 @@
             <span class="plan-progress-label">${done}/${total}</span>
            </div>`
         : '';
+      const css = statusCss[p.status] || '';
+      const label = statusLabel[p.status] || p.status || '';
       return `
-      <div class="dept-card" data-id="${p.id}" style="cursor:pointer">
-        <div class="dept-card-body">
-          <span class="dept-card-name">${p.year} <small style="font-weight:400;color:var(--text-muted)">Rev. ${p.revision || 0}</small></span>
-          ${progressHtml}
-        </div>
-        <div class="dept-card-actions">
+      <div class="plan-tile ${css}" data-id="${p.id}">
+        <div class="plan-tile-year">${p.year}</div>
+        <div class="plan-tile-rev">Rev. ${p.revision || 0}</div>
+        <div class="plan-tile-status">${label}</div>
+        ${progressHtml}
+        <div class="plan-tile-actions">
           <button class="pane-action-btn" data-action="edit-plan" data-id="${p.id}" title="Bearbeiten">&#9998;</button>
-          <button class="pane-action-btn danger" data-action="delete-plan" data-id="${p.id}" title="L&ouml;schen">&#128465;</button>
+          <button class="pane-action-btn danger" data-action="delete-plan" data-id="${p.id}" title="L\u00f6schen">&#128465;</button>
         </div>
       </div>`;
-    }).join('');
+    }).join('') + '</div>';
 
-    contentEl.querySelectorAll('.dept-card').forEach(card => {
+    contentEl.querySelectorAll('.plan-tile').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.pane-action-btn')) return;
         const id = card.dataset.id;

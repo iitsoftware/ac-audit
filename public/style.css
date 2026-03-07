@@ -1175,6 +1175,74 @@ dialog.dialog-wide {
   color: var(--text-primary);
 }
 
+/* ── Audit Plan Tiles ─────────────────────────────────────── */
+.plan-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.plan-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px 14px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: box-shadow var(--transition), border-color var(--transition);
+  position: relative;
+}
+
+.plan-tile:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.plan-tile-active { border-color: #22c55e; }
+.plan-tile-draft  { border-color: #f59e0b; }
+.plan-tile-archive { border-color: var(--border); opacity: 0.65; }
+
+.plan-tile-year {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.plan-tile-rev {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.plan-tile-status {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 8px;
+}
+
+.plan-tile-active .plan-tile-status { color: #22c55e; }
+.plan-tile-draft .plan-tile-status  { color: #f59e0b; }
+.plan-tile-archive .plan-tile-status { color: var(--text-muted); }
+
+.plan-tile .plan-progress {
+  margin-top: 10px;
+}
+
+.plan-tile-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.plan-tile:hover .plan-tile-actions { opacity: 1; }
+
 /* ── Audit Plan Progress Bar ───────────────────────────────── */
 .plan-progress {
   display: flex;
