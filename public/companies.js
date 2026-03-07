@@ -1188,7 +1188,7 @@
       <button class="icon-btn" title="Audit Checklist PDF" onclick="window.open('/api/audit-plan-lines/${currentLine.id}/pdf')" style="font-size:1rem;cursor:pointer;">&#128196;</button>
     `;
 
-    const monthOptions = ['', 'Januar', 'Februar', 'M\u00e4rz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+    const monthOptions = ['', 'Januar', 'Februar', 'M\u00e4rz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember', 'Nach Bedarf', 'Unangek\u00fcndigt'];
     function monthSelect(id, val) {
       return `<select class="inline-input" id="${id}">${monthOptions.map(m =>
         `<option value="${escapeHtml(m)}" ${m === (val || '') ? 'selected' : ''}>${m || '--'}</option>`
@@ -1763,13 +1763,29 @@
       </div>
     </div>`;
 
+    // 5W Analysis section (only for L1/L2)
+    const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
+    if (hasFiveWhy) {
+      html += `<div class="audit-section">
+        <div class="audit-section-header"><h3>5-Why Analyse</h3></div>
+        <div class="inline-form-grid">
+          <label>1. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2" placeholder="Warum ist das Problem aufgetreten?"></textarea>
+          <label>2. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2" placeholder="Warum war das so?"></textarea>
+          <label>3. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2" placeholder="Warum war das so?"></textarea>
+          <label>4. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2" placeholder="Warum war das so?"></textarea>
+          <label>5. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2" placeholder="Warum war das so?"></textarea>
+          <label>Root Cause</label><textarea class="inline-input inline-textarea five-why-field" id="fw-root-cause" rows="3" placeholder="Grundursache (wird als Ursache übernommen)"></textarea>
+        </div>
+      </div>`;
+    }
+
     // Editable fields
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Corrective Action</h3></div>
       <div class="inline-form-grid">
         <label>Deadline</label><input class="inline-input cap-field" id="cap-f-deadline" value="${escapeHtml(formatDateDE(cap.deadline))}" placeholder="TT.MM.JJJJ">
         <label>Verantwortlich</label><input class="inline-input cap-field" id="cap-f-responsible" value="${escapeHtml(cap.responsible_person || '')}">
-        <label>Ursache</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-root-cause" rows="3">${escapeHtml(cap.root_cause || '')}</textarea>
+        <label>Ursache</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-root-cause" rows="3" ${hasFiveWhy ? 'readonly style="background:var(--bg-secondary);opacity:0.7;cursor:not-allowed"' : ''}>${escapeHtml(cap.root_cause || '')}</textarea>
         <label>Korrekturma\u00dfnahme</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-corrective" rows="3">${escapeHtml(cap.corrective_action || '')}</textarea>
         <label>Vorbeugema\u00dfnahme</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-preventive" rows="3">${escapeHtml(cap.preventive_action || '')}</textarea>
         <label>Status</label><select class="inline-input cap-field" id="cap-f-status">
@@ -1800,6 +1816,44 @@
       const event = (el.tagName === 'SELECT') ? 'change' : 'blur';
       el.addEventListener(event, () => saveCapFields(cap.id));
     });
+
+    // 5W: load data and setup auto-save
+    if (hasFiveWhy) {
+      (async () => {
+        try {
+          const fw = await fetchJSON(`/api/cap-items/${cap.id}/five-why`);
+          if (fw) {
+            document.getElementById('fw-why1').value = fw.why1 || '';
+            document.getElementById('fw-why2').value = fw.why2 || '';
+            document.getElementById('fw-why3').value = fw.why3 || '';
+            document.getElementById('fw-why4').value = fw.why4 || '';
+            document.getElementById('fw-why5').value = fw.why5 || '';
+            document.getElementById('fw-root-cause').value = fw.root_cause || '';
+            document.getElementById('cap-f-root-cause').value = fw.root_cause || '';
+          }
+        } catch { /* no 5W yet */ }
+      })();
+
+      async function saveFiveWhy() {
+        const data = {
+          why1: document.getElementById('fw-why1').value.trim(),
+          why2: document.getElementById('fw-why2').value.trim(),
+          why3: document.getElementById('fw-why3').value.trim(),
+          why4: document.getElementById('fw-why4').value.trim(),
+          why5: document.getElementById('fw-why5').value.trim(),
+          root_cause: document.getElementById('fw-root-cause').value.trim(),
+        };
+        try {
+          await fetchJSON(`/api/cap-items/${cap.id}/five-why`, { method: 'PUT', body: data });
+          // Sync root_cause to the read-only Ursache field
+          document.getElementById('cap-f-root-cause').value = data.root_cause;
+        } catch (err) { toast(err.message, 'error'); }
+      }
+
+      contentEl.querySelectorAll('.five-why-field').forEach(el => {
+        el.addEventListener('blur', saveFiveWhy);
+      });
+    }
 
     // Load evidence thumbnails
     loadEvidenceThumbs(cap.id);

@@ -818,6 +818,34 @@ app.delete('/api/cap-items/:id', (req, res) => {
   res.status(204).end();
 });
 
+// ── API: Five-Why Analysis ────────────────────────────────────
+
+app.get('/api/cap-items/:id/five-why', (req, res) => {
+  const row = stmts.getFiveWhyByCapItem.get(req.params.id);
+  res.json(row || null);
+});
+
+app.put('/api/cap-items/:id/five-why', (req, res) => {
+  const { why1, why2, why3, why4, why5, root_cause } = req.body;
+  const existing = stmts.getFiveWhyByCapItem.get(req.params.id);
+  if (existing) {
+    stmts.updateFiveWhy.run(why1 || '', why2 || '', why3 || '', why4 || '', why5 || '', root_cause || '', req.params.id);
+  } else {
+    stmts.createFiveWhy.run(uuidv4(), req.params.id, why1 || '', why2 || '', why3 || '', why4 || '', why5 || '', root_cause || '');
+  }
+  // Sync root_cause to cap_item
+  const capItem = stmts.getCapItem.get(req.params.id);
+  if (capItem) {
+    stmts.updateCapItem.run(
+      capItem.deadline || null, capItem.responsible_person || '', root_cause || '',
+      capItem.corrective_action || '', capItem.preventive_action || '',
+      capItem.status || 'OPEN', capItem.completion_date || null, capItem.evidence || '',
+      req.params.id
+    );
+  }
+  res.json(stmts.getFiveWhyByCapItem.get(req.params.id));
+});
+
 // ── API: CAP Evidence Files ──────────────────────────────────
 
 app.get('/api/cap-items/:id/evidence-files', (req, res) => {

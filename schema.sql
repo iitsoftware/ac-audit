@@ -112,6 +112,19 @@ CREATE TABLE IF NOT EXISTS person (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS five_why (
+  id TEXT PRIMARY KEY,
+  cap_item_id TEXT NOT NULL UNIQUE REFERENCES cap_item(id) ON DELETE CASCADE,
+  why1 TEXT DEFAULT '',
+  why2 TEXT DEFAULT '',
+  why3 TEXT DEFAULT '',
+  why4 TEXT DEFAULT '',
+  why5 TEXT DEFAULT '',
+  root_cause TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS checklist_evidence_file (
   id TEXT PRIMARY KEY,
   checklist_item_id TEXT NOT NULL REFERENCES audit_checklist_item(id) ON DELETE CASCADE,

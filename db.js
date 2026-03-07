@@ -423,6 +423,17 @@ const stmts = {
     'SELECT signature FROM person WHERE id = ?'
   ),
 
+  // Five-Why Analysis
+  getFiveWhyByCapItem: db.prepare(
+    'SELECT * FROM five_why WHERE cap_item_id = ?'
+  ),
+  createFiveWhy: db.prepare(
+    'INSERT INTO five_why (id, cap_item_id, why1, why2, why3, why4, why5, root_cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ),
+  updateFiveWhy: db.prepare(
+    `UPDATE five_why SET why1 = ?, why2 = ?, why3 = ?, why4 = ?, why5 = ?, root_cause = ?, updated_at = datetime('now') WHERE cap_item_id = ?`
+  ),
+
   getCapSummaryByPlan: db.prepare(
     `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN c.status = 'CLOSED' THEN 1 ELSE 0 END), 0) AS closed
      FROM cap_item c
