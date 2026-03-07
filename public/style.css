@@ -1201,9 +1201,9 @@ dialog.dialog-wide {
   border-color: var(--primary);
 }
 
-.plan-tile-active { border-color: #22c55e; }
-.plan-tile-draft  { border-color: #f59e0b; }
-.plan-tile-archive { border-color: var(--border); opacity: 0.65; }
+.plan-tile-wip     { border-color: #f59e0b; }
+.plan-tile-planned { border-color: #3b82f6; }
+.plan-tile-done    { border-color: #22c55e; }
 
 .plan-tile-year {
   font-size: 28px;
@@ -1225,9 +1225,9 @@ dialog.dialog-wide {
   margin-top: 8px;
 }
 
-.plan-tile-active .plan-tile-status { color: #22c55e; }
-.plan-tile-draft .plan-tile-status  { color: #f59e0b; }
-.plan-tile-archive .plan-tile-status { color: var(--text-muted); }
+.plan-tile-wip .plan-tile-status     { color: #f59e0b; }
+.plan-tile-planned .plan-tile-status { color: #3b82f6; }
+.plan-tile-done .plan-tile-status    { color: #22c55e; }
 
 .plan-tile .plan-progress {
   margin-top: 10px;

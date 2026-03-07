@@ -635,8 +635,11 @@
     }
     // Sort by year desc, then revision desc
     const sorted = [...auditPlans].sort((a, b) => b.year - a.year || (b.revision || 0) - (a.revision || 0));
-    const statusCss = { 'AKTIV': 'plan-tile-active', 'ENTWURF': 'plan-tile-draft', 'ARCHIV': 'plan-tile-archive' };
-    const statusLabel = { 'AKTIV': 'Aktiv', 'ENTWURF': 'Entwurf', 'ARCHIV': 'Archiv' };
+    function derivePlanStatus(p) {
+      if (p.submitted_at) return { css: 'plan-tile-done', label: 'Erledigt' };
+      if (p.approved_at || p.submitted_planned_at) return { css: 'plan-tile-planned', label: 'Geplant' };
+      return { css: 'plan-tile-wip', label: 'In Arbeit' };
+    }
     contentEl.innerHTML = '<div class="plan-tile-grid">' + sorted.map(p => {
       const total = p.audit_total || 0;
       const done = p.audit_done || 0;
@@ -647,13 +650,12 @@
             <span class="plan-progress-label">${done}/${total}</span>
            </div>`
         : '';
-      const css = statusCss[p.status] || '';
-      const label = statusLabel[p.status] || p.status || '';
+      const st = derivePlanStatus(p);
       return `
-      <div class="plan-tile ${css}" data-id="${p.id}">
+      <div class="plan-tile ${st.css}" data-id="${p.id}">
         <div class="plan-tile-year">${p.year}</div>
         <div class="plan-tile-rev">Rev. ${p.revision || 0}</div>
-        <div class="plan-tile-status">${label}</div>
+        <div class="plan-tile-status">${st.label}</div>
         ${progressHtml}
         <div class="plan-tile-actions">
           <button class="pane-action-btn" data-action="edit-plan" data-id="${p.id}" title="Bearbeiten">&#9998;</button>
