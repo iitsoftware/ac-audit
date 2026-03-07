@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AC Audit – Login</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-box">
+      <h1 class="login-title">AC Audit</h1>
+      <p class="login-greeting">Hallo, Dani</p>
+      <% if (error) { %>
+        <div class="login-error"><%= error %></div>
+      <% } %>
+      <form method="POST" action="/login">
+        <input type="password" name="password" class="login-input" placeholder="Passwort" autofocus required>
+        <button type="submit" class="login-btn">Anmelden</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

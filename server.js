@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const ejs = require('ejs');
 const { v4: uuidv4 } = require('uuid');
 const AdmZip = require('adm-zip');
@@ -8,13 +9,79 @@ const { db, stmts } = require('./db');
 const app = express();
 const PORT = process.env.PORT || 8090;
 
+// ── Auth config ──────────────────────────────────────────────
+const LOGIN_USER = 'Dani';
+const LOGIN_PASSWORD = process.env.LOGIN_PASSWORD || 'audit2024';
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function createSessionToken() {
+  const expires = Date.now() + SESSION_MAX_AGE;
+  const data = `${LOGIN_USER}:${expires}`;
+  const hmac = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('hex');
+  return `${data}:${hmac}`;
+}
+
+function verifySessionToken(token) {
+  if (!token) return false;
+  const parts = token.split(':');
+  if (parts.length !== 3) return false;
+  const [user, expires, hmac] = parts;
+  if (Date.now() > parseInt(expires, 10)) return false;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(`${user}:${expires}`).digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expected));
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  const cookies = {};
+  header.split(';').forEach(c => {
+    const [k, ...v] = c.trim().split('=');
+    if (k) cookies[k.trim()] = decodeURIComponent(v.join('='));
+  });
+  return cookies;
+}
+
 // View engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // Middleware
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ── Login routes (before auth middleware) ─────────────────────
+app.get('/login', (req, res) => {
+  const cookies = parseCookies(req);
+  if (verifySessionToken(cookies.session)) return res.redirect('/');
+  res.render('login', { error: null });
+});
+
+app.post('/login', (req, res) => {
+  const { password } = req.body;
+  if (password === LOGIN_PASSWORD) {
+    const token = createSessionToken();
+    res.setHeader('Set-Cookie', `session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE / 1000}`);
+    return res.redirect('/');
+  }
+  res.render('login', { error: 'Falsches Passwort' });
+});
+
+app.get('/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+  res.redirect('/login');
+});
+
+// ── Auth middleware ───────────────────────────────────────────
+app.use((req, res, next) => {
+  // Allow static assets through
+  if (req.path.startsWith('/style.css') || req.path.startsWith('/app.js')) return next();
+  const cookies = parseCookies(req);
+  if (verifySessionToken(cookies.session)) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Nicht angemeldet' });
+  res.redirect('/login');
+});
 
 // Helper: render a page inside layout
 function renderPage(res, view, opts = {}) {
