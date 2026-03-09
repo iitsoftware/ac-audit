@@ -15,7 +15,7 @@ ac-audit is an EASA Audit Management System with audit tracking, compliance mana
 - **CSS**: Custom CSS with auto dark/light mode (blue theme)
 - **Single process**: `npm start` runs everything
 
-## Dependencies (7 total)
+## Dependencies (8 total)
 
 - `express` — HTTP server + routing
 - `better-sqlite3` — synchronous SQLite
@@ -24,6 +24,7 @@ ac-audit is an EASA Audit Management System with audit tracking, compliance mana
 - `pdfkit` — PDF generation
 - `xlsx` — Excel file parsing (.xlsx import)
 - `adm-zip` — .docx/.zip extraction
+- `nodemailer` — SMTP email sending
 
 ## Commands
 
@@ -50,6 +51,7 @@ ac-audit/
 ├── views/
 │   ├── layout.ejs         # Base HTML shell (nav, CSS, scripts)
 │   ├── companies.ejs      # Main page template (dialogs, file inputs)
+│   ├── settings.ejs       # Settings page (SMTP, backup, CAP deadlines, notifications)
 │   └── login.ejs          # Login form
 ├── documents/             # Sample audit files (.docx/.xlsx)
 └── data/                  # SQLite DB file (gitignored)
@@ -61,12 +63,12 @@ ac-audit/
 ```
 Company (id, name, street, postal_code, city, logo BLOB)
   ├── Person (id, company_id, department_id?, role, first_name, last_name, email, signature BLOB)
-  └── Department (id, company_id, name, easa_permission_number, regulation, sort_order)
+  └── Department (id, company_id, name, easa_permission_number, regulation, sort_order, authority_salutation/name/email)
        └── AuditPlan (id, department_id, name, year, revision, status, approved_at, submitted_at, ...)
             └── AuditPlanLine (id, audit_plan_id, subject, regulations, location, planned_window, audit metadata...)
                  └── AuditChecklistItem (id, audit_plan_line_id, section, regulation_ref, compliance_check, evaluation)
                       ├── ChecklistEvidenceFile (id, checklist_item_id, filename, mime_type, data BLOB)
-                      └── CapItem (id, checklist_item_id, deadline, responsible_person, root_cause, corrective/preventive_action, completion_date)
+                      └── CapItem (id, checklist_item_id, deadline, responsible_person, root_cause, corrective/preventive_action, completion_date, notified_at)
                            ├── FiveWhy (id, cap_item_id, why1-why5, root_cause) — only for L1/L2
                            └── CapEvidenceFile (id, cap_item_id, filename, mime_type, data BLOB)
 ```
@@ -157,6 +159,19 @@ Company (id, name, street, postal_code, city, logo BLOB)
 - `PUT /api/persons/:id/signature` — Upload signature (base64)
 - `GET /api/persons/:id/signature` — Serve signature image
 
+### Settings
+- `GET /api/settings` — Get all settings (key-value)
+- `PUT /api/settings` — Update settings (bulk key-value)
+- `POST /api/settings/test-email` — Send SMTP test email
+- `POST /api/settings/notify-test` — Send test notification to provided email
+
+### Backup
+- `POST /api/backup/now` — Trigger immediate backup (async, uses SQLite Online Backup API)
+- `GET /api/backup/list` — List existing backup files
+
+### CAP Deadline Recalculation
+- `POST /api/cap-items/recalc-deadlines` — Recalculate all open CAP deadlines based on configured days per evaluation
+
 ### Other
 - `GET /health` — Health check
 
@@ -172,7 +187,11 @@ Company (id, name, street, postal_code, city, logo BLOB)
 - Upload pattern: file → base64 in browser → JSON to API → Buffer in DB
 - CSS auto dark/light mode via `@media (prefers-color-scheme: dark)`
 - CAP status derived from `completion_date` (not stored explicitly)
-- CAP items auto-created when checklist evaluation is O/L1/L2/L3
+- CAP items auto-created when checklist evaluation is O/L1/L2/L3, deadline auto-calculated from performed_date + configurable days
+- CAP deadline defaults: O=180, L1=5, L2=60, L3=90 days (configurable in settings)
+- Notifications: email to department QM when CAP deadline approaches, with repeat option
+- Backup: SQLite Online Backup API (async), scheduled with change detection via DB mtime
+- Settings stored in `app_setting` table (key-value)
 - PDF helpers extracted: `renderAuditLinePdf()`, `renderCapItemPdf()`, `addPdfFooter()`
 - Multi-select PDF: batch routes registered before `:id` routes (Express route ordering)
 - Auth: HMAC-SHA256 session token in HttpOnly cookie, 7-day expiry
@@ -180,4 +199,4 @@ Company (id, name, street, postal_code, city, logo BLOB)
 
 ## Database Tables
 
-company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person
+company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting

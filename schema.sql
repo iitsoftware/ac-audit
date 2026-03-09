@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS cap_item (
   status TEXT DEFAULT 'OPEN',
   completion_date TEXT,
   evidence TEXT DEFAULT '',
+  notified_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );

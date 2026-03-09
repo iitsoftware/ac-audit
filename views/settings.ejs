@@ -38,5 +38,117 @@
         <button class="btn btn-secondary" id="test-email-send" disabled>Test senden</button>
       </div>
     </div>
+    <div class="settings-tile">
+      <h2>Backup</h2>
+      <div class="settings-form" id="backup-form">
+        <div class="form-group">
+          <label for="backup-path">Backup-Pfad</label>
+          <input type="text" id="backup-path" placeholder="/backups/acaudit">
+        </div>
+        <div class="form-group">
+          <label>Wochentage</label>
+          <div class="backup-days">
+            <label class="day-check"><input type="checkbox" value="mo" class="backup-day"> Mo</label>
+            <label class="day-check"><input type="checkbox" value="tu" class="backup-day"> Di</label>
+            <label class="day-check"><input type="checkbox" value="we" class="backup-day"> Mi</label>
+            <label class="day-check"><input type="checkbox" value="th" class="backup-day"> Do</label>
+            <label class="day-check"><input type="checkbox" value="fr" class="backup-day"> Fr</label>
+            <label class="day-check"><input type="checkbox" value="sa" class="backup-day"> Sa</label>
+            <label class="day-check"><input type="checkbox" value="su" class="backup-day"> So</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="backup-time">Uhrzeit</label>
+          <input type="time" id="backup-time" value="02:00" style="width:120px">
+        </div>
+        <div class="form-group">
+          <label for="backup-max">Max. Backups</label>
+          <input type="number" id="backup-max" value="10" min="1" style="width:120px">
+        </div>
+      </div>
+
+      <div class="settings-test-mail">
+        <button class="btn btn-secondary" id="backup-now">Jetzt sichern</button>
+      </div>
+
+      <div id="backup-list-section" style="margin-top:16px;display:none">
+        <h3 style="font-size:14px;margin:0 0 8px">Vorhandene Backups</h3>
+        <div id="backup-list" class="backup-list"></div>
+      </div>
+    </div>
+    <div class="settings-tile">
+      <h2>CAP Fristen</h2>
+      <div class="settings-form" id="cap-deadline-form">
+        <p style="font-size:13px;color:var(--muted);margin:0 0 12px">Tage ab Durchführungsdatum des Audits</p>
+        <div class="form-group">
+          <label for="cap-deadline-O">Observation (O)</label>
+          <input type="number" id="cap-deadline-O" value="180" min="1" style="width:120px">
+        </div>
+        <div class="form-group">
+          <label for="cap-deadline-L1">Level 1 (L1)</label>
+          <input type="number" id="cap-deadline-L1" value="5" min="1" style="width:120px">
+        </div>
+        <div class="form-group">
+          <label for="cap-deadline-L2">Level 2 (L2)</label>
+          <input type="number" id="cap-deadline-L2" value="60" min="1" style="width:120px">
+        </div>
+        <div class="form-group">
+          <label for="cap-deadline-L3">Level 3 (L3)</label>
+          <input type="number" id="cap-deadline-L3" value="90" min="1" style="width:120px">
+        </div>
+      </div>
+      <div class="settings-test-mail">
+        <button class="btn btn-secondary" id="cap-recalc">Alle anpassen</button>
+      </div>
+    </div>
+    <div class="settings-tile">
+      <h2>Benachrichtigungen</h2>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 12px">E-Mail an den QM der jeweiligen Abteilung</p>
+      <div class="settings-form" id="notify-form">
+        <div class="form-group">
+          <label for="notify-enabled">Aktiviert</label>
+          <select id="notify-enabled">
+            <option value="false">Nein</option>
+            <option value="true">Ja</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="notify-repeat">Wiederholen bis Erledigt</label>
+          <select id="notify-repeat">
+            <option value="false">Nein</option>
+            <option value="true">Ja</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="notify-days-before">Tage vor Fälligkeit</label>
+            <input type="number" id="notify-days-before" value="7" min="1" style="width:120px">
+          </div>
+          <div class="form-group">
+            <label for="notify-time">Uhrzeit</label>
+            <input type="time" id="notify-time" value="08:00" style="width:120px">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Wochentage</label>
+          <div class="backup-days">
+            <label class="day-check"><input type="checkbox" value="mo" class="notify-day"> Mo</label>
+            <label class="day-check"><input type="checkbox" value="tu" class="notify-day"> Di</label>
+            <label class="day-check"><input type="checkbox" value="we" class="notify-day"> Mi</label>
+            <label class="day-check"><input type="checkbox" value="th" class="notify-day"> Do</label>
+            <label class="day-check"><input type="checkbox" value="fr" class="notify-day"> Fr</label>
+            <label class="day-check"><input type="checkbox" value="sa" class="notify-day"> Sa</label>
+            <label class="day-check"><input type="checkbox" value="su" class="notify-day"> So</label>
+          </div>
+        </div>
+      </div>
+      <div class="settings-test-mail">
+        <div class="form-group">
+          <label for="notify-test-email">Test E-Mail senden an</label>
+          <input type="email" id="notify-test-email" placeholder="empfaenger@example.com">
+        </div>
+        <button class="btn btn-secondary" id="notify-test" disabled>Test senden</button>
+      </div>
+    </div>
   </div>
 </div>

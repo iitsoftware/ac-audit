@@ -26,6 +26,10 @@ Open http://localhost:8090. No build step, no external database.
 - **Filter & Tags** — Filter audit lines by status (open/planned/in progress/done), findings, observations, and checklist presence
 - **Tab Navigation** — Companies and departments as horizontal tab bars with three-dot menu for edit/delete; breadcrumb for deeper levels
 - **Persistent Navigation** — Tab selection, breadcrumb path, and filter settings survive page reloads via localStorage
+- **Settings Page** — Configurable SMTP email, backup schedule, CAP deadline defaults, and notification settings
+- **Automated Backup** — Scheduled SQLite backups with configurable path, weekdays, time, and rolling max count
+- **CAP Deadline Defaults** — Configurable days per evaluation level (O=180, L1=5, L2=60, L3=90), auto-calculated from audit performed date
+- **Notifications** — Email alerts to department QMs for upcoming/overdue CAP deadlines, with optional daily repeat until resolved
 
 ## Tech Stack
 
@@ -34,7 +38,7 @@ Open http://localhost:8090. No build step, no external database.
 - **Frontend**: Server-rendered EJS templates + vanilla JavaScript
 - **CSS**: Custom CSS with auto dark/light mode (blue theme)
 
-7 dependencies. Single process. No build step.
+8 dependencies. Single process. No build step.
 
 ## Configuration
 
@@ -66,15 +70,17 @@ Company
 ac-audit/
 ├── server.js        # Express app, all routes and API endpoints
 ├── db.js            # SQLite setup, migrations, prepared statements
-├── schema.sql       # Database schema (9 tables)
+├── schema.sql       # Database schema (11 tables)
 ├── package.json
 ├── public/          # Static files
 │   ├── style.css    # Custom CSS (blue theme, dark/light auto)
 │   ├── app.js       # Shared utilities (fetchJSON, escapeHtml, toast)
-│   └── companies.js # Main page logic (navigation, CRUD, filters)
+│   ├── companies.js # Main page logic (navigation, CRUD, filters)
+│   └── settings.js  # Settings page logic (SMTP, backup, deadlines, notifications)
 ├── views/           # EJS templates
 │   ├── layout.ejs   # Base HTML shell (nav, CSS, scripts)
-│   └── companies.ejs # Companies page (tab bars + drill-down detail)
+│   ├── companies.ejs # Companies page (tab bars + drill-down detail)
+│   └── settings.ejs  # Settings page (tile grid)
 └── data/            # SQLite database file (auto-created, gitignored)
     └── acaudit.db
 ```

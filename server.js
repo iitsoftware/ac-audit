@@ -1,4 +1,5 @@
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const ejs = require('ejs');
@@ -117,6 +118,11 @@ app.put('/api/settings', (req, res) => {
   for (const [key, value] of entries) {
     stmts.upsertSetting.run(key, String(value || ''));
   }
+  // Auto-create backup directory if path was set
+  if (req.body.backup_path && req.body.backup_path.trim()) {
+    try { fs.mkdirSync(req.body.backup_path.trim(), { recursive: true }); }
+    catch (e) { return res.status(400).json({ error: `Verzeichnis konnte nicht erstellt werden: ${e.message}` }); }
+  }
   res.json({ ok: true });
 });
 
@@ -154,6 +160,366 @@ app.post('/api/settings/test-email', (req, res) => {
     res.json({ ok: true });
   });
 });
+
+app.post('/api/settings/notify-test', async (req, res) => {
+  try {
+    const { to } = req.body;
+    if (!to) return res.status(400).json({ error: 'Test E-Mail-Adresse erforderlich' });
+
+    const rows2 = stmts.getAllSettings.all();
+    const s2 = {};
+    rows2.forEach(r => { s2[r.key] = r.value; });
+    if (!s2.smtp_host || !s2.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+
+    const cfg = getNotifySettings();
+    // For test: include ALL due items (also already notified)
+    const items = db.prepare(
+      `SELECT c.id, c.deadline, c.responsible_person,
+              ci.regulation_ref, ci.evaluation,
+              pl.subject AS audit_subject, pl.audit_no,
+              ap.name AS plan_name, ap.year AS plan_year,
+              d.id AS department_id, d.name AS department_name,
+              co.id AS company_id, co.name AS company_name
+       FROM cap_item c
+       JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
+       JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
+       JOIN audit_plan ap ON ap.id = pl.audit_plan_id
+       JOIN department d ON d.id = ap.department_id
+       JOIN company co ON co.id = d.company_id
+       WHERE (c.completion_date IS NULL OR c.completion_date = '')
+         AND c.deadline IS NOT NULL AND c.deadline != ''
+         AND c.deadline <= date('now', '+' || ? || ' days')
+       ORDER BY c.deadline ASC`
+    ).all(cfg.daysBefore);
+    if (items.length === 0) return res.status(400).json({ error: 'Keine fälligen oder überfälligen CAPs gefunden' });
+
+    const nodemailer = require('nodemailer');
+    const host = s2.smtp_host;
+    const port = parseInt(s2.smtp_port) || 587;
+    const auth = s2.smtp_auth !== 'false';
+    const transporter = nodemailer.createTransport({
+      host, port, secure: port === 465,
+      auth: auth ? { user: s2.smtp_user, pass: s2.smtp_pass } : undefined,
+    });
+
+    const overdue = items.filter(i => i.deadline < new Date().toISOString().slice(0, 10));
+    const upcoming = items.filter(i => i.deadline >= new Date().toISOString().slice(0, 10));
+    const subject = `AC Audit [TEST] – ${overdue.length} überfällig, ${upcoming.length} bald fällig`;
+
+    await transporter.sendMail({
+      from: s2.smtp_user,
+      to,
+      subject,
+      html: buildNotifyHtml(items),
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── API: Backup ─────────────────────────────────────────────
+
+// ── CAP Deadline Defaults ────────────────────────────────────
+function getCapDeadlineDays() {
+  const rows = stmts.getAllSettings.all();
+  const s = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+  return {
+    O: parseInt(s.cap_deadline_O) || 180,
+    L1: parseInt(s.cap_deadline_L1) || 5,
+    L2: parseInt(s.cap_deadline_L2) || 60,
+    L3: parseInt(s.cap_deadline_L3) || 90,
+  };
+}
+
+function calcCapDeadline(evaluation, performedDate) {
+  if (!performedDate || !evaluation) return null;
+  const days = getCapDeadlineDays();
+  const d = days[evaluation];
+  if (d === undefined) return null;
+  const base = new Date(performedDate);
+  if (isNaN(base.getTime())) return null;
+  base.setDate(base.getDate() + d);
+  return base.toISOString().slice(0, 10);
+}
+
+function getBackupSettings() {
+  const rows = stmts.getAllSettings.all();
+  const s = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+  return {
+    path: s.backup_path || '',
+    time: s.backup_time || '02:00',
+    days: s.backup_days || 'mo,tu,we,th,fr',
+    maxBackups: parseInt(s.backup_max) || 10,
+  };
+}
+
+async function performBackup() {
+  const cfg = getBackupSettings();
+  if (!cfg.path) return { error: 'Kein Backup-Pfad konfiguriert' };
+
+  const backupDir = cfg.path;
+  if (!fs.existsSync(backupDir)) {
+    try { fs.mkdirSync(backupDir, { recursive: true }); }
+    catch (e) { return { error: `Verzeichnis konnte nicht erstellt werden: ${e.message}` }; }
+  }
+
+  const now = new Date();
+  const ts = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `acaudit_${ts}.db`;
+  const dest = path.join(backupDir, filename);
+
+  try {
+    await db.backup(dest);
+  } catch (e) {
+    return { error: `Backup fehlgeschlagen: ${e.message}` };
+  }
+
+  // Rolling: delete oldest if over max
+  try {
+    const files = fs.readdirSync(backupDir)
+      .filter(f => f.startsWith('acaudit_') && f.endsWith('.db'))
+      .sort();
+    while (files.length > cfg.maxBackups) {
+      const oldest = files.shift();
+      fs.unlinkSync(path.join(backupDir, oldest));
+    }
+  } catch { /* ignore cleanup errors */ }
+
+  return { ok: true, filename };
+}
+
+app.post('/api/backup/now', async (req, res) => {
+  try {
+    const result = await performBackup();
+    if (result.error) return res.status(500).json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/backup/list', (req, res) => {
+  const cfg = getBackupSettings();
+  if (!cfg.path || !fs.existsSync(cfg.path)) return res.json([]);
+  try {
+    const files = fs.readdirSync(cfg.path)
+      .filter(f => f.startsWith('acaudit_') && f.endsWith('.db'))
+      .sort()
+      .reverse()
+      .map(f => {
+        const stat = fs.statSync(path.join(cfg.path, f));
+        return { filename: f, size: stat.size, created: stat.mtime.toISOString() };
+      });
+    res.json(files);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Backup Scheduler ────────────────────────────────────────
+let lastBackupDbMtime = null;
+
+setInterval(async () => {
+  try {
+    const cfg = getBackupSettings();
+    if (!cfg.path) return;
+
+    const now = new Date();
+    const dayMap = { 0: 'su', 1: 'mo', 2: 'tu', 3: 'we', 4: 'th', 5: 'fr', 6: 'sa' };
+    const today = dayMap[now.getDay()];
+    const activeDays = cfg.days.split(',').map(d => d.trim().toLowerCase());
+    if (!activeDays.includes(today)) return;
+
+    const [hh, mm] = cfg.time.split(':').map(Number);
+    if (now.getHours() !== hh || now.getMinutes() !== mm) return;
+
+    // Check if DB changed since last backup
+    const dbPath = path.join(__dirname, 'data', 'acaudit.db');
+    const dbMtime = fs.statSync(dbPath).mtimeMs;
+    if (lastBackupDbMtime !== null && dbMtime <= lastBackupDbMtime) return;
+
+    const result = await performBackup();
+    if (result.ok) {
+      lastBackupDbMtime = dbMtime;
+      console.log(`[Backup] ${result.filename}`);
+    } else {
+      console.error(`[Backup] ${result.error}`);
+    }
+  } catch (e) {
+    console.error('[Backup] Scheduler error:', e.message);
+  }
+}, 60000); // check every minute
+
+// ── Notification Scheduler ──────────────────────────────────
+
+function getNotifySettings() {
+  const rows = stmts.getAllSettings.all();
+  const s = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+  return {
+    enabled: s.notify_enabled === 'true',
+    repeat: s.notify_repeat === 'true',
+    daysBefore: parseInt(s.notify_days_before) || 7,
+    time: s.notify_time || '08:00',
+    days: s.notify_days || 'mo,tu,we,th,fr',
+  };
+}
+
+function buildNotifyHtml(items) {
+  const overdue = items.filter(i => i.deadline < new Date().toISOString().slice(0, 10));
+  const upcoming = items.filter(i => i.deadline >= new Date().toISOString().slice(0, 10));
+
+  let html = '<h2 style="font-family:sans-serif;color:#1a5276">AC Audit – CAP Benachrichtigung</h2>';
+
+  if (overdue.length > 0) {
+    html += '<h3 style="font-family:sans-serif;color:#c0392b">Überfällige Corrective Actions</h3>';
+    html += buildNotifyTable(overdue, true);
+  }
+  if (upcoming.length > 0) {
+    html += '<h3 style="font-family:sans-serif;color:#e67e22">Bald fällige Corrective Actions</h3>';
+    html += buildNotifyTable(upcoming, false);
+  }
+
+  html += '<p style="font-family:sans-serif;font-size:12px;color:#888;margin-top:24px">Diese E-Mail wurde automatisch von AC Audit gesendet.</p>';
+  return html;
+}
+
+function buildNotifyTable(items, isOverdue) {
+  const color = isOverdue ? '#c0392b' : '#e67e22';
+  let t = `<table style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:13px;margin-bottom:16px">
+    <tr style="background:${color};color:#fff">
+      <th style="padding:6px 10px;text-align:left">Fälligkeit</th>
+      <th style="padding:6px 10px;text-align:left">Firma</th>
+      <th style="padding:6px 10px;text-align:left">Abteilung</th>
+      <th style="padding:6px 10px;text-align:left">Auditplan</th>
+      <th style="padding:6px 10px;text-align:left">Thema</th>
+      <th style="padding:6px 10px;text-align:left">Bewertung</th>
+      <th style="padding:6px 10px;text-align:left">Verantwortlich</th>
+    </tr>`;
+  items.forEach((r, i) => {
+    const bg = i % 2 === 0 ? '#f9f9f9' : '#fff';
+    t += `<tr style="background:${bg}">
+      <td style="padding:6px 10px;border-bottom:1px solid #ddd">${r.deadline}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #ddd">${r.company_name}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #ddd">${r.department_name}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #ddd">${r.plan_name} ${r.plan_year}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #ddd">${r.audit_subject}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #ddd">${r.evaluation}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #ddd">${r.responsible_person || '–'}</td>
+    </tr>`;
+  });
+  t += '</table>';
+  return t;
+}
+
+async function sendNotification() {
+  const cfg = getNotifySettings();
+  if (!cfg.enabled) return;
+
+  // If repeat: include already notified items; otherwise only unnotified
+  const query = cfg.repeat
+    ? `SELECT c.id, c.deadline, c.responsible_person,
+              ci.regulation_ref, ci.evaluation,
+              pl.subject AS audit_subject, pl.audit_no,
+              ap.name AS plan_name, ap.year AS plan_year,
+              d.id AS department_id, d.name AS department_name,
+              co.id AS company_id, co.name AS company_name
+       FROM cap_item c
+       JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
+       JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
+       JOIN audit_plan ap ON ap.id = pl.audit_plan_id
+       JOIN department d ON d.id = ap.department_id
+       JOIN company co ON co.id = d.company_id
+       WHERE (c.completion_date IS NULL OR c.completion_date = '')
+         AND c.deadline IS NOT NULL AND c.deadline != ''
+         AND c.deadline <= date('now', '+' || ? || ' days')
+       ORDER BY c.deadline ASC`
+    : null;
+  const items = cfg.repeat
+    ? db.prepare(query).all(cfg.daysBefore)
+    : stmts.getCapItemsDue.all(cfg.daysBefore);
+  if (items.length === 0) return;
+
+  const nodemailer = require('nodemailer');
+  const rows = stmts.getAllSettings.all();
+  const s = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+
+  const host = s.smtp_host;
+  const port = parseInt(s.smtp_port) || 587;
+  const user = s.smtp_user;
+  const pass = s.smtp_pass;
+  const auth = s.smtp_auth !== 'false';
+
+  if (!host || !user) return;
+
+  const transporter = nodemailer.createTransport({
+    host, port, secure: port === 465,
+    auth: auth ? { user, pass } : undefined,
+  });
+
+  // Group items by department and send to each QM
+  const byDept = {};
+  for (const item of items) {
+    if (!byDept[item.department_id]) byDept[item.department_id] = [];
+    byDept[item.department_id].push(item);
+  }
+
+  let sent = 0;
+  for (const [deptId, deptItems] of Object.entries(byDept)) {
+    const qm = db.prepare(
+      `SELECT p.email, p.first_name, p.last_name FROM person p
+       WHERE p.department_id = ? AND p.role = 'QM' AND p.email IS NOT NULL AND p.email != ''`
+    ).get(deptId);
+    if (!qm) continue;
+
+    const overdue = deptItems.filter(i => i.deadline < new Date().toISOString().slice(0, 10));
+    const upcoming = deptItems.filter(i => i.deadline >= new Date().toISOString().slice(0, 10));
+    const subject = `AC Audit – ${overdue.length} überfällig, ${upcoming.length} bald fällig (${deptItems[0].department_name})`;
+
+    await transporter.sendMail({
+      from: user,
+      to: qm.email,
+      subject,
+      html: buildNotifyHtml(deptItems),
+    });
+
+    // Mark CAPs as notified (only if not repeating)
+    if (!cfg.repeat) {
+      const markNotified = db.prepare(`UPDATE cap_item SET notified_at = datetime('now') WHERE id = ?`);
+      for (const item of deptItems) markNotified.run(item.id);
+    }
+
+    sent++;
+    console.log(`[Notify] E-Mail gesendet an ${qm.email} (${deptItems[0].department_name}): ${deptItems.length} CAP(s)`);
+  }
+
+  return sent;
+}
+
+setInterval(async () => {
+  try {
+    const cfg = getNotifySettings();
+    if (!cfg.enabled) return;
+
+    const now = new Date();
+    const dayMap = { 0: 'su', 1: 'mo', 2: 'tu', 3: 'we', 4: 'th', 5: 'fr', 6: 'sa' };
+    const today = dayMap[now.getDay()];
+    const activeDays = cfg.days.split(',').map(d => d.trim().toLowerCase());
+    if (!activeDays.includes(today)) return;
+
+    const [hh, mm] = cfg.time.split(':').map(Number);
+    if (now.getHours() !== hh || now.getMinutes() !== mm) return;
+
+    await sendNotification();
+  } catch (e) {
+    console.error('[Notify] Scheduler error:', e.message);
+  }
+}, 60000); // check every minute
 
 // ── API: Companies ──────────────────────────────────────────
 
@@ -401,7 +767,8 @@ app.post('/api/audit-plans/:id/copy', (req, res) => {
       );
       // Auto-CAP for findings/observations
       if (['O', 'L1', 'L2', 'L3'].includes(item.evaluation)) {
-        stmts.createCapItem.run(uuidv4(), newItemId, null, '', '', '', '', 'OPEN', null, '');
+        const dl = calcCapDeadline(item.evaluation, line.performed_date);
+        stmts.createCapItem.run(uuidv4(), newItemId, dl, '', '', '', '', 'OPEN', null, '');
       }
     }
   }
@@ -685,7 +1052,8 @@ app.post('/api/audit-plan-lines/:lineId/checklist-items', (req, res) => {
   // Auto-CAP logic
   const evalVal = b.evaluation || '';
   if (['O', 'L1', 'L2', 'L3'].includes(evalVal)) {
-    stmts.createCapItem.run(uuidv4(), id, null, '', '', '', '', 'OPEN', null, '');
+    const dl = calcCapDeadline(evalVal, line.performed_date);
+    stmts.createCapItem.run(uuidv4(), id, dl, '', '', '', '', 'OPEN', null, '');
   }
   res.status(201).json(stmts.getChecklistItem.get(id));
 });
@@ -705,7 +1073,9 @@ app.put('/api/checklist-items/:id', (req, res) => {
   const needsCap = ['O', 'L1', 'L2', 'L3'].includes(evalVal);
   const existingCap = stmts.getCapItemByChecklistItem.get(req.params.id);
   if (needsCap && !existingCap) {
-    stmts.createCapItem.run(uuidv4(), req.params.id, null, '', '', '', '', 'OPEN', null, '');
+    const lineForCap = stmts.getAuditPlanLine.get(existing.audit_plan_line_id);
+    const dl = calcCapDeadline(evalVal, lineForCap ? lineForCap.performed_date : null);
+    stmts.createCapItem.run(uuidv4(), req.params.id, dl, '', '', '', '', 'OPEN', null, '');
   } else if (!needsCap && existingCap) {
     stmts.deleteCapItemByChecklistItem.run(req.params.id);
   }
@@ -920,7 +1290,9 @@ app.post('/api/audit-plans/:id/import-audits', (req, res) => {
           );
           // Auto-CAP for findings/observations
           if (['O', 'L1', 'L2', 'L3'].includes(item.evaluation)) {
-            stmts.createCapItem.run(uuidv4(), ciId, null, '', '', '', '', 'OPEN', null, '');
+            const perfDate = line.performed_date || meta.audit_end_date || line.audit_end_date;
+            const dl = calcCapDeadline(item.evaluation, perfDate);
+            stmts.createCapItem.run(uuidv4(), ciId, dl, '', '', '', '', 'OPEN', null, '');
           }
         }
 
@@ -948,6 +1320,35 @@ app.get('/api/audit-plans/:id/cap-items', (req, res) => {
   const items = stmts.getCapItemsByPlan.all(req.params.id);
   const summary = stmts.getCapSummaryByPlan.get(req.params.id);
   res.json({ items, summary });
+});
+
+// ── API: Recalculate all CAP deadlines ──────────────────────
+app.post('/api/cap-items/recalc-deadlines', (req, res) => {
+  const days = getCapDeadlineDays();
+  // Get all open CAP items with their audit line context
+  const allCaps = db.prepare(
+    `SELECT c.id, ci.evaluation, pl.performed_date, pl.audit_end_date
+     FROM cap_item c
+     JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
+     JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
+     WHERE (c.completion_date IS NULL OR c.completion_date = '')`
+  ).all();
+
+  let updated = 0;
+  const updateStmt = db.prepare(`UPDATE cap_item SET deadline = ?, updated_at = datetime('now') WHERE id = ?`);
+  const tx = db.transaction(() => {
+    for (const cap of allCaps) {
+      const baseDate = cap.performed_date || cap.audit_end_date;
+      const dl = calcCapDeadline(cap.evaluation, baseDate);
+      if (dl) {
+        updateStmt.run(dl, cap.id);
+        updated++;
+      }
+    }
+  });
+  tx();
+
+  res.json({ ok: true, updated, total: allCaps.length });
 });
 
 // ── API: Multi-select CAP Items PDF (must be before :id routes) ──

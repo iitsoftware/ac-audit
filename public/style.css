@@ -435,6 +435,14 @@ dialog.dialog-wide {
   margin-bottom: 16px;
 }
 
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+.form-row .form-group {
+  flex: 1;
+}
+
 .form-group label {
   display: block;
   font-size: 13px;
@@ -1779,3 +1787,40 @@ dialog.dialog-wide {
   font-size: 14px;
   margin: 0 0 10px;
 }
+
+.backup-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.day-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.day-check input[type="checkbox"] { cursor: pointer; }
+
+.backup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.backup-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.backup-name { font-weight: 600; }
+.backup-meta { color: var(--text-muted); }

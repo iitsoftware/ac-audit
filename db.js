@@ -78,6 +78,13 @@ try {
   try { db.exec("ALTER TABLE person ADD COLUMN email TEXT DEFAULT ''"); } catch { /* already exists */ }
 }
 
+// Migration: add notified_at to cap_item
+try {
+  db.prepare('SELECT notified_at FROM cap_item LIMIT 1').get();
+} catch {
+  try { db.exec("ALTER TABLE cap_item ADD COLUMN notified_at TEXT"); } catch {}
+}
+
 // Migration: rename statuses DRAFT → ENTWURF, ACTIVE → AKTIV
 try {
   db.exec("UPDATE audit_plan SET status = 'ENTWURF' WHERE status = 'DRAFT'");
@@ -450,6 +457,27 @@ const stmts = {
      JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
      JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
      WHERE pl.audit_plan_id = ?`
+  ),
+
+  // CAP items due/overdue (not yet notified)
+  getCapItemsDue: db.prepare(
+    `SELECT c.id, c.deadline, c.responsible_person,
+            ci.regulation_ref, ci.evaluation,
+            pl.subject AS audit_subject, pl.audit_no,
+            ap.name AS plan_name, ap.year AS plan_year,
+            d.id AS department_id, d.name AS department_name,
+            co.id AS company_id, co.name AS company_name
+     FROM cap_item c
+     JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
+     JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
+     JOIN audit_plan ap ON ap.id = pl.audit_plan_id
+     JOIN department d ON d.id = ap.department_id
+     JOIN company co ON co.id = d.company_id
+     WHERE (c.completion_date IS NULL OR c.completion_date = '')
+       AND c.deadline IS NOT NULL AND c.deadline != ''
+       AND c.deadline <= date('now', '+' || ? || ' days')
+       AND c.notified_at IS NULL
+     ORDER BY c.deadline ASC`
   ),
 
   // App Settings (key-value)
