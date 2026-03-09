@@ -178,19 +178,19 @@ app.get('/api/companies/:companyId/departments', (req, res) => {
 app.post('/api/companies/:companyId/departments', (req, res) => {
   const company = stmts.getCompany.get(req.params.companyId);
   if (!company) return res.status(404).json({ error: 'Company not found' });
-  const { name, easa_permission_number, regulation } = req.body;
+  const { name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
   const id = uuidv4();
-  stmts.createDepartment.run(id, req.params.companyId, name.trim(), easa_permission_number || '', regulation || '');
+  stmts.createDepartment.run(id, req.params.companyId, name.trim(), easa_permission_number || '', regulation || '', authority_salutation || '', authority_name || '', authority_email || '');
   res.status(201).json(stmts.getDepartment.get(id));
 });
 
 app.put('/api/departments/:id', (req, res) => {
   const existing = stmts.getDepartment.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Department not found' });
-  const { name, easa_permission_number, regulation } = req.body;
+  const { name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
-  stmts.updateDepartment.run(name.trim(), easa_permission_number || '', regulation || '', req.params.id);
+  stmts.updateDepartment.run(name.trim(), easa_permission_number || '', regulation || '', authority_salutation || '', authority_name || '', authority_email || '', req.params.id);
   res.json(stmts.getDepartment.get(req.params.id));
 });
 

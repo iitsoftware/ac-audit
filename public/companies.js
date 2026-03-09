@@ -498,6 +498,9 @@
     document.getElementById('dept-form-name').value = isEdit ? dept.name : '';
     document.getElementById('dept-form-easa').value = isEdit ? (dept.easa_permission_number || '') : '';
     document.getElementById('dept-form-regulation').value = isEdit ? (dept.regulation || '') : '';
+    document.getElementById('dept-form-authority-salutation').value = isEdit ? (dept.authority_salutation || '') : '';
+    document.getElementById('dept-form-authority-name').value = isEdit ? (dept.authority_name || '') : '';
+    document.getElementById('dept-form-authority-email').value = isEdit ? (dept.authority_email || '') : '';
 
     // Person fields — only show when editing
     const personsSection = document.getElementById('dept-persons-section');
@@ -548,6 +551,9 @@
       name: document.getElementById('dept-form-name').value.trim(),
       easa_permission_number: document.getElementById('dept-form-easa').value.trim(),
       regulation: document.getElementById('dept-form-regulation').value.trim(),
+      authority_salutation: document.getElementById('dept-form-authority-salutation').value,
+      authority_name: document.getElementById('dept-form-authority-name').value.trim(),
+      authority_email: document.getElementById('dept-form-authority-email').value.trim(),
     };
 
     if (!data.name) { toast('Name ist erforderlich', 'error'); return; }

@@ -62,6 +62,15 @@ try {
   try { db.exec("ALTER TABLE department ADD COLUMN regulation TEXT DEFAULT ''"); } catch { /* already exists */ }
 }
 
+// Migration: add authority contact fields to department
+try {
+  db.prepare('SELECT authority_salutation FROM department LIMIT 1').get();
+} catch {
+  try { db.exec("ALTER TABLE department ADD COLUMN authority_salutation TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE department ADD COLUMN authority_name TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE department ADD COLUMN authority_email TEXT DEFAULT ''"); } catch {}
+}
+
 // Migration: add email to person
 try {
   db.prepare('SELECT email FROM person LIMIT 1').get();
@@ -165,19 +174,19 @@ const stmts = {
 
   // Department
   getDepartmentsByCompany: db.prepare(
-    'SELECT id, company_id, name, easa_permission_number, regulation, sort_order, created_at, updated_at FROM department WHERE company_id = ? ORDER BY sort_order, name'
+    'SELECT id, company_id, name, easa_permission_number, regulation, sort_order, authority_salutation, authority_name, authority_email, created_at, updated_at FROM department WHERE company_id = ? ORDER BY sort_order, name'
   ),
   getDepartment: db.prepare(
-    'SELECT id, company_id, name, easa_permission_number, regulation, sort_order, created_at, updated_at FROM department WHERE id = ?'
+    'SELECT id, company_id, name, easa_permission_number, regulation, sort_order, authority_salutation, authority_name, authority_email, created_at, updated_at FROM department WHERE id = ?'
   ),
   updateDepartmentSortOrder: db.prepare(
     `UPDATE department SET sort_order = ?, updated_at = datetime('now') WHERE id = ?`
   ),
   createDepartment: db.prepare(
-    'INSERT INTO department (id, company_id, name, easa_permission_number, regulation) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO department (id, company_id, name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ),
   updateDepartment: db.prepare(
-    `UPDATE department SET name = ?, easa_permission_number = ?, regulation = ?, updated_at = datetime('now') WHERE id = ?`
+    `UPDATE department SET name = ?, easa_permission_number = ?, regulation = ?, authority_salutation = ?, authority_name = ?, authority_email = ?, updated_at = datetime('now') WHERE id = ?`
   ),
   deleteDepartment: db.prepare(
     'DELETE FROM department WHERE id = ?'

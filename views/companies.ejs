@@ -106,6 +106,19 @@
         <label for="dept-form-regulation">Regulation</label>
         <input type="text" id="dept-form-regulation">
       </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
+      <div class="form-group">
+        <label>Zust&auml;ndige Aufsichtsperson Beh&ouml;rde</label>
+        <div class="form-row">
+          <select id="dept-form-authority-salutation" style="width:auto;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+            <option value="">Anrede</option>
+            <option value="Herr">Herr</option>
+            <option value="Frau">Frau</option>
+          </select>
+          <input type="text" id="dept-form-authority-name" placeholder="Name" class="form-group">
+        </div>
+        <input type="email" id="dept-form-authority-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+      </div>
       <div id="dept-persons-section" style="display:none">
         <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
         <div class="form-group">

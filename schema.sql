@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS department (
   company_id TEXT NOT NULL REFERENCES company(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   easa_permission_number TEXT DEFAULT '',
+  authority_salutation TEXT DEFAULT '',
+  authority_name TEXT DEFAULT '',
+  authority_email TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
