@@ -451,6 +451,13 @@ const stmts = {
      JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
      WHERE pl.audit_plan_id = ?`
   ),
+
+  // App Settings (key-value)
+  getSetting: db.prepare('SELECT value FROM app_setting WHERE key = ?'),
+  getAllSettings: db.prepare('SELECT key, value FROM app_setting'),
+  upsertSetting: db.prepare(
+    `INSERT INTO app_setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ),
 };
 
 // Migration: create CAP items for existing checklist items with O/L1/L2/L3 that have no CAP yet

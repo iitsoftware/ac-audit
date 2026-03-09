@@ -128,6 +128,11 @@ CREATE TABLE IF NOT EXISTS five_why (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS app_setting (
+  key TEXT PRIMARY KEY,
+  value TEXT DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS checklist_evidence_file (
   id TEXT PRIMARY KEY,
   checklist_item_id TEXT NOT NULL REFERENCES audit_checklist_item(id) ON DELETE CASCADE,

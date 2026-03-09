@@ -99,6 +99,62 @@ app.get('/companies', (req, res) => {
   renderPage(res, 'companies', { activePage: 'companies', pageScript: 'companies.js' });
 });
 
+app.get('/settings', (req, res) => {
+  renderPage(res, 'settings', { activePage: 'settings', pageScript: 'settings.js' });
+});
+
+// ── API: Settings ──────────────────────────────────────────
+
+app.get('/api/settings', (req, res) => {
+  const rows = stmts.getAllSettings.all();
+  const settings = {};
+  rows.forEach(r => { settings[r.key] = r.value; });
+  res.json(settings);
+});
+
+app.put('/api/settings', (req, res) => {
+  const entries = Object.entries(req.body);
+  for (const [key, value] of entries) {
+    stmts.upsertSetting.run(key, String(value || ''));
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/settings/test-email', (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
+
+  const nodemailer = require('nodemailer');
+  const rows = stmts.getAllSettings.all();
+  const s = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+
+  const host = s.smtp_host;
+  const port = parseInt(s.smtp_port) || 587;
+  const user = s.smtp_user;
+  const pass = s.smtp_pass;
+  const auth = s.smtp_auth !== 'false';
+
+  if (!host || !user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: auth ? { user, pass } : undefined,
+  });
+
+  transporter.sendMail({
+    from: user,
+    to,
+    subject: 'AC Audit – Test E-Mail',
+    text: 'Diese E-Mail wurde als Test aus AC Audit gesendet.',
+  }, (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ ok: true });
+  });
+});
+
 // ── API: Companies ──────────────────────────────────────────
 
 app.get('/api/companies', (req, res) => {

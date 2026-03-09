@@ -1,0 +1,42 @@
+<div class="settings-page">
+  <h1>Einstellungen</h1>
+
+  <div class="settings-grid">
+    <div class="settings-tile">
+      <h2>E-Mail (SMTP)</h2>
+      <div class="settings-form" id="smtp-form">
+        <div class="form-group">
+          <label for="smtp-user">Benutzername</label>
+          <input type="text" id="smtp-user" placeholder="user@example.com">
+        </div>
+        <div class="form-group">
+          <label for="smtp-pass">Passwort</label>
+          <input type="password" id="smtp-pass" placeholder="Passwort">
+        </div>
+        <div class="form-group">
+          <label for="smtp-host">SMTP-Server</label>
+          <input type="text" id="smtp-host" placeholder="smtp.example.com">
+        </div>
+        <div class="form-group">
+          <label for="smtp-port">Port</label>
+          <input type="number" id="smtp-port" placeholder="587" style="width:120px">
+        </div>
+        <div class="form-group">
+          <label for="smtp-auth">Authentication</label>
+          <select id="smtp-auth">
+            <option value="true">Ja</option>
+            <option value="false">Nein</option>
+          </select>
+        </div>
+        </div>
+
+      <div class="settings-test-mail">
+        <div class="form-group">
+          <label for="test-email-to">Test E-Mail senden an</label>
+          <input type="email" id="test-email-to" placeholder="empfaenger@example.com">
+        </div>
+        <button class="btn btn-secondary" id="test-email-send" disabled>Test senden</button>
+      </div>
+    </div>
+  </div>
+</div>
