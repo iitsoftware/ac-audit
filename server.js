@@ -535,6 +535,37 @@ app.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
   res.status(201).json(stmts.getAuditPlanLine.get(id));
 });
 
+// ── API: Multi-select Audit Checklist PDF (must be before :id routes) ──
+app.get('/api/audit-plan-lines/pdf', (req, res) => {
+  const ids = (req.query.ids || '').split(',').filter(Boolean);
+  if (ids.length === 0) return res.status(400).json({ error: 'No IDs provided' });
+
+  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', 'attachment; filename="Audit_Checklists.pdf"');
+  doc.pipe(res);
+
+  for (let idx = 0; idx < ids.length; idx++) {
+    const line = stmts.getAuditPlanLine.get(ids[idx]);
+    if (!line) continue;
+    const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+    if (!plan) continue;
+    const dept = stmts.getDepartment.get(plan.department_id);
+    if (!dept) continue;
+    const company = stmts.getCompany.get(dept.company_id);
+    if (!company) continue;
+    const logoRow = stmts.getCompanyLogo.get(company.id);
+    const checklistItems = stmts.getChecklistItemsByLine.all(line.id);
+    const personsAll = stmts.getPersonsByCompany.all(company.id);
+
+    if (idx > 0) doc.addPage();
+    renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY: 50 });
+  }
+
+  addPdfFooter(doc);
+  doc.end();
+});
+
 app.get('/api/audit-plan-lines/:id', (req, res) => {
   const line = stmts.getAuditPlanLine.get(req.params.id);
   if (!line) return res.status(404).json({ error: 'Not found' });
@@ -863,6 +894,39 @@ app.get('/api/audit-plans/:id/cap-items', (req, res) => {
   res.json({ items, summary });
 });
 
+// ── API: Multi-select CAP Items PDF (must be before :id routes) ──
+app.get('/api/cap-items/pdf', (req, res) => {
+  const ids = (req.query.ids || '').split(',').filter(Boolean);
+  if (ids.length === 0) return res.status(400).json({ error: 'No IDs provided' });
+
+  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', 'attachment; filename="Corrective_Actions.pdf"');
+  doc.pipe(res);
+
+  const checklistStmt = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?');
+
+  for (let idx = 0; idx < ids.length; idx++) {
+    const cap = stmts.getCapItem.get(ids[idx]);
+    if (!cap) continue;
+    const checklistItem = checklistStmt.get(cap.checklist_item_id);
+    const line = stmts.getAuditPlanLine.get(checklistItem.audit_plan_line_id);
+    const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+    const dept = stmts.getDepartment.get(plan.department_id);
+    const company = stmts.getCompany.get(dept.company_id);
+    const logoRow = stmts.getCompanyLogo.get(company.id);
+    const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
+    const fiveWhy = hasFiveWhy ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+    const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
+
+    if (idx > 0) doc.addPage();
+    renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY: 50 });
+  }
+
+  addPdfFooter(doc);
+  doc.end();
+});
+
 app.get('/api/cap-items/:id', (req, res) => {
   const row = stmts.getCapItem.get(req.params.id);
   if (!row) return res.status(404).json({ error: 'CAP item not found' });
@@ -871,10 +935,12 @@ app.get('/api/cap-items/:id', (req, res) => {
 
 app.put('/api/cap-items/:id', (req, res) => {
   const b = req.body;
+  const compDate = b.completion_date || null;
   stmts.updateCapItem.run(
     b.deadline || null, b.responsible_person || '', b.root_cause || '',
     b.corrective_action || '', b.preventive_action || '',
-    b.status || 'OPEN', b.completion_date || null, b.evidence || '',
+    compDate, b.evidence || '',
+    compDate, compDate,
     req.params.id
   );
   res.json({ ok: true });
@@ -903,10 +969,12 @@ app.put('/api/cap-items/:id/five-why', (req, res) => {
   // Sync root_cause to cap_item
   const capItem = stmts.getCapItem.get(req.params.id);
   if (capItem) {
+    const compDate2 = capItem.completion_date || null;
     stmts.updateCapItem.run(
       capItem.deadline || null, capItem.responsible_person || '', root_cause || '',
       capItem.corrective_action || '', capItem.preventive_action || '',
-      capItem.status || 'OPEN', capItem.completion_date || null, capItem.evidence || '',
+      compDate2, capItem.evidence || '',
+      compDate2, compDate2,
       req.params.id
     );
   }
@@ -1245,23 +1313,10 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
   doc.end();
 });
 
-// ── API: Audit Checklist PDF (Einzelaudit) ───────────────────
-app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
-  const line = stmts.getAuditPlanLine.get(req.params.id);
-  if (!line) return res.status(404).json({ error: 'Audit plan line not found' });
-
-  const plan = stmts.getAuditPlan.get(line.audit_plan_id);
-  if (!plan) return res.status(404).json({ error: 'Audit plan not found' });
-
-  const dept = stmts.getDepartment.get(plan.department_id);
-  if (!dept) return res.status(404).json({ error: 'Department not found' });
-
-  const company = stmts.getCompany.get(dept.company_id);
-  if (!company) return res.status(404).json({ error: 'Company not found' });
-
-  const logoRow = stmts.getCompanyLogo.get(company.id);
-  const checklistItems = stmts.getChecklistItemsByLine.all(line.id);
-  const personsAll = stmts.getPersonsByCompany.all(company.id);
+// ── PDF Helper: Render single audit line into doc ────────────
+function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY }) {
+  const pageW = 595.28;
+  const tableRight = pageW - 50;
 
   function formatDateDE(isoStr) {
     if (!isoStr) return '';
@@ -1270,17 +1325,9 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
     return `${d[2]}.${d[1]}.${d[0]}`;
   }
 
-  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
-  const pageW = 595.28;
-  const tableRight = pageW - 50;
-
-  res.set('Content-Type', 'application/pdf');
-  res.set('Content-Disposition', `attachment; filename="Audit_${line.audit_no || 'X'}_${(line.subject || 'Checklist').replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
-  doc.pipe(res);
+  let y = startY || 50;
 
   // ── Header ──
-  let y = 50;
-
   if (logoRow && logoRow.logo) {
     try {
       doc.image(logoRow.logo, 50, y, { height: 45 });
@@ -1297,7 +1344,6 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
   doc.text(subLine, 50, y);
   y += 25;
 
-  // ── Title ──
   doc.fontSize(14).font('Helvetica-Bold').text('Audit Checklist', 50, y);
   y += 25;
 
@@ -1361,19 +1407,16 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
       continue;
     }
 
-    // Compute first row height to ensure title + header + first row fit on same page
     doc.font('Helvetica').fontSize(7);
     const firstItem = items[0];
     const firstCompH = doc.heightOfString(firstItem.compliance_check || '', { width: clColW[2] - 6 });
     const firstCommH = doc.heightOfString(firstItem.auditor_comment || '', { width: clColW[4] - 6 });
     const firstRowH = Math.max(14, firstCompH + 6, firstCommH + 6);
-    // Section title (16) + table header (16) + first row
     if (y + 16 + 16 + firstRowH > 740) { doc.addPage(); y = 50; }
 
     doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text(section.label, 50, y);
     y += 16;
 
-    // Table header
     doc.fontSize(7).font('Helvetica-Bold');
     doc.rect(50, y, tableRight - 50, 16).fill('#2563eb');
     doc.fillColor('#ffffff');
@@ -1393,7 +1436,6 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
       if (y + rowH > 740) {
         doc.addPage();
         y = 50;
-        // Re-draw header on new page
         doc.fontSize(7).font('Helvetica-Bold');
         doc.rect(50, y, tableRight - 50, 16).fill('#2563eb');
         doc.fillColor('#ffffff');
@@ -1405,13 +1447,11 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
         doc.font('Helvetica').fontSize(7);
       }
 
-      // Zebra
       if (i % 2 === 0) {
         doc.rect(50, y, tableRight - 50, rowH).fill('#f8f9fa');
         doc.fillColor('#000000');
       }
 
-      // Eval color highlight
       const evalVal = (item.evaluation || '').trim().toUpperCase();
       if (evalColors[evalVal]) {
         doc.rect(clColX[3], y, clColW[3], rowH).fill(evalColors[evalVal]);
@@ -1441,19 +1481,18 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
   doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Summary', 50, y);
   y += 16;
 
-  let totalQ = checklistItems.length;
-  let cCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'C').length;
-  let naCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'NA').length;
-  let oCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'O').length;
-  let l1Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L1').length;
-  let l2Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L2').length;
-  let l3Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L3').length;
+  const totalQ = checklistItems.length;
+  const cCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'C').length;
+  const naCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'NA').length;
+  const oCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'O').length;
+  const l1Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L1').length;
+  const l2Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L2').length;
+  const l3Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L3').length;
 
   const sumHeaders = ['Total Questions', 'Conformities', 'Not Applicable', 'Observation', 'Level 1', 'Level 2', 'Level 3'];
   const sumValues = [totalQ, cCount, naCount, oCount, l1Count, l2Count, l3Count];
   const sumColW = (tableRight - 50) / sumHeaders.length;
 
-  // Header
   doc.fontSize(7).font('Helvetica-Bold');
   doc.rect(50, y, tableRight - 50, 16).fill('#2563eb');
   doc.fillColor('#ffffff');
@@ -1463,7 +1502,6 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
   doc.fillColor('#000000');
   y += 16;
 
-  // Values
   doc.fontSize(9).font('Helvetica');
   doc.strokeColor('#d0d0d0').lineWidth(0.5);
   doc.rect(50, y, tableRight - 50, 18).stroke();
@@ -1520,11 +1558,9 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
     doc.moveTo(50 + c * sigColW, y).lineTo(50 + c * sigColW, y + sigRowH).stroke();
   }
 
-  // Date column
   doc.fontSize(8).font('Helvetica');
   doc.text(formatDateDE(line.audit_end_date), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
 
-  // Signatures: Auditor (QM), Abteilungsleiter, Accountable
   const sigPersons = [qmPerson, alPerson, accPerson];
   for (let c = 0; c < 3; c++) {
     const person = sigPersons[c];
@@ -1563,7 +1599,146 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
   }
   doc.fillColor('#000000');
 
-  // ── Footer on every page ──
+  return y;
+}
+
+// ── PDF Helper: Render single CAP item into doc ──────────────
+function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY }) {
+  const pageW = 595.28;
+  const tableRight = pageW - 50;
+  const contentW = tableRight - 50;
+
+  function formatDateDE(isoStr) {
+    if (!isoStr) return '';
+    const d = isoStr.substring(0, 10).split('-');
+    if (d.length !== 3) return isoStr;
+    return `${d[2]}.${d[1]}.${d[0]}`;
+  }
+
+  const evalColors = {
+    'C': '#d4edda', 'NA': '#e2e3e5', 'O': '#fff3cd',
+    'L1': '#f8d7da', 'L2': '#f5c6cb', 'L3': '#f1b0b7'
+  };
+
+  let y = startY || 50;
+
+  // ── Header ──
+  if (logoRow && logoRow.logo) {
+    try {
+      doc.image(logoRow.logo, 50, y, { height: 45 });
+      y += 55;
+    } catch { y += 10; }
+  }
+
+  doc.fontSize(14).font('Helvetica-Bold').text(company.name, 50, y);
+  y += 20;
+  doc.fontSize(9).font('Helvetica');
+  let subLine = dept.name;
+  if (dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
+  if (dept.regulation) subLine += `  |  ${dept.regulation}`;
+  doc.text(subLine, 50, y);
+  y += 25;
+
+  doc.fontSize(14).font('Helvetica-Bold').text('Corrective Action', 50, y);
+  y += 25;
+
+  // ── Helper: key-value row ──
+  const labelW = 130;
+  const valW = contentW - labelW;
+
+  function drawInfoRow(label, value, options) {
+    const { evalHighlight, bold } = options || {};
+    const textVal = value || '';
+    doc.fontSize(8).font('Helvetica');
+    const valH = Math.max(16, doc.heightOfString(textVal, { width: valW - 8 }) + 6);
+    if (y + valH > 740) { doc.addPage(); y = 50; }
+
+    doc.rect(50, y, labelW, valH).fill('#f0f4ff');
+    doc.rect(50, y, labelW, valH).stroke();
+    if (evalHighlight && evalColors[evalHighlight]) {
+      doc.rect(50 + labelW, y, valW, valH).fill(evalColors[evalHighlight]);
+    }
+    doc.rect(50 + labelW, y, valW, valH).stroke();
+    doc.fillColor('#000000').font('Helvetica-Bold').text(label, 54, y + 3, { width: labelW - 8 });
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').text(textVal, 50 + labelW + 4, y + 3, { width: valW - 8 });
+    y += valH;
+  }
+
+  // ── Section 1: Finding Info ──
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Finding-Info', 50, y);
+  y += 16;
+
+  doc.strokeColor('#d0d0d0').lineWidth(0.5);
+  drawInfoRow('Auditplan', `${plan.year || ''} – ${plan.name || ''}`);
+  drawInfoRow('Audit-Nr.', cap.audit_no);
+  drawInfoRow('Thema', cap.subject);
+  drawInfoRow('Finding', cap.compliance_check);
+  drawInfoRow('Level', cap.evaluation, { evalHighlight: cap.evaluation, bold: true });
+  drawInfoRow('Regulation Ref.', cap.regulation_ref);
+  drawInfoRow('Kommentar', cap.auditor_comment);
+  y += 15;
+
+  // ── Section 2: 5-Why (only L1/L2) ──
+  const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
+  if (hasFiveWhy && fiveWhy) {
+    if (y + 30 > 740) { doc.addPage(); y = 50; }
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('5-Why Analyse', 50, y);
+    y += 16;
+
+    doc.strokeColor('#d0d0d0').lineWidth(0.5);
+    drawInfoRow('1. Warum?', fiveWhy.why1);
+    drawInfoRow('2. Warum?', fiveWhy.why2);
+    drawInfoRow('3. Warum?', fiveWhy.why3);
+    drawInfoRow('4. Warum?', fiveWhy.why4);
+    drawInfoRow('5. Warum?', fiveWhy.why5);
+    drawInfoRow('Root Cause', fiveWhy.root_cause, { bold: true });
+    y += 15;
+  }
+
+  // ── Section 3: Corrective Action Details ──
+  if (y + 30 > 740) { doc.addPage(); y = 50; }
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Corrective Action', 50, y);
+  y += 16;
+
+  doc.strokeColor('#d0d0d0').lineWidth(0.5);
+  drawInfoRow('Deadline', formatDateDE(cap.deadline));
+  drawInfoRow('Verantwortlich', cap.responsible_person);
+  drawInfoRow('Ursache', cap.root_cause);
+  drawInfoRow('Korrekturmaßnahme', cap.corrective_action);
+  drawInfoRow('Vorbeugemaßnahme', cap.preventive_action);
+  drawInfoRow('Erledigt am', formatDateDE(cap.completion_date));
+  drawInfoRow('Nachweis', cap.evidence);
+  y += 15;
+
+  // ── Section 4: Evidence Images ──
+  const imageFiles = (evidenceFiles || []).filter(f => (f.mime_type || '').startsWith('image/'));
+  if (imageFiles.length > 0) {
+    if (y + 30 > 740) { doc.addPage(); y = 50; }
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Nachweise', 50, y);
+    y += 16;
+
+    for (const ef of imageFiles) {
+      const fullFile = stmts.getEvidenceFile.get(ef.id);
+      if (!fullFile || !fullFile.data) continue;
+      try {
+        const maxH = 300;
+        if (y + maxH + 20 > 740) { doc.addPage(); y = 50; }
+        doc.fontSize(7).font('Helvetica').fillColor('#666666').text(ef.filename || 'Bild', 50, y);
+        y += 12;
+        doc.image(fullFile.data, 50, y, { fit: [contentW, maxH], align: 'center' });
+        y += maxH + 10;
+        if (y > 740) { doc.addPage(); y = 50; }
+      } catch { /* skip unreadable image */ }
+    }
+  }
+
+  return y;
+}
+
+// ── PDF Helper: Add footer to all pages ──────────────────────
+function addPdfFooter(doc) {
+  const pageW = 595.28;
+  const tableRight = pageW - 50;
   const pages = doc.bufferedPageRange();
   for (let p = pages.start; p < pages.start + pages.count; p++) {
     doc.switchToPage(p);
@@ -1575,7 +1750,59 @@ app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
     const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
     doc.text(pageLabel, 50, footerY + 4, { width: tableRight - 50, align: 'right', lineBreak: false });
   }
+}
 
+
+// ── API: Audit Checklist PDF (Einzelaudit) ───────────────────
+app.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
+  const line = stmts.getAuditPlanLine.get(req.params.id);
+  if (!line) return res.status(404).json({ error: 'Audit plan line not found' });
+
+  const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+  if (!plan) return res.status(404).json({ error: 'Audit plan not found' });
+
+  const dept = stmts.getDepartment.get(plan.department_id);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
+
+  const company = stmts.getCompany.get(dept.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+
+  const logoRow = stmts.getCompanyLogo.get(company.id);
+  const checklistItems = stmts.getChecklistItemsByLine.all(line.id);
+  const personsAll = stmts.getPersonsByCompany.all(company.id);
+
+  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="Audit_${line.audit_no || 'X'}_${(line.subject || 'Checklist').replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
+  doc.pipe(res);
+
+  renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY: 50 });
+  addPdfFooter(doc);
+  doc.end();
+});
+
+// ── API: CAP Item PDF Export (single) ─────────────────────────
+app.get('/api/cap-items/:id/pdf', (req, res) => {
+  const cap = stmts.getCapItem.get(req.params.id);
+  if (!cap) return res.status(404).json({ error: 'CAP item not found' });
+
+  const checklistItem = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?').get(cap.checklist_item_id);
+  const line = stmts.getAuditPlanLine.get(checklistItem.audit_plan_line_id);
+  const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+  const dept = stmts.getDepartment.get(plan.department_id);
+  const company = stmts.getCompany.get(dept.company_id);
+  const logoRow = stmts.getCompanyLogo.get(company.id);
+  const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
+  const fiveWhy = hasFiveWhy ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+  const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
+
+  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="CAP_${cap.audit_no || 'X'}_${(cap.evaluation || '').replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
+  doc.pipe(res);
+
+  renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY: 50 });
+  addPdfFooter(doc);
   doc.end();
 });
 

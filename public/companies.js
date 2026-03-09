@@ -12,6 +12,10 @@
   let capFilter = null; // null = all, 'OPEN', 'CLOSED'
   let auditLineFilters = new Set(); // tag filter keys for audit plan detail
 
+  // ── Reusable SVG Icons ──────────────────────────────────────
+  const ICON_SHARE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 3 12 15"/><polyline points="8 7 12 3 16 7"/></svg>';
+  const ICON_IMPORT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 15 12 3"/><polyline points="8 11 12 15 16 11"/></svg>';
+
   // ── LocalStorage Persistence ────────────────────────────────
   const NAV_STORAGE_KEY = 'ac-audit-nav-state';
 
@@ -605,7 +609,7 @@
     headerEl.innerHTML = `
       <h2>Auditpl&auml;ne</h2>
       <div style="display:flex;gap:0.25rem">
-        <button class="btn-icon" id="btn-import-plan" title="Auditplan aus .docx importieren">\u{1F4E5}</button>
+        <button class="btn-icon" id="btn-import-plan" title="Auditplan aus .docx importieren">${ICON_IMPORT}</button>
         <button class="btn-icon" id="btn-add-plan" title="Auditplan hinzuf&uuml;gen">+</button>
       </div>
     `;
@@ -944,8 +948,8 @@
     html += `<div class="plan-lines-header">
       <h3>Themenbereiche</h3>
       <div style="display:flex;gap:0.25rem">
-        <button class="btn-icon" id="btn-pdf-export" title="PDF exportieren">\u{1F4C4}</button>
-        <button class="btn-icon" id="btn-import-audits" title="Audit-Checklisten importieren (.xlsx)">\u{1F4E5}</button>
+        <button class="btn-icon" id="btn-pdf-export" title="PDF exportieren">${ICON_SHARE}</button>
+        <button class="btn-icon" id="btn-import-audits" title="Audit-Checklisten importieren (.xlsx)">${ICON_IMPORT}</button>
         <button class="btn-icon" id="btn-add-line" title="Themenbereich hinzuf\u00fcgen">+</button>
       </div>
     </div>`;
@@ -974,6 +978,7 @@
             <th>Geplant</th>
             <th>Durchgef\u00fchrt</th>
             <th></th>
+            <th class="col-select"><label class="select-header"><input type="checkbox" class="select-all-lines" title="Alle ausw\u00e4hlen">${ICON_SHARE}</label></th>
           </tr>
         </thead>
         <tbody>`;
@@ -1001,6 +1006,7 @@
           <td class="line-actions">
             <button class="pane-action-btn danger" data-action="delete-line" data-id="${line.id}" title="L\u00f6schen">&#128465;</button>
           </td>
+          <td class="col-select"><input type="checkbox" class="line-select-cb" data-line-id="${line.id}"></td>
         </tr>`;
       });
       html += `</tbody></table></div>`;
@@ -1112,7 +1118,7 @@
     // Bind row click → drill-down to line detail
     contentEl.querySelectorAll('.line-row-clickable').forEach(row => {
       row.addEventListener('click', (e) => {
-        if (e.target.closest('.pane-action-btn')) return;
+        if (e.target.closest('.pane-action-btn') || e.target.closest('.col-select')) return;
         const lineId = row.dataset.id;
         const line = planLines.find(l => l.id === lineId);
         if (!line) return;
@@ -1120,6 +1126,23 @@
         renderCurrentLevel();
       });
     });
+
+    // ── Line multi-select + export ──
+    const selectAllLines = contentEl.querySelector('.select-all-lines');
+    const lineCbs = contentEl.querySelectorAll('.line-select-cb');
+    if (selectAllLines) {
+      selectAllLines.addEventListener('change', () => {
+        const checked = selectAllLines.checked;
+        lineCbs.forEach(cb => {
+          if (cb.closest('tr').style.display !== 'none') cb.checked = checked;
+        });
+      });
+      selectAllLines.closest('.select-header').querySelector('svg').addEventListener('click', () => {
+        const ids = [...lineCbs].filter(cb => cb.checked).map(cb => cb.dataset.lineId);
+        if (ids.length === 0) { toast('Keine Themenbereiche ausgew\u00e4hlt', 'error'); return; }
+        window.open(`/api/audit-plan-lines/pdf?ids=${ids.join(',')}`);
+      });
+    }
 
     // Bind PDF export button
     document.getElementById('btn-pdf-export').addEventListener('click', () => {
@@ -1193,7 +1216,7 @@
 
     headerEl.innerHTML = `
       <h2>${escapeHtml(currentLine.subject || 'Themenbereich')}</h2>
-      <button class="icon-btn" title="Audit Checklist PDF" onclick="window.open('/api/audit-plan-lines/${currentLine.id}/pdf')" style="font-size:1rem;cursor:pointer;">&#128196;</button>
+      <button class="btn-icon" title="Audit Checklist PDF" onclick="window.open('/api/audit-plan-lines/${currentLine.id}/pdf')">${ICON_SHARE}</button>
     `;
 
     const monthOptions = ['', 'Januar', 'Februar', 'M\u00e4rz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember', 'Nach Bedarf', 'Unangek\u00fcndigt'];
@@ -1685,7 +1708,8 @@
       <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED">CLOSED</button>
     </div>`;
 
-    const filtered = capFilter ? capItems.filter(c => c.status === capFilter) : capItems;
+    function capStatus(c) { return c.completion_date ? 'CLOSED' : 'OPEN'; }
+    const filtered = capFilter ? capItems.filter(c => capStatus(c) === capFilter) : capItems;
 
     if (filtered.length === 0) {
       html += '<div class="empty-state-inline" style="padding:16px 0">Keine Eintr\u00e4ge</div>';
@@ -1693,6 +1717,7 @@
       html += `<div class="lines-table-wrap"><table class="lines-table">
         <thead><tr>
           <th>Nr.</th><th>Audit-Nr.</th><th>Thema</th><th>Finding</th><th>Level</th><th>Deadline</th><th>Status</th>
+          <th class="col-select"><label class="select-header"><input type="checkbox" class="select-all-cap" title="Alle ausw\u00e4hlen">${ICON_SHARE}</label></th>
         </tr></thead><tbody>`;
       filtered.forEach((cap, idx) => {
         const evalClass = cap.evaluation ? `eval-${cap.evaluation}` : '';
@@ -1704,7 +1729,8 @@
           <td class="wrap-cell">${escapeHtml(cap.compliance_check || '')}</td>
           <td>${cap.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(cap.evaluation)}</span>` : ''}</td>
           <td>${escapeHtml(deadlineDisplay)}</td>
-          <td><span class="cap-status-${cap.status}">${cap.status}</span></td>
+          <td><span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span></td>
+          <td class="col-select"><input type="checkbox" class="cap-select-cb" data-cap-id="${cap.id}"></td>
         </tr>`;
       });
       html += '</tbody></table></div>';
@@ -1724,7 +1750,8 @@
 
     // Row click → navigate to CAP detail
     section.querySelectorAll('.cap-row-clickable').forEach(row => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.col-select')) return;
         const cap = capItems.find(c => c.id === row.dataset.capId);
         if (cap) {
           navPath.push({ type: 'cap-item', id: cap.id, name: 'CAP' });
@@ -1732,6 +1759,20 @@
         }
       });
     });
+
+    // ── CAP multi-select + export ──
+    const selectAllCap = section.querySelector('.select-all-cap');
+    const capCbs = section.querySelectorAll('.cap-select-cb');
+    if (selectAllCap) {
+      selectAllCap.addEventListener('change', () => {
+        capCbs.forEach(cb => { cb.checked = selectAllCap.checked; });
+      });
+      selectAllCap.closest('.select-header').querySelector('svg').addEventListener('click', () => {
+        const ids = [...capCbs].filter(cb => cb.checked).map(cb => cb.dataset.capId);
+        if (ids.length === 0) { toast('Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
+        window.open(`/api/cap-items/pdf?ids=${ids.join(',')}`);
+      });
+    }
   }
 
   // ── CAP Detail Level (inline drill-down) ──────────────────
@@ -1753,7 +1794,8 @@
       return;
     }
 
-    headerEl.innerHTML = `<h2>Corrective Action</h2>`;
+    headerEl.innerHTML = `<h2>Corrective Action</h2>
+      <button class="btn-icon" title="CAP als PDF exportieren" onclick="window.open('/api/cap-items/${capItemId}/pdf')">${ICON_SHARE}</button>`;
 
     const cap = currentCapItem;
     let html = '<div class="audit-detail">';
@@ -1796,10 +1838,6 @@
         <label>Ursache</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-root-cause" rows="3" ${hasFiveWhy ? 'readonly style="background:var(--bg-secondary);opacity:0.7;cursor:not-allowed"' : ''}>${escapeHtml(cap.root_cause || '')}</textarea>
         <label>Korrekturma\u00dfnahme</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-corrective" rows="3">${escapeHtml(cap.corrective_action || '')}</textarea>
         <label>Vorbeugema\u00dfnahme</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-preventive" rows="3">${escapeHtml(cap.preventive_action || '')}</textarea>
-        <label>Status</label><select class="inline-input cap-field" id="cap-f-status">
-          <option value="OPEN" ${cap.status === 'OPEN' ? 'selected' : ''}>OPEN</option>
-          <option value="CLOSED" ${cap.status === 'CLOSED' ? 'selected' : ''}>CLOSED</option>
-        </select>
         <label>Erledigt am</label><input class="inline-input cap-field" id="cap-f-completion-date" value="${escapeHtml(formatDateDE(cap.completion_date))}" placeholder="TT.MM.JJJJ">
         <label>Nachweis</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-evidence" rows="3">${escapeHtml(cap.evidence || '')}</textarea>
       </div>
@@ -1901,7 +1939,6 @@
       root_cause: document.getElementById('cap-f-root-cause').value.trim(),
       corrective_action: document.getElementById('cap-f-corrective').value.trim(),
       preventive_action: document.getElementById('cap-f-preventive').value.trim(),
-      status: document.getElementById('cap-f-status').value,
       completion_date: completionIso,
       evidence: document.getElementById('cap-f-evidence').value.trim(),
     };

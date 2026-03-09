@@ -1415,6 +1415,16 @@ dialog.dialog-wide {
   border-color: var(--primary);
 }
 
+.col-select { width: 50px; text-align: center; }
+.col-select input[type="checkbox"] { cursor: pointer; }
+.select-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.select-header svg { vertical-align: middle; }
+
 .cap-info-block {
   padding: 12px 16px;
   background: var(--bg);

@@ -344,7 +344,8 @@ const stmts = {
   ),
   updateCapItem: db.prepare(
     `UPDATE cap_item SET deadline = ?, responsible_person = ?, root_cause = ?, corrective_action = ?,
-                         preventive_action = ?, status = ?, completion_date = ?, evidence = ?,
+                         preventive_action = ?, completion_date = ?, evidence = ?,
+                         status = CASE WHEN ? IS NOT NULL AND ? != '' THEN 'CLOSED' ELSE 'OPEN' END,
                          updated_at = datetime('now')
      WHERE id = ?`
   ),
@@ -435,7 +436,7 @@ const stmts = {
   ),
 
   getCapSummaryByPlan: db.prepare(
-    `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN c.status = 'CLOSED' THEN 1 ELSE 0 END), 0) AS closed
+    `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN c.completion_date IS NOT NULL AND c.completion_date != '' THEN 1 ELSE 0 END), 0) AS closed
      FROM cap_item c
      JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
      JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
