@@ -93,6 +93,15 @@ function renderPage(res, view, opts = {}) {
   });
 }
 
+// ── Logging ─────────────────────────────────────────────────
+function logAction(action, entityType, entityId, entityName, details = '', companyName = '', departmentName = '') {
+  try { stmts.insertLog.run(action, entityType, entityId || '', entityName || '', companyName, departmentName, details); } catch {}
+}
+
+// Clean old log entries
+stmts.deleteOldLogs.run();
+setInterval(() => { try { stmts.deleteOldLogs.run(); } catch {} }, 24 * 60 * 60 * 1000);
+
 // ── Pages ───────────────────────────────────────────────────
 app.get('/', (req, res) => res.redirect('/companies'));
 
@@ -157,6 +166,7 @@ app.post('/api/settings/test-email', (req, res) => {
     text: 'Diese E-Mail wurde als Test aus AC Audit gesendet.',
   }, (err) => {
     if (err) return res.status(500).json({ error: err.message });
+    logAction('Test-E-Mail gesendet', 'settings', '', '', to);
     res.json({ ok: true });
   });
 });
@@ -296,6 +306,7 @@ app.post('/api/backup/now', async (req, res) => {
   try {
     const result = await performBackup();
     if (result.error) return res.status(500).json(result);
+    logAction('Backup erstellt', 'backup', '', result.filename);
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -546,6 +557,7 @@ app.post('/api/companies', (req, res) => {
   const id = uuidv4();
   const logoBuf = logo ? Buffer.from(logo, 'base64') : null;
   stmts.createCompany.run(id, name.trim(), street || '', postal_code || '', city || '', logoBuf);
+  logAction('Firma erstellt', 'company', id, name.trim(), '', name.trim());
   const created = stmts.getCompany.get(id);
   created.has_logo = !!logoBuf;
   res.status(201).json(created);
@@ -557,6 +569,7 @@ app.put('/api/companies/:id', (req, res) => {
   const { name, street, postal_code, city } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
   stmts.updateCompany.run(name.trim(), street || '', postal_code || '', city || '', req.params.id);
+  logAction('Firma aktualisiert', 'company', req.params.id, name.trim(), '', name.trim());
   const updated = stmts.getCompany.get(req.params.id);
   const logoRow = stmts.getCompanyLogo.get(req.params.id);
   updated.has_logo = !!(logoRow && logoRow.logo);
@@ -569,6 +582,7 @@ app.delete('/api/companies/:id', (req, res) => {
   const { cnt } = stmts.countAuditPlansByCompany.get(req.params.id);
   if (cnt > 0) return res.status(409).json({ error: 'Firma kann nicht gelöscht werden, da Auditpläne vorhanden sind' });
   stmts.deleteCompany.run(req.params.id);
+  logAction('Firma gelöscht', 'company', req.params.id, existing.name, '', existing.name);
   res.status(204).end();
 });
 
@@ -604,22 +618,27 @@ app.post('/api/companies/:companyId/departments', (req, res) => {
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
   const id = uuidv4();
   stmts.createDepartment.run(id, req.params.companyId, name.trim(), easa_permission_number || '', regulation || '', authority_salutation || '', authority_name || '', authority_email || '');
+  logAction('Abteilung erstellt', 'department', id, name.trim(), '', company.name, name.trim());
   res.status(201).json(stmts.getDepartment.get(id));
 });
 
 app.put('/api/departments/:id', (req, res) => {
   const existing = stmts.getDepartment.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Department not found' });
+  const company = stmts.getCompany.get(existing.company_id);
   const { name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
   stmts.updateDepartment.run(name.trim(), easa_permission_number || '', regulation || '', authority_salutation || '', authority_name || '', authority_email || '', req.params.id);
+  logAction('Abteilung aktualisiert', 'department', req.params.id, name.trim(), '', company ? company.name : '', name.trim());
   res.json(stmts.getDepartment.get(req.params.id));
 });
 
 app.delete('/api/departments/:id', (req, res) => {
   const existing = stmts.getDepartment.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Department not found' });
+  const company = stmts.getCompany.get(existing.company_id);
   stmts.deleteDepartment.run(req.params.id);
+  logAction('Abteilung gelöscht', 'department', req.params.id, existing.name, '', company ? company.name : '', existing.name);
   res.status(204).end();
 });
 
@@ -741,45 +760,64 @@ app.post('/api/audit-plans/:id/copy', (req, res) => {
 
   stmts.createAuditPlan.run(newId, targetDeptId, newYear, 'ENTWURF', newRevision);
 
-  // Copy lines (with integrated audit fields) and their checklist items
+  // Copy lines and their checklist items
+  const isTemplate = mode === 'template';
   const sourceLines = stmts.getAuditPlanLinesByPlan.all(source.id);
   for (const line of sourceLines) {
     const newLineId = uuidv4();
-    stmts.createAuditPlanLine.run(
-      newLineId, newId, line.sort_order,
-      line.subject || '', line.regulations || '', line.location || '', line.planned_window || '',
-      line.audit_no || '', line.audit_subject || '', line.audit_title || '',
-      line.auditor_team || '', line.auditee || '',
-      line.audit_start_date || null, line.audit_end_date || null, line.audit_location || '',
-      line.document_ref || '', line.document_iss_rev || '', line.document_rev_date || null,
-      line.recommendation || '', line.audit_status || 'OPEN'
-    );
-
-    // Copy checklist items for this line
-    const sourceItems = stmts.getChecklistItemsByLine.all(line.id);
-    for (const item of sourceItems) {
-      const newItemId = uuidv4();
-      stmts.createChecklistItem.run(
-        newItemId, newLineId,
-        item.section || 'THEORETICAL', item.sort_order || 0,
-        item.regulation_ref || '', item.compliance_check || '',
-        item.evaluation || '', item.auditor_comment || '', item.document_ref || ''
+    if (isTemplate) {
+      // Template mode: copy only subjects/regulations/location, clear all audit data
+      stmts.createAuditPlanLine.run(
+        newLineId, newId, line.sort_order,
+        line.subject || '', line.regulations || '', line.location || '', '',
+        '', '', '', '', '',
+        null, null, '',
+        '', '', null,
+        '', 'OPEN'
       );
-      // Auto-CAP for findings/observations
-      if (['O', 'L1', 'L2', 'L3'].includes(item.evaluation)) {
-        const dl = calcCapDeadline(item.evaluation, line.performed_date);
-        stmts.createCapItem.run(uuidv4(), newItemId, dl, '', '', '', '', 'OPEN', null, '');
+    } else {
+      // Revision mode: copy everything
+      stmts.createAuditPlanLine.run(
+        newLineId, newId, line.sort_order,
+        line.subject || '', line.regulations || '', line.location || '', line.planned_window || '',
+        line.audit_no || '', line.audit_subject || '', line.audit_title || '',
+        line.auditor_team || '', line.auditee || '',
+        line.audit_start_date || null, line.audit_end_date || null, line.audit_location || '',
+        line.document_ref || '', line.document_iss_rev || '', line.document_rev_date || null,
+        line.recommendation || '', line.audit_status || 'OPEN'
+      );
+
+      // Copy checklist items only for revision
+      const sourceItems = stmts.getChecklistItemsByLine.all(line.id);
+      for (const item of sourceItems) {
+        const newItemId = uuidv4();
+        stmts.createChecklistItem.run(
+          newItemId, newLineId,
+          item.section || 'THEORETICAL', item.sort_order || 0,
+          item.regulation_ref || '', item.compliance_check || '',
+          item.evaluation || '', item.auditor_comment || '', item.document_ref || ''
+        );
+        if (['O', 'L1', 'L2', 'L3'].includes(item.evaluation)) {
+          const dl = calcCapDeadline(item.evaluation, line.performed_date);
+          stmts.createCapItem.run(uuidv4(), newItemId, dl, '', '', '', '', 'OPEN', null, '');
+        }
       }
     }
   }
 
+  const targetDept = stmts.getDepartment.get(targetDeptId);
+  const targetCompany = targetDept ? stmts.getCompany.get(targetDept.company_id) : null;
+  logAction('Auditplan kopiert', 'audit_plan', newId, source.year + ' Rev.' + newRevision, mode === 'revision' ? 'Neue Revision' : 'Als Vorlage', targetCompany ? targetCompany.name : '', targetDept ? targetDept.name : '');
   res.status(201).json(stmts.getAuditPlan.get(newId));
 });
 
 app.delete('/api/audit-plans/:id', (req, res) => {
   const existing = stmts.getAuditPlan.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Audit plan not found' });
+  const delDept = stmts.getDepartment.get(existing.department_id);
+  const delCompany = delDept ? stmts.getCompany.get(delDept.company_id) : null;
   stmts.deleteAuditPlan.run(req.params.id);
+  logAction('Auditplan gelöscht', 'audit_plan', req.params.id, existing.year + ' Rev.' + (existing.revision || 0), '', delCompany ? delCompany.name : '', delDept ? delDept.name : '');
   res.status(204).end();
 });
 
@@ -909,6 +947,8 @@ app.post('/api/departments/:departmentId/import-audit-plan',
       insertPlan();
 
       const plan = stmts.getAuditPlan.get(planId);
+      const impCompany = stmts.getCompany.get(dept.company_id);
+      logAction('Auditplan importiert', 'audit_plan', planId, year + '', lines.length + ' Themenbereiche', impCompany ? impCompany.name : '', dept.name);
       res.status(201).json({ plan, lineCount: lines.length });
     } catch (err) {
       console.error('Import error:', err);
@@ -1305,6 +1345,9 @@ app.post('/api/audit-plans/:id/import-audits', (req, res) => {
 
   try {
     importAll();
+    const biDept = stmts.getDepartment.get(plan.department_id);
+    const biCompany = biDept ? stmts.getCompany.get(biDept.company_id) : null;
+    logAction('Audit-Checklisten importiert', 'audit_plan', req.params.id, '', matched.length + ' Dateien importiert', biCompany ? biCompany.name : '', biDept ? biDept.name : '');
     res.json({ matched, skipped });
   } catch (err) {
     console.error('Bulk import error:', err);
@@ -1348,6 +1391,7 @@ app.post('/api/cap-items/recalc-deadlines', (req, res) => {
   });
   tx();
 
+  logAction('CAP-Fristen neu berechnet', 'cap_item', '', '', updated + ' von ' + allCaps.length + ' aktualisiert');
   res.json({ ok: true, updated, total: allCaps.length });
 });
 
@@ -1497,6 +1541,31 @@ app.delete('/api/checklist-evidence-files/:id', (req, res) => {
 // ── API: Audit Plan PDF Export ───────────────────────────────
 const PDFDocument = require('pdfkit');
 
+// Helper: generate audit plan PDF as Buffer (for email attachment)
+function generateAuditPlanPdfBuffer(planId, type, filter) {
+  return new Promise((resolve, reject) => {
+    const isClosed = type === 'closed';
+    const plan = stmts.getAuditPlan.get(planId);
+    if (!plan) return reject(new Error('Audit plan not found'));
+    const dept = stmts.getDepartment.get(plan.department_id);
+    if (!dept) return reject(new Error('Department not found'));
+    const company = stmts.getCompany.get(dept.company_id);
+    if (!company) return reject(new Error('Company not found'));
+    const logoRow = stmts.getCompanyLogo.get(company.id);
+    let lines = stmts.getAuditPlanLinesByPlan.all(plan.id);
+    if (filter === 'planned') lines = lines.filter(l => l.planned_window && l.planned_window.trim());
+    if (isClosed) lines = lines.filter(l => l.audit_end_date);
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), plan, dept, company }));
+    doc.on('error', reject);
+    _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed });
+    doc.end();
+  });
+}
+
 app.get('/api/audit-plans/:id/pdf', (req, res) => {
   const type = req.query.type || 'open';
   if (type !== 'open' && type !== 'closed') {
@@ -1523,19 +1592,87 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
     lines = lines.filter(l => l.audit_end_date);
   }
 
-  function formatDateDE(isoStr) {
-    if (!isoStr) return '';
-    const d = isoStr.substring(0, 10).split('-');
-    if (d.length !== 3) return isoStr;
-    return `${d[2]}.${d[1]}.${d[0]}`;
-  }
-
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
 
   const suffix = isClosed ? 'Durchgefuehrte' : 'Geplante';
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `attachment; filename="Auditplan_${plan.year}_${suffix}.pdf"`);
   doc.pipe(res);
+
+  _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed });
+  doc.end();
+});
+
+// ── Send audit plan PDF via email ───────────────────────────
+app.post('/api/audit-plans/:id/send-email', async (req, res) => {
+  const { to, type, authority } = req.body;
+  if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
+  if (type !== 'open' && type !== 'closed') return res.status(400).json({ error: 'type must be open or closed' });
+
+  try {
+    const filter = type === 'open' ? 'planned' : undefined;
+    const { buffer, plan, dept, company } = await generateAuditPlanPdfBuffer(req.params.id, type, filter);
+
+    const nodemailer = require('nodemailer');
+    const rows = stmts.getAllSettings.all();
+    const s = {};
+    rows.forEach(r => { s[r.key] = r.value; });
+    if (!s.smtp_host || !s.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+
+    const port = parseInt(s.smtp_port) || 587;
+    const auth = s.smtp_auth !== 'false';
+    const transporter = nodemailer.createTransport({
+      host: s.smtp_host, port, secure: port === 465,
+      auth: auth ? { user: s.smtp_user, pass: s.smtp_pass } : undefined,
+    });
+
+    const isClosed = type === 'closed';
+    const suffix = isClosed ? 'Durchgeführte' : 'Geplante';
+    const filename = `Auditplan_${plan.year}_${suffix.replace(/ü/g, 'ue')}_Audits.pdf`;
+
+    const personsAll = stmts.getPersonsByCompany.all(company.id);
+    const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+
+    let subject, text, bcc;
+    if (authority) {
+      // Formal letter to authority
+      const salutation = dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
+      const qmName = qm ? `${qm.first_name} ${qm.last_name}` : '';
+      const qmTitle = qm ? 'Compliance Monitoring Manager' : '';
+
+      subject = `Auditplan ${plan.year} – ${suffix} Audits – ${company.name} (${dept.name})`;
+      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Auditplan ${plan.year} – ${suffix} Audits der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n${qmName}${qmTitle ? '\n' + qmTitle : ''}\n${company.name}`;
+      // BCC the QM
+      if (qm && qm.email) bcc = qm.email;
+    } else {
+      // Regular email
+      subject = `Auditplan ${plan.year} – ${suffix} Audits (${dept.name})`;
+      text = `Hallo,\n\nanbei der Auditplan ${plan.year} – ${suffix} Audits für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n${company.name}`;
+    }
+
+    const mailOpts = {
+      from: s.smtp_user,
+      to, subject, text,
+      attachments: [{ filename, content: buffer, contentType: 'application/pdf' }],
+    };
+    if (bcc) mailOpts.bcc = bcc;
+    await transporter.sendMail(mailOpts);
+
+    logAction('Auditplan per E-Mail gesendet', 'audit_plan', plan.id, `${plan.year} Rev. ${plan.revision || 0}`, `An: ${to}, Typ: ${suffix}${authority ? ' (Behörde)' : ''}`, company.name, dept.name);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Internal: render audit plan PDF content ─────────────────
+function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed }) {
+  function formatDateDE(isoStr) {
+    if (!isoStr) return '';
+    const d = isoStr.substring(0, 10).split('-');
+    if (d.length !== 3) return isoStr;
+    return `${d[2]}.${d[1]}.${d[0]}`;
+  }
 
   // ── Header: Logo then text below ──
   let headerY = 50;
@@ -1767,8 +1904,7 @@ app.get('/api/audit-plans/:id/pdf', (req, res) => {
     doc.text(pageLabel, 50, footerY + 4, { width: tableRight - 50, align: 'right', lineBreak: false });
   }
 
-  doc.end();
-});
+}
 
 // ── PDF Helper: Render single audit line into doc ────────────
 function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY }) {
@@ -2327,6 +2463,18 @@ app.get('/api/persons/:id/signature', (req, res) => {
 // ── Health ──────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// ── API: Logs ───────────────────────────────────────────────
+app.get('/api/logs', (req, res) => {
+  const limit = parseInt(req.query.limit) || 50;
+  const offset = parseInt(req.query.offset) || 0;
+  const logs = stmts.getRecentLogs.all(limit, offset);
+  res.json(logs);
+});
+
+app.get('/logs', (req, res) => {
+  renderPage(res, 'logs', { activePage: 'logs', pageScript: 'logs.js' });
 });
 
 // ── Start ───────────────────────────────────────────────────

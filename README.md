@@ -20,9 +20,10 @@ Open http://localhost:8090. No build step, no external database.
 - **Audit Checklists** — Per-line checklists with Theoretical, Practical, and Procedure sections; evaluations (C, NA, O, L1, L2, L3)
 - **Corrective Action Plan (CAP)** — Auto-generated for findings/observations, inline detail with deadline, root cause, corrective/preventive actions, and status tracking
 - **PDF Export** — Planned audits PDF and completed audits PDF with findings summary (O/L1/L2/L3), signature table, and page numbers
+- **Email Sending** — Send audit plan PDFs via email; formal authority letters with salutation, CMM signature, and BCC to QM; regular emails with company mention
 - **Evidence Upload** — Attach images to CAP items as proof of corrective actions
 - **Import** — Import audit plans from .docx, bulk-import audit checklists from .xlsx
-- **Copy & Revision** — Create new plan revisions or copy plans as templates across departments
+- **Copy & Revision** — Create new plan revisions or copy plans as templates (subjects only, unfilled) across departments
 - **Filter & Tags** — Filter audit lines by status (open/planned/in progress/done), findings, observations, and checklist presence
 - **Tab Navigation** — Companies and departments as horizontal tab bars with three-dot menu for edit/delete; breadcrumb for deeper levels
 - **Persistent Navigation** — Tab selection, breadcrumb path, and filter settings survive page reloads via localStorage
@@ -30,6 +31,8 @@ Open http://localhost:8090. No build step, no external database.
 - **Automated Backup** — Scheduled SQLite backups with configurable path, weekdays, time, and rolling max count
 - **CAP Deadline Defaults** — Configurable days per evaluation level (O=180, L1=5, L2=60, L3=90), auto-calculated from audit performed date
 - **Notifications** — Email alerts to department QMs for upcoming/overdue CAP deadlines, with optional daily repeat until resolved
+- **Audit Log** — All actions logged with company/department context, viewable on dedicated log page with toggle nav button
+- **Responsive Design** — Tablet (768px) and mobile (480px) breakpoints
 
 ## Tech Stack
 
@@ -74,13 +77,15 @@ ac-audit/
 ├── package.json
 ├── public/          # Static files
 │   ├── style.css    # Custom CSS (blue theme, dark/light auto)
-│   ├── app.js       # Shared utilities (fetchJSON, escapeHtml, toast)
+│   ├── app.js       # Shared utilities (fetchJSON, escapeHtml, toast, nav toggles)
 │   ├── companies.js # Main page logic (navigation, CRUD, filters)
-│   └── settings.js  # Settings page logic (SMTP, backup, deadlines, notifications)
+│   ├── settings.js  # Settings page logic (SMTP, backup, deadlines, notifications)
+│   └── logs.js      # Audit log page logic (pagination)
 ├── views/           # EJS templates
 │   ├── layout.ejs   # Base HTML shell (nav, CSS, scripts)
 │   ├── companies.ejs # Companies page (tab bars + drill-down detail)
-│   └── settings.ejs  # Settings page (tile grid)
+│   ├── settings.ejs  # Settings page (tile grid)
+│   └── logs.ejs      # Audit log page
 └── data/            # SQLite database file (auto-created, gitignored)
     └── acaudit.db
 ```

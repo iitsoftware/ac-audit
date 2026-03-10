@@ -116,11 +116,12 @@ body {
   font-weight: 500;
   color: var(--text-muted);
   background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-bottom: -1px;
   cursor: pointer;
   white-space: nowrap;
-  transition: color var(--transition), border-color var(--transition);
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
   flex-shrink: 0;
 }
 
@@ -130,13 +131,22 @@ body {
 
 .tab-active {
   color: var(--primary);
-  border-bottom-color: var(--primary);
+  border-bottom-color: transparent;
+  background: var(--surface);
   font-weight: 600;
 }
 
 .tab-secondary {
   padding: 6px 14px;
   font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-bottom: -1px;
+}
+
+.tab-secondary.tab-active {
+  border-bottom-color: transparent;
+  background: var(--bg);
 }
 
 .tab-add-btn {
@@ -1715,11 +1725,20 @@ dialog.dialog-wide {
   padding: 6px;
   border-radius: var(--radius);
   transition: background var(--transition), color var(--transition);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
 }
 
 .nav-icon-link:hover {
   background: var(--primary-tint);
   color: var(--text);
+}
+
+.nav-icon-link.active {
+  background: var(--primary-tint);
+  color: var(--primary);
 }
 
 /* ── Settings Page ─────────────────────────────────────────── */
@@ -1824,3 +1843,160 @@ dialog.dialog-wide {
 
 .backup-name { font-weight: 600; }
 .backup-meta { color: var(--text-muted); }
+
+/* ── Export Dialog ───────────────────────────────────────────── */
+.export-section {
+  margin-bottom: 16px;
+}
+.export-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.export-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Log Table ───────────────────────────────────────────────── */
+.log-table-wrap {
+  overflow-x: auto;
+}
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.log-table th,
+.log-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.log-table th {
+  font-weight: 600;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+}
+.log-table td:last-child {
+  white-space: normal;
+  max-width: 300px;
+}
+
+/* ── Responsive: Tablet ──────────────────────────────────── */
+@media (max-width: 768px) {
+  .main-content-full {
+    padding: 16px 12px;
+  }
+  .card {
+    padding: 16px;
+  }
+  .plan-meta {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .plan-tile-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+  .audit-head-grid {
+    grid-template-columns: 1fr;
+  }
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .inline-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .pane-content-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .plan-lines-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  dialog {
+    width: 95vw;
+    max-width: 95vw;
+  }
+}
+
+/* ── Responsive: Mobile ──────────────────────────────────── */
+@media (max-width: 480px) {
+  .top-nav {
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .top-nav .brand {
+    font-size: 15px;
+  }
+  .main-content-full {
+    padding: 12px 8px;
+  }
+  .card {
+    padding: 12px;
+  }
+  .tab {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .tab-secondary {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+  .plan-tile-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .plan-tile-year {
+    font-size: 22px;
+  }
+  .settings-page {
+    padding: 0;
+  }
+  .settings-page h1 {
+    font-size: 20px;
+  }
+  .settings-tile {
+    padding: 16px;
+  }
+  .eval-summary-grid {
+    gap: 4px;
+  }
+  .cap-info-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cap-info-label {
+    min-width: auto;
+  }
+  .toast-container {
+    top: auto;
+    bottom: 16px;
+    right: 8px;
+    left: 8px;
+  }
+  .toast {
+    min-width: auto;
+    width: 100%;
+  }
+  .breadcrumb {
+    font-size: 12px;
+    gap: 4px;
+  }
+  .log-table th,
+  .log-table td {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}

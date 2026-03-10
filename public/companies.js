@@ -375,7 +375,7 @@
       previewRow.style.display = 'none';
     }
 
-    // Person fields — only show when editing
+    // Person fields
     const personsSection = document.getElementById('company-persons-section');
     if (isEdit) {
       await loadPersons();
@@ -394,10 +394,14 @@
           previewRow.style.display = 'none';
         }
       }
-      personsSection.style.display = '';
     } else {
-      personsSection.style.display = 'none';
+      document.getElementById('form-acc-firstname').value = '';
+      document.getElementById('form-acc-lastname').value = '';
+      document.getElementById('form-acc-email').value = '';
+      const { previewRow } = setupSigInput('acc');
+      previewRow.style.display = 'none';
     }
+    personsSection.style.display = '';
 
     dialog.showModal();
     document.getElementById('form-name').focus();
@@ -457,6 +461,12 @@
         if (logoBase64) data.logo = logoBase64;
         const created = await fetchJSON('/api/companies', { method: 'POST', body: data });
         selectedId = created.id;
+        // Save company-level persons
+        await savePerson(created.id, 'ACCOUNTABLE', null,
+          document.getElementById('form-acc-firstname').value.trim(),
+          document.getElementById('form-acc-lastname').value.trim(),
+          document.getElementById('form-acc-email').value.trim(),
+          sigStates.acc);
         toast('Firma erstellt');
       }
       dialog.close();
@@ -502,7 +512,7 @@
     document.getElementById('dept-form-authority-name').value = isEdit ? (dept.authority_name || '') : '';
     document.getElementById('dept-form-authority-email').value = isEdit ? (dept.authority_email || '') : '';
 
-    // Person fields — only show when editing
+    // Person fields
     const personsSection = document.getElementById('dept-persons-section');
     if (isEdit) {
       await loadPersons();
@@ -515,14 +525,6 @@
       document.getElementById('dept-form-al-lastname').value = al ? al.last_name : '';
       document.getElementById('dept-form-al-email').value = al ? (al.email || '') : '';
 
-      // Dynamic label for Abteilungsleiter based on regulation
-      const deptText = `${dept.name} ${dept.regulation || ''}`.toLowerCase();
-      let alLabel = 'Abteilungsleiter';
-      if (deptText.includes('145')) alLabel = 'Maintenance Manager';
-      else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
-      else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
-      document.getElementById('dept-form-al-label').textContent = alLabel;
-
       // Signatures
       for (const { key, person } of [{ key: 'dept-qm', person: qm }, { key: 'dept-al', person: al }]) {
         const { previewRow, previewImg } = setupSigInput(key);
@@ -533,10 +535,28 @@
           previewRow.style.display = 'none';
         }
       }
-      personsSection.style.display = '';
     } else {
-      personsSection.style.display = 'none';
+      document.getElementById('dept-form-qm-firstname').value = '';
+      document.getElementById('dept-form-qm-lastname').value = '';
+      document.getElementById('dept-form-qm-email').value = '';
+      document.getElementById('dept-form-al-firstname').value = '';
+      document.getElementById('dept-form-al-lastname').value = '';
+      document.getElementById('dept-form-al-email').value = '';
+      for (const key of ['dept-qm', 'dept-al']) {
+        const { previewRow } = setupSigInput(key);
+        previewRow.style.display = 'none';
+      }
     }
+
+    // Dynamic label for Abteilungsleiter based on regulation
+    const deptText = isEdit ? `${dept.name} ${dept.regulation || ''}`.toLowerCase() : '';
+    let alLabel = 'Abteilungsleiter';
+    if (deptText.includes('145')) alLabel = 'Maintenance Manager';
+    else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
+    else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
+    document.getElementById('dept-form-al-label').textContent = alLabel;
+
+    personsSection.style.display = '';
 
     deptDialog.showModal();
     document.getElementById('dept-form-name').focus();
@@ -574,7 +594,18 @@
           sigStates['dept-al']);
         toast('Abteilung aktualisiert');
       } else {
-        await fetchJSON(`/api/companies/${selectedId}/departments`, { method: 'POST', body: data });
+        const newDept = await fetchJSON(`/api/companies/${selectedId}/departments`, { method: 'POST', body: data });
+        // Save persons for the new department
+        await savePerson(selectedId, 'QM', newDept.id,
+          document.getElementById('dept-form-qm-firstname').value.trim(),
+          document.getElementById('dept-form-qm-lastname').value.trim(),
+          document.getElementById('dept-form-qm-email').value.trim(),
+          sigStates['dept-qm']);
+        await savePerson(selectedId, 'ABTEILUNGSLEITER', newDept.id,
+          document.getElementById('dept-form-al-firstname').value.trim(),
+          document.getElementById('dept-form-al-lastname').value.trim(),
+          document.getElementById('dept-form-al-email').value.trim(),
+          sigStates['dept-al']);
         toast('Abteilung erstellt');
       }
       deptDialog.close();
@@ -830,16 +861,15 @@
 
   document.getElementById('new-plan-template').addEventListener('click', async () => {
     newPlanDialog.close();
-    // Show template select dialog with all plans
     try {
-      const plans = await fetchJSON('/api/audit-plans/all');
+      const plans = await fetchJSON(`/api/departments/${currentDeptId}/audit-plans`);
       const listEl = document.getElementById('template-select-list');
       if (plans.length === 0) {
-        listEl.innerHTML = '<div class="empty-state-inline">Keine Pl\u00e4ne vorhanden</div>';
+        listEl.innerHTML = '<div class="empty-state-inline">Keine Auditpläne vorhanden</div>';
       } else {
         listEl.innerHTML = plans.map(p => `
           <div class="template-list-item" data-id="${p.id}">
-            <span class="template-list-name">${escapeHtml(p.company_name)} \u203a ${escapeHtml(p.department_name)} \u203a ${p.year} Rev. ${p.revision || 0}</span>
+            <span class="template-list-name">${p.year} Rev. ${p.revision || 0}</span>
           </div>
         `).join('');
         listEl.querySelectorAll('.template-list-item').forEach(item => {
@@ -1660,18 +1690,75 @@
 
   // ── PDF Export Dialog ──────────────────────────────────────
   const pdfExportDialog = document.getElementById('pdf-export-dialog');
-  document.getElementById('pdf-export-cancel').addEventListener('click', () => pdfExportDialog.close());
-  document.getElementById('pdf-export-open').addEventListener('click', () => {
-    if (currentPlan) {
-      window.open(`/api/audit-plans/${currentPlan.id}/pdf?type=open&filter=planned`, '_blank');
-    }
+  const pdfEmailSection = document.getElementById('pdf-export-email-section');
+  const pdfEmailInput = document.getElementById('pdf-export-email-to');
+  const pdfEmailSendBtn = document.getElementById('pdf-export-email-send');
+  let pdfEmailType = 'open';
+
+  document.getElementById('pdf-export-cancel').addEventListener('click', () => {
+    pdfEmailSection.style.display = 'none';
     pdfExportDialog.close();
   });
-  document.getElementById('pdf-export-closed').addEventListener('click', () => {
-    if (currentPlan) {
-      window.open(`/api/audit-plans/${currentPlan.id}/pdf?type=closed`, '_blank');
-    }
+
+  // Download PDF
+  document.getElementById('pdf-export-open-download').addEventListener('click', () => {
+    if (currentPlan) window.open(`/api/audit-plans/${currentPlan.id}/pdf?type=open&filter=planned`, '_blank');
     pdfExportDialog.close();
+  });
+  document.getElementById('pdf-export-closed-download').addEventListener('click', () => {
+    if (currentPlan) window.open(`/api/audit-plans/${currentPlan.id}/pdf?type=closed`, '_blank');
+    pdfExportDialog.close();
+  });
+
+  // Send to authority
+  async function sendToAuthority(type) {
+    if (!currentPlan) return;
+    const dept = departments.find(d => d.id === currentDeptId);
+    if (!dept || !dept.authority_email) {
+      toast('Keine Behörden-E-Mail in der Abteilung hinterlegt', 'error');
+      return;
+    }
+    try {
+      await fetchJSON(`/api/audit-plans/${currentPlan.id}/send-email`, {
+        method: 'POST', body: { to: dept.authority_email, type, authority: true }
+      });
+      toast(`Auditplan an ${dept.authority_email} gesendet`);
+      pdfExportDialog.close();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+  document.getElementById('pdf-export-open-authority').addEventListener('click', () => sendToAuthority('open'));
+  document.getElementById('pdf-export-closed-authority').addEventListener('click', () => sendToAuthority('closed'));
+
+  // Send via email
+  function showEmailInput(type) {
+    pdfEmailType = type;
+    pdfEmailSection.style.display = '';
+    pdfEmailInput.value = '';
+    pdfEmailSendBtn.disabled = true;
+    pdfEmailInput.focus();
+  }
+  document.getElementById('pdf-export-open-email').addEventListener('click', () => showEmailInput('open'));
+  document.getElementById('pdf-export-closed-email').addEventListener('click', () => showEmailInput('closed'));
+
+  pdfEmailInput.addEventListener('input', () => {
+    pdfEmailSendBtn.disabled = !pdfEmailInput.value.trim() || !pdfEmailInput.validity.valid;
+  });
+
+  pdfEmailSendBtn.addEventListener('click', async () => {
+    const to = pdfEmailInput.value.trim();
+    if (!to || !pdfEmailInput.validity.valid || !currentPlan) return;
+    try {
+      await fetchJSON(`/api/audit-plans/${currentPlan.id}/send-email`, {
+        method: 'POST', body: { to, type: pdfEmailType }
+      });
+      toast(`Auditplan an ${to} gesendet`);
+      pdfEmailSection.style.display = 'none';
+      pdfExportDialog.close();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
   });
 
   // ── CAP Section ──────────────────────────────────────────

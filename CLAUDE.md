@@ -46,12 +46,15 @@ ac-audit/
 ├── schema.sql             # All tables (CREATE IF NOT EXISTS)
 ├── public/
 │   ├── style.css          # Custom CSS (blue theme, dark/light auto)
-│   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting
-│   └── companies.js       # Main frontend logic (2000+ lines)
+│   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting, nav toggles
+│   ├── companies.js       # Main frontend logic (2000+ lines)
+│   ├── settings.js        # Settings page logic
+│   └── logs.js            # Audit log page logic
 ├── views/
-│   ├── layout.ejs         # Base HTML shell (nav, CSS, scripts)
+│   ├── layout.ejs         # Base HTML shell (nav with toggle buttons, CSS, scripts)
 │   ├── companies.ejs      # Main page template (dialogs, file inputs)
 │   ├── settings.ejs       # Settings page (SMTP, backup, CAP deadlines, notifications)
+│   ├── logs.ejs           # Audit log page
 │   └── login.ejs          # Login form
 ├── documents/             # Sample audit files (.docx/.xlsx)
 └── data/                  # SQLite DB file (gitignored)
@@ -147,6 +150,11 @@ Company (id, name, street, postal_code, city, logo BLOB)
 - `GET /api/cap-items/pdf` — Multi-select CAP PDF (query: ids=id1,id2,...)
 - `GET /api/cap-items/:id/pdf` — Single CAP PDF (with 5-Why for L1/L2)
 
+### Email Sending
+- `POST /api/audit-plans/:id/send-email` — Send PDF via email (body: to, type, authority?)
+  - Regular: informal email with company mention
+  - Authority (`authority: true`): formal letter with salutation, CMM signature, BCC to QM
+
 ### Import
 - `POST /api/departments/:departmentId/import-audit-plan` — Import from .docx
 - `POST /api/audit-plans/:id/import-audits` — Bulk import .xlsx checklists
@@ -172,6 +180,9 @@ Company (id, name, street, postal_code, city, logo BLOB)
 ### CAP Deadline Recalculation
 - `POST /api/cap-items/recalc-deadlines` — Recalculate all open CAP deadlines based on configured days per evaluation
 
+### Audit Log
+- `GET /api/logs` — List log entries (query: limit, offset)
+
 ### Other
 - `GET /health` — Health check
 
@@ -196,7 +207,12 @@ Company (id, name, street, postal_code, city, logo BLOB)
 - Multi-select PDF: batch routes registered before `:id` routes (Express route ordering)
 - Auth: HMAC-SHA256 session token in HttpOnly cookie, 7-day expiry
 - Evaluations: C (Conform), NA (Not Applicable), O (Observation), L1/L2/L3 (Finding levels)
+- Audit log: `logAction()` records company_name/department_name context for every action
+- Nav toggle buttons: Log/Config buttons navigate to page on click, back to `/` when active (state buttons)
+- Template copy: copies plan structure (subjects/regulations/location only), clears all audit data
+- Authority email: formal letter with salutation, Compliance Monitoring Manager signature, BCC to QM
+- Person fields shown in both add and edit dialogs (company: Accountable Manager; department: QM, Abteilungsleiter)
 
 ## Database Tables
 
-company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting
+company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log

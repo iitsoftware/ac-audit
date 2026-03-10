@@ -85,6 +85,14 @@ try {
   try { db.exec("ALTER TABLE cap_item ADD COLUMN notified_at TEXT"); } catch {}
 }
 
+// Migration: add company_name and department_name to audit_log
+try {
+  db.prepare('SELECT company_name FROM audit_log LIMIT 1').get();
+} catch {
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN company_name TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN department_name TEXT DEFAULT ''"); } catch {}
+}
+
 // Migration: rename statuses DRAFT → ENTWURF, ACTIVE → AKTIV
 try {
   db.exec("UPDATE audit_plan SET status = 'ENTWURF' WHERE status = 'DRAFT'");
@@ -485,6 +493,17 @@ const stmts = {
   getAllSettings: db.prepare('SELECT key, value FROM app_setting'),
   upsertSetting: db.prepare(
     `INSERT INTO app_setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ),
+
+  // Audit Log
+  insertLog: db.prepare(
+    'INSERT INTO audit_log (action, entity_type, entity_id, entity_name, company_name, department_name, details) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ),
+  getRecentLogs: db.prepare(
+    'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  ),
+  deleteOldLogs: db.prepare(
+    "DELETE FROM audit_log WHERE created_at < datetime('now', '-1 month')"
   ),
 };
 

@@ -62,6 +62,18 @@ function initDateAutoFormat(input) {
   });
 }
 
+// ── Nav toggle buttons (on/off state) ────────────────────
+document.querySelectorAll('[data-toggle-page]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.getAttribute('data-toggle-page');
+    if (btn.classList.contains('active')) {
+      window.location.href = '/';
+    } else {
+      window.location.href = target;
+    }
+  });
+});
+
 // Toast notifications
 (function () {
   let container;

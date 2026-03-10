@@ -318,11 +318,30 @@
 
 <!-- PDF Export dialog -->
 <dialog id="pdf-export-dialog">
-  <div class="dialog-header">PDF exportieren</div>
+  <div class="dialog-header">Auditplan exportieren</div>
   <div class="dialog-body">
-    <div class="new-plan-options">
-      <button class="btn btn-primary new-plan-option" id="pdf-export-open">Geplante Audits</button>
-      <button class="btn btn-secondary new-plan-option" id="pdf-export-closed">Durchgef&uuml;hrte Audits</button>
+    <div class="export-section">
+      <h3 class="export-section-title">Geplante Audits</h3>
+      <div class="export-actions">
+        <button class="btn btn-secondary" id="pdf-export-open-download">Download PDF</button>
+        <button class="btn btn-secondary" id="pdf-export-open-authority">An Beh&ouml;rde senden</button>
+        <button class="btn btn-secondary" id="pdf-export-open-email">Per E-Mail senden</button>
+      </div>
+    </div>
+    <div class="export-section">
+      <h3 class="export-section-title">Durchgef&uuml;hrte Audits</h3>
+      <div class="export-actions">
+        <button class="btn btn-secondary" id="pdf-export-closed-download">Download PDF</button>
+        <button class="btn btn-secondary" id="pdf-export-closed-authority">An Beh&ouml;rde senden</button>
+        <button class="btn btn-secondary" id="pdf-export-closed-email">Per E-Mail senden</button>
+      </div>
+    </div>
+    <div id="pdf-export-email-section" style="display:none;margin-top:12px">
+      <div class="form-group">
+        <label for="pdf-export-email-to">E-Mail-Adresse</label>
+        <input type="email" id="pdf-export-email-to" placeholder="empfaenger@example.com" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+      </div>
+      <button class="btn btn-primary" id="pdf-export-email-send" disabled>Senden</button>
     </div>
   </div>
   <div class="dialog-footer">

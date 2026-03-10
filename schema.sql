@@ -142,3 +142,15 @@ CREATE TABLE IF NOT EXISTS checklist_evidence_file (
   data BLOB NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action TEXT NOT NULL,
+  entity_type TEXT DEFAULT '',
+  entity_id TEXT DEFAULT '',
+  entity_name TEXT DEFAULT '',
+  company_name TEXT DEFAULT '',
+  department_name TEXT DEFAULT '',
+  details TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
