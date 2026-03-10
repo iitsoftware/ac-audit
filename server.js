@@ -1817,6 +1817,7 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
   let alLabel = 'Abteilungsleiter';
   if (deptText.includes('145')) alLabel = 'Maintenance Manager';
   else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
+  else if (deptText.includes('ato') || deptText.includes('flugschule') || deptText.includes('training')) alLabel = 'Head of Training';
   else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
 
   const sigRowH = 50;
@@ -2125,6 +2126,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   let alLabel = 'Abteilungsleiter';
   if (deptText.includes('145')) alLabel = 'Maintenance Manager';
   else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
+  else if (deptText.includes('ato') || deptText.includes('flugschule') || deptText.includes('training')) alLabel = 'Head of Training';
   else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
 
   const sigCols = 4;
