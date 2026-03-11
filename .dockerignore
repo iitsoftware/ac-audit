@@ -1,0 +1,8 @@
+node_modules
+data
+backup
+*.md
+.git
+.gitignore
+.claude
+tasks

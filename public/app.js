@@ -63,16 +63,39 @@ function initDateAutoFormat(input) {
 }
 
 // ── Nav toggle buttons (on/off state) ────────────────────
+const togglePages = new Set(Array.from(document.querySelectorAll('[data-toggle-page]')).map(b => b.getAttribute('data-toggle-page')));
+// Save current path as "return to" if it's not a toggle page itself
+if (!togglePages.has(window.location.pathname)) {
+  localStorage.setItem('nav_return_path', window.location.pathname + window.location.hash);
+}
 document.querySelectorAll('[data-toggle-page]').forEach(btn => {
   btn.addEventListener('click', () => {
     const target = btn.getAttribute('data-toggle-page');
     if (btn.classList.contains('active')) {
-      window.location.href = '/';
+      const returnPath = localStorage.getItem('nav_return_path') || '/home';
+      window.location.href = returnPath;
     } else {
       window.location.href = target;
     }
   });
 });
+
+// Trash badge count
+async function updateTrashBadge() {
+  try {
+    const data = await fetchJSON('/api/trash/count');
+    const badge = document.getElementById('trash-badge');
+    if (badge) {
+      if (data.count > 0) {
+        badge.textContent = data.count;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  } catch {}
+}
+updateTrashBadge();
 
 // Toast notifications
 (function () {

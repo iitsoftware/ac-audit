@@ -1,0 +1,25 @@
+<div class="settings-page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <h1>Papierkorb</h1>
+    <button class="btn btn-secondary" id="trash-empty-btn" style="display:none">Papierkorb leeren</button>
+  </div>
+  <div class="log-table-wrap">
+    <table class="log-table" id="trash-table">
+      <thead>
+        <tr>
+          <th>Typ</th>
+          <th>Name</th>
+          <th>Firma</th>
+          <th>Abteilung</th>
+          <th>Gelöscht am</th>
+          <th style="text-align:right">Aktionen</th>
+        </tr>
+      </thead>
+      <tbody id="trash-body"></tbody>
+    </table>
+  </div>
+  <p id="trash-empty-msg" style="text-align:center;color:var(--text-muted);margin-top:32px;display:none">Papierkorb ist leer</p>
+  <div style="text-align:center;margin-top:16px">
+    <button class="btn btn-secondary" id="trash-load-more" style="display:none">Mehr laden</button>
+  </div>
+</div>

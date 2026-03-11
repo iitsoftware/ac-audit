@@ -90,6 +90,8 @@ CREATE TABLE IF NOT EXISTS cap_item (
   completion_date TEXT,
   evidence TEXT DEFAULT '',
   notified_at TEXT,
+  source TEXT DEFAULT 'audit',
+  source_ref_id TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -153,4 +155,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
   department_name TEXT DEFAULT '',
   details TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS trash_item (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  entity_name TEXT DEFAULT '',
+  company_name TEXT DEFAULT '',
+  department_name TEXT DEFAULT '',
+  parent_id TEXT DEFAULT '',
+  parent_type TEXT DEFAULT '',
+  snapshot TEXT NOT NULL,
+  deleted_at TEXT DEFAULT (datetime('now'))
 );

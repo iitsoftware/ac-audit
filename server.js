@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const ejs = require('ejs');
 const { v4: uuidv4 } = require('uuid');
 const AdmZip = require('adm-zip');
-const { db, stmts } = require('./db');
+const { db, stmts, dataDir } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -55,7 +55,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ── Login routes (before auth middleware) ─────────────────────
 app.get('/login', (req, res) => {
   const cookies = parseCookies(req);
-  if (verifySessionToken(cookies.session)) return res.redirect('/');
+  if (verifySessionToken(cookies.session)) return res.redirect('/home');
   res.render('login', { error: null });
 });
 
@@ -64,7 +64,7 @@ app.post('/login', (req, res) => {
   if (password === LOGIN_PASSWORD) {
     const token = createSessionToken();
     res.setHeader('Set-Cookie', `session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE / 1000}`);
-    return res.redirect('/');
+    return res.redirect('/home');
   }
   res.render('login', { error: 'Falsches Passwort' });
 });
@@ -102,8 +102,118 @@ function logAction(action, entityType, entityId, entityName, details = '', compa
 stmts.deleteOldLogs.run();
 setInterval(() => { try { stmts.deleteOldLogs.run(); } catch {} }, 24 * 60 * 60 * 1000);
 
+// Clean expired trash items
+try {
+  const trashDays = (stmts.getSetting.get('trash_retention_days') || {}).value || '30';
+  stmts.deleteExpiredTrashItems.run(trashDays);
+} catch {}
+setInterval(() => {
+  try {
+    const trashDays = (stmts.getSetting.get('trash_retention_days') || {}).value || '30';
+    stmts.deleteExpiredTrashItems.run(trashDays);
+  } catch {}
+}, 24 * 60 * 60 * 1000);
+
+// ── Trash: Snapshot & Restore helpers ───────────────────────
+
+function snapshotCapItem(capId) {
+  const cap = db.prepare('SELECT * FROM cap_item WHERE id = ?').get(capId);
+  if (!cap) return null;
+  const evidenceFiles = db.prepare('SELECT id, cap_item_id, filename, mime_type, data, created_at FROM cap_evidence_file WHERE cap_item_id = ?').all(capId);
+  cap.evidence_files = evidenceFiles.map(f => ({ ...f, data: f.data ? Buffer.from(f.data).toString('base64') : null }));
+  const fiveWhy = db.prepare('SELECT * FROM five_why WHERE cap_item_id = ?').get(capId);
+  cap.five_why = fiveWhy || null;
+  return cap;
+}
+
+function snapshotAuditPlanLine(lineId) {
+  const line = db.prepare(`SELECT * FROM audit_plan_line WHERE id = ?`).get(lineId);
+  if (!line) return null;
+  const items = db.prepare('SELECT * FROM audit_checklist_item WHERE audit_plan_line_id = ? ORDER BY section, sort_order').all(lineId);
+  line.checklist_items = items.map(item => {
+    const checkEvFiles = db.prepare('SELECT id, checklist_item_id, filename, mime_type, data, created_at FROM checklist_evidence_file WHERE checklist_item_id = ?').all(item.id);
+    item.evidence_files = checkEvFiles.map(f => ({ ...f, data: f.data ? Buffer.from(f.data).toString('base64') : null }));
+    const capItem = db.prepare('SELECT * FROM cap_item WHERE checklist_item_id = ?').get(item.id);
+    if (capItem) {
+      const capEvFiles = db.prepare('SELECT id, cap_item_id, filename, mime_type, data, created_at FROM cap_evidence_file WHERE cap_item_id = ?').all(capItem.id);
+      capItem.evidence_files = capEvFiles.map(f => ({ ...f, data: f.data ? Buffer.from(f.data).toString('base64') : null }));
+      capItem.five_why = db.prepare('SELECT * FROM five_why WHERE cap_item_id = ?').get(capItem.id) || null;
+    }
+    item.cap_item = capItem || null;
+    return item;
+  });
+  return line;
+}
+
+function snapshotAuditPlan(planId) {
+  const plan = db.prepare('SELECT * FROM audit_plan WHERE id = ?').get(planId);
+  if (!plan) return null;
+  const lines = db.prepare('SELECT id FROM audit_plan_line WHERE audit_plan_id = ?').all(planId);
+  plan.lines = lines.map(l => snapshotAuditPlanLine(l.id));
+  return plan;
+}
+
+function restoreCapItem(cap) {
+  db.prepare(
+    `INSERT INTO cap_item (id, checklist_item_id, deadline, responsible_person, root_cause, corrective_action, preventive_action, status, completion_date, evidence, notified_at, source, source_ref_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(cap.id, cap.checklist_item_id, cap.deadline, cap.responsible_person, cap.root_cause, cap.corrective_action, cap.preventive_action, cap.status, cap.completion_date, cap.evidence, cap.notified_at, cap.source || 'audit', cap.source_ref_id || null, cap.created_at, cap.updated_at);
+  if (cap.evidence_files) {
+    for (const f of cap.evidence_files) {
+      db.prepare('INSERT INTO cap_evidence_file (id, cap_item_id, filename, mime_type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(f.id, f.cap_item_id, f.filename, f.mime_type, f.data ? Buffer.from(f.data, 'base64') : null, f.created_at);
+    }
+  }
+  if (cap.five_why) {
+    const fw = cap.five_why;
+    db.prepare('INSERT INTO five_why (id, cap_item_id, why1, why2, why3, why4, why5, root_cause, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(fw.id, fw.cap_item_id, fw.why1, fw.why2, fw.why3, fw.why4, fw.why5, fw.root_cause, fw.created_at, fw.updated_at);
+  }
+}
+
+function restoreChecklistItem(item) {
+  db.prepare(
+    `INSERT INTO audit_checklist_item (id, audit_plan_line_id, section, sort_order, regulation_ref, compliance_check, evaluation, auditor_comment, document_ref, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(item.id, item.audit_plan_line_id, item.section, item.sort_order, item.regulation_ref, item.compliance_check, item.evaluation, item.auditor_comment, item.document_ref, item.created_at, item.updated_at);
+  if (item.evidence_files) {
+    for (const f of item.evidence_files) {
+      db.prepare('INSERT INTO checklist_evidence_file (id, checklist_item_id, filename, mime_type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(f.id, f.checklist_item_id, f.filename, f.mime_type, f.data ? Buffer.from(f.data, 'base64') : null, f.created_at);
+    }
+  }
+  if (item.cap_item) {
+    restoreCapItem(item.cap_item);
+  }
+}
+
+function restoreAuditPlanLine(line) {
+  db.prepare(
+    `INSERT INTO audit_plan_line (id, audit_plan_id, sort_order, subject, regulations, location, planned_window, performed_date, signature, audit_no, audit_subject, audit_title, auditor_team, auditee, audit_start_date, audit_end_date, audit_location, document_ref, document_iss_rev, document_rev_date, recommendation, audit_status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(line.id, line.audit_plan_id, line.sort_order, line.subject, line.regulations, line.location, line.planned_window, line.performed_date, line.signature, line.audit_no, line.audit_subject, line.audit_title, line.auditor_team, line.auditee, line.audit_start_date, line.audit_end_date, line.audit_location, line.document_ref, line.document_iss_rev, line.document_rev_date, line.recommendation, line.audit_status, line.created_at, line.updated_at);
+  if (line.checklist_items) {
+    for (const item of line.checklist_items) {
+      restoreChecklistItem(item);
+    }
+  }
+}
+
+function restoreAuditPlan(plan) {
+  db.prepare(
+    `INSERT INTO audit_plan (id, department_id, name, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(plan.id, plan.department_id, plan.name || '', plan.year, plan.status, plan.revision, plan.approved_by, plan.approved_at, plan.submitted_to, plan.submitted_planned_at, plan.submitted_at, plan.created_at, plan.updated_at);
+  if (plan.lines) {
+    for (const line of plan.lines) {
+      restoreAuditPlanLine(line);
+    }
+  }
+}
+
 // ── Pages ───────────────────────────────────────────────────
-app.get('/', (req, res) => res.redirect('/companies'));
+app.get('/', (req, res) => res.redirect('/home'));
+
+app.get('/home', (req, res) => {
+  renderPage(res, 'home', { activePage: 'home', pageScript: 'home.js' });
+});
 
 app.get('/companies', (req, res) => {
   renderPage(res, 'companies', { activePage: 'companies', pageScript: 'companies.js' });
@@ -111,6 +221,114 @@ app.get('/companies', (req, res) => {
 
 app.get('/settings', (req, res) => {
   renderPage(res, 'settings', { activePage: 'settings', pageScript: 'settings.js' });
+});
+
+// ── API: Home Stats ───────────────────────────────────────────
+app.get('/api/home/stats', (req, res) => {
+  try {
+    const openCount = stmts.getCapStatsOpen.get().cnt;
+    const overdueCount = stmts.getCapStatsOverdue.get().cnt;
+    const totalAudits = stmts.getTotalAudits.get().cnt;
+
+    // Build enriched CAP items list via multi-query approach
+    const openCaps = stmts.getOpenCapItems.all();
+    const capItems = [];
+
+    if (openCaps.length > 0) {
+      // Step 2: Get checklist items
+      const checklistItemIds = [...new Set(openCaps.map(c => c.checklist_item_id))];
+      const checklistItems = db.prepare(
+        `SELECT id, audit_plan_line_id, evaluation, compliance_check, regulation_ref
+         FROM audit_checklist_item WHERE id IN (${checklistItemIds.map(() => '?').join(',')})`
+      ).all(...checklistItemIds);
+      const ciMap = Object.fromEntries(checklistItems.map(ci => [ci.id, ci]));
+
+      // Step 3: Get plan lines
+      const planLineIds = [...new Set(checklistItems.map(ci => ci.audit_plan_line_id))];
+      const planLines = planLineIds.length > 0 ? db.prepare(
+        `SELECT id, audit_plan_id, audit_no, subject
+         FROM audit_plan_line WHERE id IN (${planLineIds.map(() => '?').join(',')})`
+      ).all(...planLineIds) : [];
+      const plMap = Object.fromEntries(planLines.map(pl => [pl.id, pl]));
+
+      // Step 4: Get plans
+      const planIds = [...new Set(planLines.map(pl => pl.audit_plan_id))];
+      const plans = planIds.length > 0 ? db.prepare(
+        `SELECT id, department_id, year
+         FROM audit_plan WHERE id IN (${planIds.map(() => '?').join(',')})`
+      ).all(...planIds) : [];
+      const apMap = Object.fromEntries(plans.map(p => [p.id, p]));
+
+      // Step 5: Get departments
+      const deptIds = [...new Set(plans.map(p => p.department_id))];
+      const depts = deptIds.length > 0 ? db.prepare(
+        `SELECT id, company_id, name
+         FROM department WHERE id IN (${deptIds.map(() => '?').join(',')})`
+      ).all(...deptIds) : [];
+      const dMap = Object.fromEntries(depts.map(d => [d.id, d]));
+
+      // Step 6: Get companies
+      const companyIds = [...new Set(depts.map(d => d.company_id))];
+      const companies = companyIds.length > 0 ? db.prepare(
+        `SELECT id, name
+         FROM company WHERE id IN (${companyIds.map(() => '?').join(',')})`
+      ).all(...companyIds) : [];
+      const coMap = Object.fromEntries(companies.map(c => [c.id, c]));
+
+      // Step 7: Merge
+      const today = new Date().toISOString().slice(0, 10);
+      for (const cap of openCaps) {
+        const ci = ciMap[cap.checklist_item_id];
+        if (!ci) continue;
+        const pl = plMap[ci.audit_plan_line_id];
+        if (!pl) continue;
+        const ap = apMap[pl.audit_plan_id];
+        if (!ap) continue;
+        const dept = dMap[ap.department_id];
+        if (!dept) continue;
+        const co = coMap[dept.company_id];
+        if (!co) continue;
+
+        const isOverdue = cap.deadline && cap.deadline !== '' && cap.deadline < today;
+        capItems.push({
+          id: cap.id,
+          companyId: co.id,
+          companyName: co.name,
+          departmentId: dept.id,
+          departmentName: dept.name,
+          auditPlanId: ap.id,
+          auditPlanYear: ap.year,
+          auditNo: pl.audit_no,
+          auditSubject: pl.subject,
+          evaluation: ci.evaluation,
+          description: ci.compliance_check,
+          deadline: cap.deadline,
+          status: isOverdue ? 'OVERDUE' : 'OPEN',
+          isOverdue,
+          source: cap.source || 'audit',
+        });
+      }
+
+      // Sort: overdue first, then by deadline ASC
+      capItems.sort((a, b) => {
+        if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+        return (a.deadline || '').localeCompare(b.deadline || '');
+      });
+    }
+
+    res.json({
+      modules: {
+        audit: {
+          openCaps: openCount,
+          overdueCaps: overdueCount,
+          totalAudits,
+        },
+      },
+      capItems,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── API: Settings ──────────────────────────────────────────
@@ -255,12 +473,14 @@ function calcCapDeadline(evaluation, performedDate) {
   return base.toISOString().slice(0, 10);
 }
 
+const defaultBackupPath = process.env.BACKUP_PATH || path.join(dataDir, 'backups');
+
 function getBackupSettings() {
   const rows = stmts.getAllSettings.all();
   const s = {};
   rows.forEach(r => { s[r.key] = r.value; });
   return {
-    path: s.backup_path || '',
+    path: process.env.BACKUP_PATH || s.backup_path || defaultBackupPath,
     time: s.backup_time || '02:00',
     days: s.backup_days || 'mo,tu,we,th,fr',
     maxBackups: parseInt(s.backup_max) || 10,
@@ -349,7 +569,7 @@ setInterval(async () => {
     if (now.getHours() !== hh || now.getMinutes() !== mm) return;
 
     // Check if DB changed since last backup
-    const dbPath = path.join(__dirname, 'data', 'acaudit.db');
+    const dbPath = path.join(dataDir, 'acaudit.db');
     const dbMtime = fs.statSync(dbPath).mtimeMs;
     if (lastBackupDbMtime !== null && dbMtime <= lastBackupDbMtime) return;
 
@@ -816,6 +1036,14 @@ app.delete('/api/audit-plans/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Audit plan not found' });
   const delDept = stmts.getDepartment.get(existing.department_id);
   const delCompany = delDept ? stmts.getCompany.get(delDept.company_id) : null;
+  // Snapshot to trash before deleting
+  try {
+    const snapshot = snapshotAuditPlan(req.params.id);
+    if (snapshot) {
+      const entityName = existing.year + ' Rev.' + (existing.revision || 0);
+      stmts.createTrashItem.run(uuidv4(), 'audit_plan', req.params.id, entityName, delCompany ? delCompany.name : '', delDept ? delDept.name : '', existing.department_id, 'department', JSON.stringify(snapshot));
+    }
+  } catch (e) { console.error('Trash snapshot failed:', e.message); }
   stmts.deleteAuditPlan.run(req.params.id);
   logAction('Auditplan gelöscht', 'audit_plan', req.params.id, existing.year + ' Rev.' + (existing.revision || 0), '', delCompany ? delCompany.name : '', delDept ? delDept.name : '');
   res.status(204).end();
@@ -1061,6 +1289,16 @@ app.patch('/api/audit-plan-lines/:id/performed', (req, res) => {
 app.delete('/api/audit-plan-lines/:id', (req, res) => {
   const existing = stmts.getAuditPlanLine.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Audit plan line not found' });
+  // Snapshot to trash before deleting
+  try {
+    const snapshot = snapshotAuditPlanLine(req.params.id);
+    if (snapshot) {
+      const plan = stmts.getAuditPlan.get(existing.audit_plan_id);
+      const dept = plan ? stmts.getDepartment.get(plan.department_id) : null;
+      const comp = dept ? stmts.getCompany.get(dept.company_id) : null;
+      stmts.createTrashItem.run(uuidv4(), 'audit_plan_line', req.params.id, existing.subject || existing.audit_no || '', comp ? comp.name : '', dept ? dept.name : '', existing.audit_plan_id, 'audit_plan', JSON.stringify(snapshot));
+    }
+  } catch (e) { console.error('Trash snapshot failed:', e.message); }
   stmts.deleteAuditPlanLine.run(req.params.id);
   res.status(204).end();
 });
@@ -1448,6 +1686,26 @@ app.put('/api/cap-items/:id', (req, res) => {
 });
 
 app.delete('/api/cap-items/:id', (req, res) => {
+  // Snapshot to trash before deleting
+  try {
+    const cap = snapshotCapItem(req.params.id);
+    if (cap) {
+      const checkItem = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?').get(cap.checklist_item_id);
+      let compName = '', deptName = '', entityName = '';
+      if (checkItem) {
+        const line = stmts.getAuditPlanLine.get(checkItem.audit_plan_line_id);
+        if (line) {
+          entityName = line.subject || line.audit_no || '';
+          const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+          if (plan) {
+            const dept = stmts.getDepartment.get(plan.department_id);
+            if (dept) { deptName = dept.name; const comp = stmts.getCompany.get(dept.company_id); if (comp) compName = comp.name; }
+          }
+        }
+      }
+      stmts.createTrashItem.run(uuidv4(), 'cap_item', req.params.id, entityName, compName, deptName, cap.checklist_item_id, 'audit_checklist_item', JSON.stringify(cap));
+    }
+  } catch (e) { console.error('Trash snapshot failed:', e.message); }
   stmts.deleteCapItem.run(req.params.id);
   res.status(204).end();
 });
@@ -2477,6 +2735,71 @@ app.get('/api/logs', (req, res) => {
 
 app.get('/logs', (req, res) => {
   renderPage(res, 'logs', { activePage: 'logs', pageScript: 'logs.js' });
+});
+
+// ── API: Trash (Papierkorb) ─────────────────────────────────
+
+app.get('/api/trash', (req, res) => {
+  const limit = parseInt(req.query.limit) || 50;
+  const offset = parseInt(req.query.offset) || 0;
+  res.json(stmts.getTrashItems.all(limit, offset));
+});
+
+app.get('/api/trash/count', (req, res) => {
+  const row = stmts.getTrashItemCount.get();
+  res.json({ count: row ? row.cnt : 0 });
+});
+
+app.post('/api/trash/:id/restore', (req, res) => {
+  const item = stmts.getTrashItem.get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Trash item not found' });
+
+  const snapshot = JSON.parse(item.snapshot);
+
+  // Check parent existence
+  if (item.entity_type === 'audit_plan') {
+    const dept = stmts.getDepartment.get(item.parent_id);
+    if (!dept) return res.status(409).json({ error: 'Abteilung existiert nicht mehr. Wiederherstellung nicht möglich.' });
+  } else if (item.entity_type === 'audit_plan_line') {
+    const plan = stmts.getAuditPlan.get(item.parent_id);
+    if (!plan) return res.status(409).json({ error: 'Auditplan existiert nicht mehr. Wiederherstellung nicht möglich.' });
+  } else if (item.entity_type === 'cap_item') {
+    const checkItem = db.prepare('SELECT id FROM audit_checklist_item WHERE id = ?').get(item.parent_id);
+    if (!checkItem) return res.status(409).json({ error: 'Prüfpunkt existiert nicht mehr. Wiederherstellung nicht möglich.' });
+  }
+
+  try {
+    const restoreTx = db.transaction(() => {
+      if (item.entity_type === 'audit_plan') {
+        restoreAuditPlan(snapshot);
+      } else if (item.entity_type === 'audit_plan_line') {
+        restoreAuditPlanLine(snapshot);
+      } else if (item.entity_type === 'cap_item') {
+        restoreCapItem(snapshot);
+      }
+      stmts.deleteTrashItem.run(req.params.id);
+    });
+    restoreTx();
+    logAction('Wiederhergestellt', item.entity_type, item.entity_id, item.entity_name, 'Aus Papierkorb', item.company_name, item.department_name);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Restore failed:', e.message);
+    res.status(500).json({ error: 'Wiederherstellung fehlgeschlagen: ' + e.message });
+  }
+});
+
+app.delete('/api/trash/:id', (req, res) => {
+  stmts.deleteTrashItem.run(req.params.id);
+  res.status(204).end();
+});
+
+app.post('/api/trash/empty', (req, res) => {
+  stmts.deleteAllTrashItems.run();
+  res.json({ ok: true });
+});
+
+app.get('/trash', (req, res) => {
+  renderPage(res, 'trash', { activePage: 'trash', pageScript: 'trash.js' });
 });
 
 // ── Start ───────────────────────────────────────────────────

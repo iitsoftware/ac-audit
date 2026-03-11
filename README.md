@@ -32,6 +32,7 @@ Open http://localhost:8090. No build step, no external database.
 - **CAP Deadline Defaults** — Configurable days per evaluation level (O=180, L1=5, L2=60, L3=90), auto-calculated from audit performed date
 - **Notifications** — Email alerts to department QMs for upcoming/overdue CAP deadlines, with optional daily repeat until resolved
 - **Audit Log** — All actions logged with company/department context, viewable on dedicated log page with toggle nav button
+- **Trash (Papierkorb)** — Deleted audit plans, plan lines, and CAP items are moved to trash with full JSON snapshots (incl. BLOBs). Restore or permanently delete from the trash page. Auto-cleanup after configurable retention days (default 30)
 - **Responsive Design** — Tablet (768px) and mobile (480px) breakpoints
 
 ## Tech Stack
@@ -43,11 +44,25 @@ Open http://localhost:8090. No build step, no external database.
 
 8 dependencies. Single process. No build step.
 
+## Docker
+
+```bash
+docker compose up -d          # Start
+docker compose up -d --build  # Rebuild after code changes
+docker compose down           # Stop
+```
+
+Data is stored in `./data/` (DB + backups). To migrate an existing database, copy it to `./data/acaudit.db` before starting.
+
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT`   | `8090`  | HTTP server port |
+| Variable         | Default             | Description                              |
+|------------------|---------------------|------------------------------------------|
+| `PORT`           | `8090`              | HTTP server port                         |
+| `LOGIN_PASSWORD` | `audit2024`         | Login password                           |
+| `SESSION_SECRET` | random              | HMAC secret (set for persistent sessions)|
+| `DATA_DIR`       | `./data`            | Database and backup directory            |
+| `BACKUP_PATH`    | `$DATA_DIR/backups` | Override backup location                 |
 
 ```bash
 PORT=3000 npm start
@@ -71,21 +86,28 @@ Company
 
 ```
 ac-audit/
-├── server.js        # Express app, all routes and API endpoints
-├── db.js            # SQLite setup, migrations, prepared statements
-├── schema.sql       # Database schema (11 tables)
+├── server.js         # Express app, all routes and API endpoints
+├── db.js             # SQLite setup, migrations, prepared statements
+├── schema.sql        # Database schema (13 tables)
 ├── package.json
-├── public/          # Static files
-│   ├── style.css    # Custom CSS (blue theme, dark/light auto)
-│   ├── app.js       # Shared utilities (fetchJSON, escapeHtml, toast, nav toggles)
-│   ├── companies.js # Main page logic (navigation, CRUD, filters)
-│   ├── settings.js  # Settings page logic (SMTP, backup, deadlines, notifications)
-│   └── logs.js      # Audit log page logic (pagination)
-├── views/           # EJS templates
-│   ├── layout.ejs   # Base HTML shell (nav, CSS, scripts)
+├── Dockerfile        # Docker image (node:20-alpine)
+├── docker-compose.yml
+├── public/           # Static files
+│   ├── style.css     # Custom CSS (blue theme, dark/light auto)
+│   ├── app.js        # Shared utilities (fetchJSON, escapeHtml, toast, nav toggles, trash badge)
+│   ├── companies.js  # Main page logic (navigation, CRUD, filters)
+│   ├── home.js       # Home dashboard logic
+│   ├── settings.js   # Settings page logic (SMTP, backup, deadlines, notifications)
+│   ├── trash.js      # Trash page logic (restore, delete, empty)
+│   └── logs.js       # Audit log page logic (pagination)
+├── views/            # EJS templates
+│   ├── layout.ejs    # Base HTML shell (nav, CSS, scripts)
 │   ├── companies.ejs # Companies page (tab bars + drill-down detail)
+│   ├── home.ejs      # Home dashboard
 │   ├── settings.ejs  # Settings page (tile grid)
+│   ├── trash.ejs     # Trash page (restore/delete table)
 │   └── logs.ejs      # Audit log page
-└── data/            # SQLite database file (auto-created, gitignored)
-    └── acaudit.db
+└── data/             # SQLite database file (auto-created, gitignored)
+    ├── acaudit.db
+    └── backups/      # Automatic backups
 ```

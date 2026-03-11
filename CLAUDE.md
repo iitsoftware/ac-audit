@@ -34,6 +34,11 @@ npm start            # Start server (default port 8090)
 PORT=3000 npm start  # Custom port
 ```
 
+```bash
+docker compose up -d          # Docker start
+docker compose up -d --build  # Docker rebuild
+```
+
 No build step. No external database server.
 
 ## Architecture
@@ -44,21 +49,28 @@ ac-audit/
 ├── server.js              # Express app, all routes, PDF rendering, import parsing
 ├── db.js                  # SQLite setup, migrations, prepared statements
 ├── schema.sql             # All tables (CREATE IF NOT EXISTS)
+├── Dockerfile             # Docker image (node:20-alpine)
+├── docker-compose.yml     # Docker Compose config
 ├── public/
 │   ├── style.css          # Custom CSS (blue theme, dark/light auto)
-│   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting, nav toggles
+│   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting, nav toggles, trash badge
 │   ├── companies.js       # Main frontend logic (2000+ lines)
+│   ├── home.js            # Home dashboard logic
 │   ├── settings.js        # Settings page logic
+│   ├── trash.js           # Trash page logic (restore, delete, empty)
 │   └── logs.js            # Audit log page logic
 ├── views/
 │   ├── layout.ejs         # Base HTML shell (nav with toggle buttons, CSS, scripts)
 │   ├── companies.ejs      # Main page template (dialogs, file inputs)
+│   ├── home.ejs           # Home dashboard
 │   ├── settings.ejs       # Settings page (SMTP, backup, CAP deadlines, notifications)
+│   ├── trash.ejs          # Trash page (restore/delete table)
 │   ├── logs.ejs           # Audit log page
 │   └── login.ejs          # Login form
 ├── documents/             # Sample audit files (.docx/.xlsx)
-└── data/                  # SQLite DB file (gitignored)
-    └── acaudit.db
+└── data/                  # SQLite DB + backups (gitignored, Docker volume)
+    ├── acaudit.db
+    └── backups/
 ```
 
 ## Data Model
@@ -183,6 +195,13 @@ Company (id, name, street, postal_code, city, logo BLOB)
 ### Audit Log
 - `GET /api/logs` — List log entries (query: limit, offset)
 
+### Trash (Papierkorb)
+- `GET /api/trash` — List trash items (query: limit, offset, without snapshot data)
+- `GET /api/trash/count` — Count (for nav badge)
+- `POST /api/trash/:id/restore` — Restore (checks parent existence, atomic transaction)
+- `DELETE /api/trash/:id` — Permanently delete
+- `POST /api/trash/empty` — Empty entire trash
+
 ### Other
 - `GET /health` — Health check
 
@@ -201,18 +220,21 @@ Company (id, name, street, postal_code, city, logo BLOB)
 - CAP items auto-created when checklist evaluation is O/L1/L2/L3, deadline auto-calculated from performed_date + configurable days
 - CAP deadline defaults: O=180, L1=5, L2=60, L3=90 days (configurable in settings)
 - Notifications: email to department QM when CAP deadline approaches, with repeat option
-- Backup: SQLite Online Backup API (async), scheduled with change detection via DB mtime
+- Backup: SQLite Online Backup API (async), scheduled with change detection via DB mtime. Path: `BACKUP_PATH` env > DB setting > `$DATA_DIR/backups/`
 - Settings stored in `app_setting` table (key-value)
 - PDF helpers extracted: `renderAuditLinePdf()`, `renderCapItemPdf()`, `addPdfFooter()`
 - Multi-select PDF: batch routes registered before `:id` routes (Express route ordering)
 - Auth: HMAC-SHA256 session token in HttpOnly cookie, 7-day expiry
 - Evaluations: C (Conform), NA (Not Applicable), O (Observation), L1/L2/L3 (Finding levels)
 - Audit log: `logAction()` records company_name/department_name context for every action
-- Nav toggle buttons: Log/Config buttons navigate to page on click, back to `/` when active (state buttons)
+- Nav toggle buttons: Trash/Log/Config buttons navigate to page on click, back to previous page when active (localStorage breadcrumb)
 - Template copy: copies plan structure (subjects/regulations/location only), clears all audit data
 - Authority email: formal letter with salutation, Compliance Monitoring Manager signature, BCC to QM
 - Person fields shown in both add and edit dialogs (company: Accountable Manager; department: QM, Abteilungsleiter)
+- Trash: DELETE handlers snapshot entity tree (incl. BLOBs as base64) to `trash_item` table before CASCADE delete. Restore re-inserts with original UUIDs in a transaction. Auto-cleanup of expired items (configurable `trash_retention_days`, default 30)
+- Docker: `DATA_DIR` env configures DB + backup location (default `/data` in container). Single volume mount for all persistent data
+- Share button blink: `has-selection` class on `.select-header` triggers CSS blink animation when checkboxes are selected
 
 ## Database Tables
 
-company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log
+company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log, trash_item

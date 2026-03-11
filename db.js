@@ -2,8 +2,8 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(path.join(dataDir, 'acaudit.db'));
 
@@ -83,6 +83,14 @@ try {
   db.prepare('SELECT notified_at FROM cap_item LIMIT 1').get();
 } catch {
   try { db.exec("ALTER TABLE cap_item ADD COLUMN notified_at TEXT"); } catch {}
+}
+
+// Migration: add source tracking to cap_item
+try {
+  db.prepare('SELECT source FROM cap_item LIMIT 1').get();
+} catch {
+  try { db.exec("ALTER TABLE cap_item ADD COLUMN source TEXT DEFAULT 'audit'"); } catch {}
+  try { db.exec("ALTER TABLE cap_item ADD COLUMN source_ref_id TEXT"); } catch {}
 }
 
 // Migration: add company_name and department_name to audit_log
@@ -495,6 +503,25 @@ const stmts = {
     `INSERT INTO app_setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`
   ),
 
+  // Home stats
+  getOpenCapItems: db.prepare(
+    `SELECT id, checklist_item_id, deadline, responsible_person, source
+     FROM cap_item WHERE completion_date IS NULL OR completion_date = ''
+     ORDER BY deadline ASC`
+  ),
+  getCapStatsOpen: db.prepare(
+    `SELECT COUNT(*) AS cnt FROM cap_item WHERE completion_date IS NULL OR completion_date = ''`
+  ),
+  getCapStatsOverdue: db.prepare(
+    `SELECT COUNT(*) AS cnt FROM cap_item
+     WHERE (completion_date IS NULL OR completion_date = '')
+       AND deadline IS NOT NULL AND deadline != ''
+       AND deadline < date('now')`
+  ),
+  getTotalAudits: db.prepare(
+    `SELECT COUNT(*) AS cnt FROM audit_plan_line`
+  ),
+
   // Audit Log
   insertLog: db.prepare(
     'INSERT INTO audit_log (action, entity_type, entity_id, entity_name, company_name, department_name, details) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -504,6 +531,29 @@ const stmts = {
   ),
   deleteOldLogs: db.prepare(
     "DELETE FROM audit_log WHERE created_at < datetime('now', '-1 month')"
+  ),
+
+  // Trash
+  getTrashItems: db.prepare(
+    'SELECT id, entity_type, entity_id, entity_name, company_name, department_name, parent_id, parent_type, deleted_at FROM trash_item ORDER BY deleted_at DESC LIMIT ? OFFSET ?'
+  ),
+  getTrashItem: db.prepare(
+    'SELECT * FROM trash_item WHERE id = ?'
+  ),
+  createTrashItem: db.prepare(
+    'INSERT INTO trash_item (id, entity_type, entity_id, entity_name, company_name, department_name, parent_id, parent_type, snapshot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ),
+  deleteTrashItem: db.prepare(
+    'DELETE FROM trash_item WHERE id = ?'
+  ),
+  deleteAllTrashItems: db.prepare(
+    'DELETE FROM trash_item'
+  ),
+  deleteExpiredTrashItems: db.prepare(
+    "DELETE FROM trash_item WHERE deleted_at < datetime('now', '-' || ? || ' days')"
+  ),
+  getTrashItemCount: db.prepare(
+    'SELECT COUNT(*) AS cnt FROM trash_item'
   ),
 };
 
@@ -529,4 +579,4 @@ try {
   }
 } catch { /* cap_item table might not exist yet on first run edge cases */ }
 
-module.exports = { db, stmts };
+module.exports = { db, stmts, dataDir };

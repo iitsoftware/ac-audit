@@ -231,8 +231,11 @@
       return;
     }
 
+    // Back button to home
+    html += `<button class="breadcrumb-back" data-nav="home" title="Zur\u00fcck zur \u00dcbersicht">\u2190</button>`;
+
     bcSegments.forEach((segment, i) => {
-      if (i > 0) html += `<span class="breadcrumb-sep">\u203a</span>`;
+      html += `<span class="breadcrumb-sep">\u203a</span>`;
       const navIdx = navPath.indexOf(segment);
       if (i < bcSegments.length - 1) {
         html += `<button class="breadcrumb-item" data-nav="${navIdx}">${escapeHtml(segment.name)}</button>`;
@@ -242,6 +245,11 @@
     });
 
     breadcrumbEl.innerHTML = html;
+
+    const backBtn = breadcrumbEl.querySelector('.breadcrumb-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => { window.location.href = '/home'; });
+    }
 
     breadcrumbEl.querySelectorAll('.breadcrumb-item').forEach(btn => {
       btn.addEventListener('click', () => navigateTo(parseInt(btn.dataset.nav)));
@@ -1168,13 +1176,20 @@
     const selectAllLines = contentEl.querySelector('.select-all-lines');
     const lineCbs = contentEl.querySelectorAll('.line-select-cb');
     if (selectAllLines) {
+      const lineHeader = selectAllLines.closest('.select-header');
+      const updateLineSelection = () => {
+        const anyChecked = [...lineCbs].some(cb => cb.checked);
+        lineHeader.classList.toggle('has-selection', anyChecked);
+      };
       selectAllLines.addEventListener('change', () => {
         const checked = selectAllLines.checked;
         lineCbs.forEach(cb => {
           if (cb.closest('tr').style.display !== 'none') cb.checked = checked;
         });
+        updateLineSelection();
       });
-      selectAllLines.closest('.select-header').querySelector('svg').addEventListener('click', () => {
+      lineCbs.forEach(cb => cb.addEventListener('change', updateLineSelection));
+      lineHeader.querySelector('svg').addEventListener('click', () => {
         const ids = [...lineCbs].filter(cb => cb.checked).map(cb => cb.dataset.lineId);
         if (ids.length === 0) { toast('Keine Themenbereiche ausgew\u00e4hlt', 'error'); return; }
         window.open(`/api/audit-plan-lines/pdf?ids=${ids.join(',')}`);
@@ -1858,10 +1873,17 @@
     const selectAllCap = section.querySelector('.select-all-cap');
     const capCbs = section.querySelectorAll('.cap-select-cb');
     if (selectAllCap) {
+      const capHeader = selectAllCap.closest('.select-header');
+      const updateCapSelection = () => {
+        const anyChecked = [...capCbs].some(cb => cb.checked);
+        capHeader.classList.toggle('has-selection', anyChecked);
+      };
       selectAllCap.addEventListener('change', () => {
         capCbs.forEach(cb => { cb.checked = selectAllCap.checked; });
+        updateCapSelection();
       });
-      selectAllCap.closest('.select-header').querySelector('svg').addEventListener('click', () => {
+      capCbs.forEach(cb => cb.addEventListener('change', updateCapSelection));
+      capHeader.querySelector('svg').addEventListener('click', () => {
         const ids = [...capCbs].filter(cb => cb.checked).map(cb => cb.dataset.capId);
         if (ids.length === 0) { toast('Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
         window.open(`/api/cap-items/pdf?ids=${ids.join(',')}`);
