@@ -1,0 +1,14 @@
+services:
+  ac-audit:
+    image: ac-audit
+    container_name: ac-audit
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      # Bestehende DB hierhin kopieren: ./data/acaudit.db
+      # Backups landen automatisch in: ./data/backups/
+      - ./data:/data
+    environment:
+      - LOGIN_PASSWORD=audit2024
+      # - SESSION_SECRET=change-me-to-a-random-string
