@@ -1243,9 +1243,10 @@ dialog.dialog-wide {
   border-color: var(--primary);
 }
 
-.plan-tile-wip     { border-color: #f59e0b; }
-.plan-tile-planned { border-color: #3b82f6; }
-.plan-tile-done    { border-color: #22c55e; }
+.plan-tile-wip       { border-color: #f59e0b; }
+.plan-tile-planned   { border-color: #3b82f6; }
+.plan-tile-done      { border-color: #22c55e; }
+.plan-tile-authority { border-color: #8b5cf6; background: linear-gradient(135deg, var(--surface) 80%, rgba(139, 92, 246, 0.08)); }
 
 .plan-tile-year {
   font-size: 28px;
@@ -1267,9 +1268,20 @@ dialog.dialog-wide {
   margin-top: 8px;
 }
 
-.plan-tile-wip .plan-tile-status     { color: #f59e0b; }
-.plan-tile-planned .plan-tile-status { color: #3b82f6; }
-.plan-tile-done .plan-tile-status    { color: #22c55e; }
+.plan-tile-wip .plan-tile-status       { color: #f59e0b; }
+.plan-tile-planned .plan-tile-status   { color: #3b82f6; }
+.plan-tile-done .plan-tile-status      { color: #22c55e; }
+.plan-tile-authority .plan-tile-status { color: #8b5cf6; }
+
+.plan-group-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin: 16px 0 8px;
+}
+.plan-group-label:first-child { margin-top: 0; }
 
 .plan-tile .plan-progress {
   margin-top: 10px;

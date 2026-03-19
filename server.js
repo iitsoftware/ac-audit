@@ -904,10 +904,11 @@ app.get('/api/audit-plans/:id', (req, res) => {
 app.post('/api/departments/:departmentId/audit-plans', (req, res) => {
   const dept = stmts.getDepartment.get(req.params.departmentId);
   if (!dept) return res.status(404).json({ error: 'Department not found' });
-  const { year } = req.body;
+  const { year, plan_type } = req.body;
   if (!year || !Number.isInteger(year)) return res.status(400).json({ error: 'Year is required' });
   const id = uuidv4();
-  stmts.createAuditPlan.run(id, req.params.departmentId, year, 'ENTWURF', 0);
+  const pType = plan_type === 'AUTHORITY' ? 'AUTHORITY' : 'AUDIT';
+  stmts.createAuditPlan.run(id, req.params.departmentId, year, 'ENTWURF', 0, pType);
   res.status(201).json(stmts.getAuditPlan.get(id));
 });
 
@@ -978,7 +979,7 @@ app.post('/api/audit-plans/:id/copy', (req, res) => {
   const newYear = mode === 'revision' ? source.year : new Date().getFullYear();
   const newRevision = mode === 'revision' ? (source.revision || 0) + 1 : 0;
 
-  stmts.createAuditPlan.run(newId, targetDeptId, newYear, 'ENTWURF', newRevision);
+  stmts.createAuditPlan.run(newId, targetDeptId, newYear, 'ENTWURF', newRevision, source.plan_type || 'AUDIT');
 
   // Copy lines and their checklist items
   const isTemplate = mode === 'template';
@@ -1151,7 +1152,7 @@ app.post('/api/departments/:departmentId/import-audit-plan',
       // Create audit plan
       const planId = uuidv4();
       const insertPlan = db.transaction(() => {
-        stmts.createAuditPlan.run(planId, req.params.departmentId, year, 'ENTWURF', 0);
+        stmts.createAuditPlan.run(planId, req.params.departmentId, year, 'ENTWURF', 0, 'AUDIT');
         for (const line of lines) {
           const lineId = uuidv4();
           stmts.createAuditPlanLine.run(
@@ -1214,11 +1215,25 @@ app.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
   const id = uuidv4();
   const maxNo = stmts.getMaxAuditNo.get(req.params.auditPlanId);
   const auditNo = String((maxNo?.max_no || 0) + 1);
+
+  // For authority audits, prefill auditor_team with authority name, auditee with QM name
+  let auditorTeam = b.auditor_team || '';
+  let auditee = b.auditee || '';
+  if (plan.plan_type === 'AUTHORITY' && !auditorTeam && !auditee) {
+    const dept = stmts.getDepartment.get(plan.department_id);
+    if (dept && dept.authority_name) auditorTeam = dept.authority_name;
+    if (dept) {
+      const personsAll = stmts.getPersonsByCompany.all(dept.company_id);
+      const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+      if (qm) auditee = `${qm.first_name} ${qm.last_name}`.trim();
+    }
+  }
+
   stmts.createAuditPlanLine.run(
     id, req.params.auditPlanId,
     b.sort_order || 0, b.subject || '', b.regulations || '', b.location || '', b.planned_window || '',
     auditNo, b.audit_subject || '', b.audit_title || '',
-    b.auditor_team || '', b.auditee || '',
+    auditorTeam, auditee,
     b.audit_start_date || null, b.audit_end_date || null, b.audit_location || '',
     b.document_ref || '', b.document_iss_rev || '', b.document_rev_date || null,
     b.recommendation || '', b.audit_status || 'OPEN'
@@ -1666,6 +1681,113 @@ app.get('/api/cap-items/pdf', (req, res) => {
   doc.end();
 });
 
+// Helper: generate multi-CAP PDF as Buffer
+function generateCapItemsPdfBuffer(ids) {
+  return new Promise((resolve, reject) => {
+    if (!ids || ids.length === 0) return reject(new Error('No IDs provided'));
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('error', reject);
+
+    const checklistStmt = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?');
+    let dept, company;
+    for (let idx = 0; idx < ids.length; idx++) {
+      const cap = stmts.getCapItem.get(ids[idx]);
+      if (!cap) continue;
+      const checklistItem = checklistStmt.get(cap.checklist_item_id);
+      const line = stmts.getAuditPlanLine.get(checklistItem.audit_plan_line_id);
+      const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+      dept = stmts.getDepartment.get(plan.department_id);
+      company = stmts.getCompany.get(dept.company_id);
+      const logoRow = stmts.getCompanyLogo.get(company.id);
+      const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
+      const fiveWhy = hasFiveWhy ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+      const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
+      if (idx > 0) doc.addPage();
+      renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY: 50 });
+    }
+    addPdfFooter(doc);
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), dept, company }));
+    doc.end();
+  });
+}
+
+// Send CAP items PDF via email
+app.post('/api/cap-items/send-email', async (req, res) => {
+  const { ids, to: toAddress, authority } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Keine CAP-Einträge ausgewählt' });
+
+  // For authority mode, resolve the authority email from the first CAP's department
+  let to = toAddress;
+  if (authority && !to) {
+    const firstCap = stmts.getCapItem.get(ids[0]);
+    if (firstCap) {
+      const ci = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?').get(firstCap.checklist_item_id);
+      if (ci) {
+        const ln = stmts.getAuditPlanLine.get(ci.audit_plan_line_id);
+        if (ln) {
+          const pl = stmts.getAuditPlan.get(ln.audit_plan_id);
+          if (pl) {
+            const dp = stmts.getDepartment.get(pl.department_id);
+            if (dp && dp.authority_email) to = dp.authority_email;
+          }
+        }
+      }
+    }
+  }
+  if (!to) return res.status(400).json({ error: authority ? 'Keine Behörden-E-Mail in der Abteilung hinterlegt' : 'E-Mail-Adresse erforderlich' });
+
+  try {
+    const { buffer, dept, company } = await generateCapItemsPdfBuffer(ids);
+
+    const nodemailer = require('nodemailer');
+    const rows = stmts.getAllSettings.all();
+    const s = {};
+    rows.forEach(r => { s[r.key] = r.value; });
+    if (!s.smtp_host || !s.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+
+    const port = parseInt(s.smtp_port) || 587;
+    const auth = s.smtp_auth !== 'false';
+    const transporter = nodemailer.createTransport({
+      host: s.smtp_host, port, secure: port === 465,
+      auth: auth ? { user: s.smtp_user, pass: s.smtp_pass } : undefined,
+    });
+
+    const filename = `Corrective_Actions.pdf`;
+    const personsAll = stmts.getPersonsByCompany.all(company.id);
+    const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+
+    let subject, text, bcc;
+    if (authority) {
+      const salutation = dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
+      const qmName = qm ? `${qm.first_name} ${qm.last_name}` : '';
+      const qmTitle = qm ? 'Compliance Monitoring Manager' : '';
+
+      subject = `Corrective Action Plan – ${company.name} (${dept.name})`;
+      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Corrective Action Plan der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n${qmName}${qmTitle ? '\n' + qmTitle : ''}\n${company.name}`;
+      if (qm && qm.email) bcc = qm.email;
+    } else {
+      subject = `Corrective Action Plan (${dept.name})`;
+      text = `Hallo,\n\nanbei der Corrective Action Plan für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n${company.name}`;
+    }
+
+    const mailOpts = {
+      from: s.smtp_user,
+      to, subject, text,
+      attachments: [{ filename, content: buffer, contentType: 'application/pdf' }],
+    };
+    if (bcc) mailOpts.bcc = bcc;
+    await transporter.sendMail(mailOpts);
+
+    logAction('CAP per E-Mail gesendet', 'cap_item', '', `${ids.length} CAP-Einträge`, `An: ${to}${authority ? ' (Behörde)' : ''}`, company.name, dept.name);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('CAP send-email error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/cap-items/:id', (req, res) => {
   const row = stmts.getCapItem.get(req.params.id);
   if (!row) return res.status(404).json({ error: 'CAP item not found' });
@@ -2063,7 +2185,22 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
     doc.fillColor('#000000');
   }
 
-  // ── Signature table ──
+  // ── Signature table (skip for authority audits) ──
+  if (plan.plan_type === 'AUTHORITY') {
+    // No signature section — just add footer
+    const pages = doc.bufferedPageRange();
+    for (let p = pages.start; p < pages.start + pages.count; p++) {
+      doc.switchToPage(p);
+      const footerY = 770;
+      doc.strokeColor('#000000').lineWidth(0.5);
+      doc.moveTo(50, footerY).lineTo(pageW - 50, footerY).stroke();
+      doc.fontSize(7).fillColor('#000000').font('Helvetica');
+      doc.text('Erstellt mit ac-audit', 50, footerY + 4, { lineBreak: false });
+      const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
+      doc.text(pageLabel, 50, footerY + 4, { width: pageW - 100, align: 'right', lineBreak: false });
+    }
+    return;
+  }
   // Load persons for this company/department
   const personsAll = stmts.getPersonsByCompany.all(company.id);
   const qmPerson = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);

@@ -686,14 +686,16 @@
     // Sort by year desc, then revision desc
     const sorted = [...auditPlans].sort((a, b) => b.year - a.year || (b.revision || 0) - (a.revision || 0));
     function derivePlanStatus(p) {
+      if ((p.plan_type || 'AUDIT') === 'AUTHORITY') return { css: 'plan-tile-authority', label: 'Aktiv' };
       if (p.submitted_at) return { css: 'plan-tile-done', label: 'Erledigt' };
       if (p.approved_at || p.submitted_planned_at) return { css: 'plan-tile-planned', label: 'Geplant' };
       return { css: 'plan-tile-wip', label: 'In Arbeit' };
     }
-    contentEl.innerHTML = '<div class="plan-tile-grid">' + sorted.map(p => {
+    function renderTile(p) {
       const total = p.audit_total || 0;
       const done = p.audit_done || 0;
       const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      const isAuthority = (p.plan_type || 'AUDIT') === 'AUTHORITY';
       const progressHtml = total > 0
         ? `<div class="plan-progress">
             <div class="plan-progress-bar"><div class="plan-progress-fill" style="width:${pct}%"></div></div>
@@ -704,15 +706,27 @@
       return `
       <div class="plan-tile ${st.css}" data-id="${p.id}">
         <div class="plan-tile-year">${p.year}</div>
-        <div class="plan-tile-rev">Rev. ${p.revision || 0}</div>
+        ${isAuthority ? '' : `<div class="plan-tile-rev">Rev. ${p.revision || 0}</div>`}
         <div class="plan-tile-status">${st.label}</div>
         ${progressHtml}
         <div class="plan-tile-actions">
-          <button class="pane-action-btn" data-action="edit-plan" data-id="${p.id}" title="Bearbeiten">&#9998;</button>
+          ${isAuthority ? '' : `<button class="pane-action-btn" data-action="edit-plan" data-id="${p.id}" title="Bearbeiten">&#9998;</button>`}
           <button class="pane-action-btn danger" data-action="delete-plan" data-id="${p.id}" title="L\u00f6schen">&#128465;</button>
         </div>
       </div>`;
-    }).join('') + '</div>';
+    }
+    const auditSorted = sorted.filter(p => (p.plan_type || 'AUDIT') !== 'AUTHORITY');
+    const authoritySorted = sorted.filter(p => (p.plan_type || 'AUDIT') === 'AUTHORITY');
+    let gridHtml = '';
+    if (auditSorted.length > 0) {
+      if (authoritySorted.length > 0) gridHtml += '<div class="plan-group-label">Auditpl\u00e4ne</div>';
+      gridHtml += '<div class="plan-tile-grid">' + auditSorted.map(renderTile).join('') + '</div>';
+    }
+    if (authoritySorted.length > 0) {
+      if (auditSorted.length > 0) gridHtml += '<div class="plan-group-label">Beh\u00f6rdenaudits</div>';
+      gridHtml += '<div class="plan-tile-grid">' + authoritySorted.map(renderTile).join('') + '</div>';
+    }
+    contentEl.innerHTML = gridHtml;
 
     contentEl.querySelectorAll('.plan-tile').forEach(card => {
       card.addEventListener('click', (e) => {
@@ -720,7 +734,8 @@
         const id = card.dataset.id;
         const plan = auditPlans.find(p => p.id === id);
         if (!plan) return;
-        navPath.push({ type: 'audit-plan', id: plan.id, name: `Auditplan ${plan.year} Rev. ${plan.revision || 0}` });
+        const pName = (plan.plan_type || 'AUDIT') === 'AUTHORITY' ? `Beh\u00f6rdenaudits ${plan.year}` : `Auditplan ${plan.year} Rev. ${plan.revision || 0}`;
+        navPath.push({ type: 'audit-plan', id: plan.id, name: pName });
         renderCurrentLevel();
       });
     });
@@ -795,10 +810,38 @@
     }
   });
 
+  // ── Plan Type Dialog ───────────────────────────────────────
+  const planTypeDialog = document.getElementById('plan-type-dialog');
+  document.getElementById('plan-type-cancel').addEventListener('click', () => planTypeDialog.close());
+
+  document.getElementById('plan-type-audit').addEventListener('click', () => {
+    planTypeDialog.close();
+    openNewAuditPlanDialog();
+  });
+
+  document.getElementById('plan-type-authority').addEventListener('click', async () => {
+    planTypeDialog.close();
+    try {
+      await fetchJSON(`/api/departments/${currentDeptId}/audit-plans`, {
+        method: 'POST',
+        body: { year: new Date().getFullYear(), plan_type: 'AUTHORITY' }
+      });
+      toast('Behördenaudits erstellt');
+      await loadAuditPlans();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+
   // ── New Plan Dialog (3 options) ──────────────────────────────
   async function openNewPlanDialog() {
-    if (auditPlans.length === 0) {
-      // No plans exist — create empty one directly
+    planTypeDialog.showModal();
+  }
+
+  async function openNewAuditPlanDialog() {
+    const regularPlans = auditPlans.filter(p => (p.plan_type || 'AUDIT') !== 'AUTHORITY');
+    if (regularPlans.length === 0) {
+      // No regular audit plans exist — create empty one directly
       try {
         await fetchJSON(`/api/departments/${currentDeptId}/audit-plans`, {
           method: 'POST',
@@ -922,7 +965,7 @@
       // Update navPath name to include full title
       const seg = navPath.find(s => s.type === 'audit-plan' && s.id === planId);
       if (seg) {
-        seg.name = `Auditplan ${currentPlan.year} Rev. ${currentPlan.revision || 0}`;
+        seg.name = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? `Beh\u00f6rdenaudits ${currentPlan.year}` : `Auditplan ${currentPlan.year} Rev. ${currentPlan.revision || 0}`;
         saveNavState();
       }
     } catch (e) {
@@ -939,22 +982,28 @@
       return;
     }
 
-    headerEl.innerHTML = `
-      <h2>Auditplan ${currentPlan.year} <small style="font-weight:400;color:var(--text-muted)">Rev. ${currentPlan.revision ?? 0}</small></h2>
-    `;
+    const isAuthority = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
+    const planTitle = isAuthority ? `Beh\u00f6rdenaudits ${currentPlan.year}` : `Auditplan ${currentPlan.year}`;
+    const planSubtitle = isAuthority ? '' : ` <small style="font-weight:400;color:var(--text-muted)">Rev. ${currentPlan.revision ?? 0}</small>`;
 
-    const approvedDisplay = formatDateDE(currentPlan.approved_at);
-    const submittedPlannedDisplay = formatDateDE(currentPlan.submitted_planned_at);
-    const submittedDisplay = formatDateDE(currentPlan.submitted_at);
+    headerEl.innerHTML = `
+      <h2>${planTitle}${planSubtitle}</h2>
+    `;
 
     let html = `<div class="plan-detail">`;
 
-    // Meta info as inline editable row
-    html += `<div class="plan-meta">`;
-    html += `<div class="plan-meta-item"><span class="plan-meta-label">Datum Freigabe</span> <input type="text" class="plan-date-input" id="plan-approved-at" value="${escapeHtml(approvedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
-    html += `<div class="plan-meta-item"><span class="plan-meta-label">Weitergabe LBA (geplant)</span> <input type="text" class="plan-date-input" id="plan-submitted-planned-at" value="${escapeHtml(submittedPlannedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
-    html += `<div class="plan-meta-item"><span class="plan-meta-label">Weitergabe LBA (durchgef\u00fchrt)</span> <input type="text" class="plan-date-input" id="plan-submitted-at" value="${escapeHtml(submittedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
-    html += `</div>`;
+    if (!isAuthority) {
+      const approvedDisplay = formatDateDE(currentPlan.approved_at);
+      const submittedPlannedDisplay = formatDateDE(currentPlan.submitted_planned_at);
+      const submittedDisplay = formatDateDE(currentPlan.submitted_at);
+
+      // Meta info as inline editable row
+      html += `<div class="plan-meta">`;
+      html += `<div class="plan-meta-item"><span class="plan-meta-label">Datum Freigabe</span> <input type="text" class="plan-date-input" id="plan-approved-at" value="${escapeHtml(approvedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
+      html += `<div class="plan-meta-item"><span class="plan-meta-label">Weitergabe LBA (geplant)</span> <input type="text" class="plan-date-input" id="plan-submitted-planned-at" value="${escapeHtml(submittedPlannedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
+      html += `<div class="plan-meta-item"><span class="plan-meta-label">Weitergabe LBA (durchgef\u00fchrt)</span> <input type="text" class="plan-date-input" id="plan-submitted-at" value="${escapeHtml(submittedDisplay)}" placeholder="TT.MM.JJJJ"></div>`;
+      html += `</div>`;
+    }
 
     // Lines are already sorted by audit_no from the server
     const sortedLines = planLines;
@@ -990,12 +1039,14 @@
     }
 
     // Lines section
+    const linesTitle = isAuthority ? 'Findings' : 'Themenbereiche';
+    const addLineTitle = isAuthority ? 'Finding hinzuf\u00fcgen' : 'Themenbereich hinzuf\u00fcgen';
     html += `<div class="plan-lines-header">
-      <h3>Themenbereiche</h3>
+      <h3>${linesTitle}</h3>
       <div style="display:flex;gap:0.25rem">
-        <button class="btn-icon" id="btn-pdf-export" title="PDF exportieren">${ICON_SHARE}</button>
+        ${isAuthority ? '' : `<button class="btn-icon" id="btn-pdf-export" title="PDF exportieren">${ICON_SHARE}</button>`}
         <button class="btn-icon" id="btn-import-audits" title="Audit-Checklisten importieren (.xlsx)">${ICON_IMPORT}</button>
-        <button class="btn-icon" id="btn-add-line" title="Themenbereich hinzuf\u00fcgen">+</button>
+        <button class="btn-icon" id="btn-add-line" title="${addLineTitle}">+</button>
       </div>
     </div>`;
 
@@ -1011,7 +1062,42 @@
     }
 
     if (sortedLines.length === 0) {
-      html += '<div class="empty-state-inline">Keine Themenbereiche vorhanden</div>';
+      html += `<div class="empty-state-inline">Keine ${isAuthority ? 'Findings' : 'Themenbereiche'} vorhanden</div>`;
+    } else if (isAuthority) {
+      html += `<div class="lines-table-wrap"><table class="lines-table">
+        <thead>
+          <tr>
+            <th>Nr.</th>
+            <th>Finding</th>
+            <th>Vorschriften</th>
+            <th>Ort</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>`;
+      sortedLines.forEach(line => {
+        const lt = lineTagsMap.get(line.id);
+        const tagKeys = lt.map(t => t.key).join(' ');
+        let tagsHtml = '';
+        for (const t of lt) {
+          let label = t.label;
+          if (t.key === 'finding') label += ` (${line.finding_count})`;
+          if (t.key === 'observation') label += ` (${line.observation_count})`;
+          if (t.key === 'checklist') label += ` (${line.checklist_count})`;
+          if (t.key === 'evidence') label += ` (${line.evidence_count})`;
+          tagsHtml += `<span class="audit-tag ${t.css}">${label}</span>`;
+        }
+        html += `<tr data-id="${line.id}" data-tags="${tagKeys}" class="line-row-clickable">
+          <td>${escapeHtml(line.audit_no || '')}</td>
+          <td>${escapeHtml(line.subject)}<div class="audit-tags">${tagsHtml}</div></td>
+          <td class="regulations-cell">${escapeHtml(line.regulations || '').replace(/\n/g, '<br>')}</td>
+          <td>${escapeHtml(line.location || '')}</td>
+          <td class="line-actions">
+            <button class="pane-action-btn danger" data-action="delete-line" data-id="${line.id}" title="L\u00f6schen">&#128465;</button>
+          </td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
     } else {
       html += `<div class="lines-table-wrap"><table class="lines-table">
         <thead>
@@ -1138,22 +1224,26 @@
     const planApprovedInput = document.getElementById('plan-approved-at');
     const planSubmittedPlannedInput = document.getElementById('plan-submitted-planned-at');
     const planSubmittedInput = document.getElementById('plan-submitted-at');
-    initDateAutoFormat(planApprovedInput);
-    initDateAutoFormat(planSubmittedPlannedInput);
-    initDateAutoFormat(planSubmittedInput);
-    planApprovedInput.addEventListener('blur', savePlanDates);
-    planSubmittedPlannedInput.addEventListener('blur', savePlanDates);
-    planSubmittedInput.addEventListener('blur', savePlanDates);
+    if (planApprovedInput) {
+      initDateAutoFormat(planApprovedInput);
+      initDateAutoFormat(planSubmittedPlannedInput);
+      initDateAutoFormat(planSubmittedInput);
+      planApprovedInput.addEventListener('blur', savePlanDates);
+      planSubmittedPlannedInput.addEventListener('blur', savePlanDates);
+      planSubmittedInput.addEventListener('blur', savePlanDates);
+    }
 
     // Bind add line: create empty line, then navigate to detail
     document.getElementById('btn-add-line').addEventListener('click', async () => {
       try {
         const defaultCity = getSelectedCompany()?.city || '';
+        const isAuth = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
+        const defaultSubject = isAuth ? 'Neues Finding' : 'Neuer Themenbereich';
         const created = await fetchJSON(`/api/audit-plans/${currentPlan.id}/lines`, {
           method: 'POST',
-          body: { subject: 'Neuer Themenbereich', location: defaultCity, sort_order: planLines.length + 1 }
+          body: { subject: defaultSubject, location: defaultCity, sort_order: planLines.length + 1 }
         });
-        navPath.push({ type: 'audit-plan-line', id: created.id, name: created.subject || 'Themenbereich' });
+        navPath.push({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich') });
         renderCurrentLevel();
       } catch (err) {
         toast(err.message, 'error');
@@ -1196,10 +1286,13 @@
       });
     }
 
-    // Bind PDF export button
-    document.getElementById('btn-pdf-export').addEventListener('click', () => {
-      document.getElementById('pdf-export-dialog').showModal();
-    });
+    // Bind PDF export button (not present for authority plans)
+    const pdfExportBtn = document.getElementById('btn-pdf-export');
+    if (pdfExportBtn) {
+      pdfExportBtn.addEventListener('click', () => {
+        document.getElementById('pdf-export-dialog').showModal();
+      });
+    }
 
     // Bind import audits button
     document.getElementById('btn-import-audits').addEventListener('click', () => {
@@ -1280,13 +1373,15 @@
     let html = '<div class="audit-detail">';
 
     // ── Themenbereich Meta ──
+    const isAuthorityLine = currentPlan && (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
+    const sectionLabel = isAuthorityLine ? 'Finding' : 'Themenbereich';
     html += `<div class="audit-section">
-      <div class="audit-section-header"><h3>Themenbereich</h3></div>
+      <div class="audit-section-header"><h3>${sectionLabel}</h3></div>
       <div class="inline-form-grid">
-        <label>Themenbereich</label><input class="inline-input" id="ld-subject" value="${escapeHtml(currentLine.subject || '')}">
+        <label>${sectionLabel}</label><input class="inline-input" id="ld-subject" value="${escapeHtml(currentLine.subject || '')}">
         <label>Vorschriften</label><textarea class="inline-input inline-textarea" id="ld-regulations" rows="2">${escapeHtml(currentLine.regulations || '')}</textarea>
         <label>Ort</label><input class="inline-input" id="ld-location" value="${escapeHtml(currentLine.location || '')}">
-        <label>Monat geplant</label>${monthSelect('ld-planned-window', currentLine.planned_window)}
+        ${isAuthorityLine ? '' : `<label>Monat geplant</label>${monthSelect('ld-planned-window', currentLine.planned_window)}`}
       </div>
     </div>`;
 
@@ -1382,7 +1477,7 @@
         subject: document.getElementById('ld-subject').value.trim(),
         regulations: document.getElementById('ld-regulations').value.trim(),
         location: document.getElementById('ld-location').value.trim(),
-        planned_window: document.getElementById('ld-planned-window').value,
+        planned_window: (document.getElementById('ld-planned-window') || {}).value || '',
         auditor_team: document.getElementById('ld-auditor-team').value.trim(),
         auditee: document.getElementById('ld-auditee').value.trim(),
         audit_start_date: startIso,
@@ -1469,8 +1564,29 @@
   }
 
   // ── Checklist Item Dialog (Add / Edit) ─────────────────────
+  const allEvalOptions = [
+    { value: '', label: '--' },
+    { value: 'C', label: 'C (Compliant)' },
+    { value: 'NA', label: 'NA (Not Applicable)' },
+    { value: 'O', label: 'O (Observation)' },
+    { value: 'L1', label: 'L1 (Level 1)' },
+    { value: 'L2', label: 'L2 (Level 2)' },
+    { value: 'L3', label: 'L3 (Level 3)' },
+  ];
+  const authorityEvalValues = ['', 'O', 'L1', 'L2', 'L3'];
+
   function openChecklistItemDialog(item, defaultSection, defaultSortOrder) {
     const isEdit = !!item;
+    const isAuthorityPlan = currentPlan && (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
+
+    // Filter evaluation options for authority plans
+    const evalSelect = document.getElementById('ci-form-evaluation');
+    const allowedValues = isAuthorityPlan ? authorityEvalValues : allEvalOptions.map(o => o.value);
+    evalSelect.innerHTML = allEvalOptions
+      .filter(o => allowedValues.includes(o.value))
+      .map(o => `<option value="${o.value}">${o.label}</option>`)
+      .join('');
+
     document.getElementById('checklist-item-dialog-title').textContent = isEdit ? 'Eintrag bearbeiten' : 'Eintrag hinzuf\u00fcgen';
     document.getElementById('ci-form-id').value = isEdit ? item.id : '';
     document.getElementById('ci-form-section').value = isEdit ? (item.section || 'THEORETICAL') : (defaultSection || 'THEORETICAL');
@@ -1886,10 +2002,67 @@
       capHeader.querySelector('svg').addEventListener('click', () => {
         const ids = [...capCbs].filter(cb => cb.checked).map(cb => cb.dataset.capId);
         if (ids.length === 0) { toast('Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
-        window.open(`/api/cap-items/pdf?ids=${ids.join(',')}`);
+        selectedCapIds = ids;
+        capExportEmailSection.style.display = 'none';
+        capExportDialog.showModal();
       });
     }
   }
+
+  // ── CAP Export Dialog ──────────────────────────────────────
+  const capExportDialog = document.getElementById('cap-export-dialog');
+  const capExportEmailSection = document.getElementById('cap-export-email-section');
+  const capExportEmailInput = document.getElementById('cap-export-email-to');
+  const capExportEmailSendBtn = document.getElementById('cap-export-email-send');
+  let selectedCapIds = [];
+
+  document.getElementById('cap-export-cancel').addEventListener('click', () => {
+    capExportEmailSection.style.display = 'none';
+    capExportDialog.close();
+  });
+
+  document.getElementById('cap-export-download').addEventListener('click', () => {
+    if (selectedCapIds.length > 0) window.open(`/api/cap-items/pdf?ids=${selectedCapIds.join(',')}`);
+    capExportDialog.close();
+  });
+
+  document.getElementById('cap-export-authority').addEventListener('click', async () => {
+    try {
+      await fetchJSON('/api/cap-items/send-email', {
+        method: 'POST', body: { ids: selectedCapIds, authority: true }
+      });
+      toast('CAP an Beh\u00f6rde gesendet');
+      capExportDialog.close();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  document.getElementById('cap-export-email').addEventListener('click', () => {
+    capExportEmailSection.style.display = '';
+    capExportEmailInput.value = '';
+    capExportEmailSendBtn.disabled = true;
+    capExportEmailInput.focus();
+  });
+
+  capExportEmailInput.addEventListener('input', () => {
+    capExportEmailSendBtn.disabled = !capExportEmailInput.value.trim() || !capExportEmailInput.validity.valid;
+  });
+
+  capExportEmailSendBtn.addEventListener('click', async () => {
+    const to = capExportEmailInput.value.trim();
+    if (!to || !capExportEmailInput.validity.valid) return;
+    try {
+      await fetchJSON('/api/cap-items/send-email', {
+        method: 'POST', body: { ids: selectedCapIds, to }
+      });
+      toast(`CAP an ${to} gesendet`);
+      capExportEmailSection.style.display = 'none';
+      capExportDialog.close();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
 
   // ── CAP Detail Level (inline drill-down) ──────────────────
   let currentCapItem = null;
@@ -1911,7 +2084,12 @@
     }
 
     headerEl.innerHTML = `<h2>Corrective Action</h2>
-      <button class="btn-icon" title="CAP als PDF exportieren" onclick="window.open('/api/cap-items/${capItemId}/pdf')">${ICON_SHARE}</button>`;
+      <button class="btn-icon" id="btn-cap-detail-export" title="CAP exportieren">${ICON_SHARE}</button>`;
+    document.getElementById('btn-cap-detail-export').addEventListener('click', () => {
+      selectedCapIds = [capItemId];
+      capExportEmailSection.style.display = 'none';
+      capExportDialog.showModal();
+    });
 
     const cap = currentCapItem;
     let html = '<div class="audit-detail">';

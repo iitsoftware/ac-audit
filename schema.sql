@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS audit_plan (
   submitted_to TEXT DEFAULT '',
   submitted_planned_at TEXT,
   submitted_at TEXT,
+  plan_type TEXT DEFAULT 'AUDIT',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );

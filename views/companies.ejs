@@ -349,6 +349,42 @@
   </div>
 </dialog>
 
+<!-- Plan Type selection dialog -->
+<dialog id="plan-type-dialog">
+  <div class="dialog-header">Neuen Plan erstellen</div>
+  <div class="dialog-body">
+    <div class="new-plan-options">
+      <button class="btn btn-primary new-plan-option" id="plan-type-audit">Auditplan</button>
+      <button class="btn btn-secondary new-plan-option" id="plan-type-authority">Beh&ouml;rdenaudits</button>
+    </div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="plan-type-cancel">Abbrechen</button>
+  </div>
+</dialog>
+
+<!-- CAP Export dialog -->
+<dialog id="cap-export-dialog">
+  <div class="dialog-header">CAP exportieren</div>
+  <div class="dialog-body">
+    <div class="export-actions">
+      <button class="btn btn-secondary" id="cap-export-download">Download PDF</button>
+      <button class="btn btn-secondary" id="cap-export-authority">An Beh&ouml;rde senden</button>
+      <button class="btn btn-secondary" id="cap-export-email">Per E-Mail senden</button>
+    </div>
+    <div id="cap-export-email-section" style="display:none;margin-top:12px">
+      <div class="form-group">
+        <label for="cap-export-email-to">E-Mail-Adresse</label>
+        <input type="email" id="cap-export-email-to" placeholder="empfaenger@example.com" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+      </div>
+      <button class="btn btn-primary" id="cap-export-email-send" disabled>Senden</button>
+    </div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="cap-export-cancel">Abbrechen</button>
+  </div>
+</dialog>
+
 <!-- Hidden file input for .docx import -->
 <input type="file" id="import-file-input" accept=".docx" style="display:none">
 

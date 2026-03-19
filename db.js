@@ -62,6 +62,13 @@ try {
   try { db.exec("ALTER TABLE department ADD COLUMN regulation TEXT DEFAULT ''"); } catch { /* already exists */ }
 }
 
+// Migration: add plan_type to audit_plan
+try {
+  db.prepare('SELECT plan_type FROM audit_plan LIMIT 1').get();
+} catch {
+  try { db.exec("ALTER TABLE audit_plan ADD COLUMN plan_type TEXT DEFAULT 'AUDIT'"); } catch {}
+}
+
 // Migration: add authority contact fields to department
 try {
   db.prepare('SELECT authority_salutation FROM department LIMIT 1').get();
@@ -217,7 +224,7 @@ const stmts = {
 
   // Audit Plan
   getAuditPlansByDepartment: db.prepare(
-    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, created_at, updated_at FROM audit_plan WHERE department_id = ? ORDER BY year DESC'
+    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, plan_type, created_at, updated_at FROM audit_plan WHERE department_id = ? ORDER BY year DESC'
   ),
   getAuditPlanProgress: db.prepare(
     `SELECT audit_plan_id,
@@ -228,10 +235,10 @@ const stmts = {
      GROUP BY audit_plan_id`
   ),
   getAuditPlan: db.prepare(
-    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, created_at, updated_at FROM audit_plan WHERE id = ?'
+    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, plan_type, created_at, updated_at FROM audit_plan WHERE id = ?'
   ),
   createAuditPlan: db.prepare(
-    "INSERT INTO audit_plan (id, department_id, name, year, status, revision) VALUES (?, ?, '', ?, ?, ?)"
+    "INSERT INTO audit_plan (id, department_id, name, year, status, revision, plan_type) VALUES (?, ?, '', ?, ?, ?, ?)"
   ),
   updateAuditPlan: db.prepare(
     `UPDATE audit_plan SET year = ?, updated_at = datetime('now') WHERE id = ?`
@@ -249,7 +256,7 @@ const stmts = {
     `UPDATE audit_plan SET status = 'ARCHIV', updated_at = datetime('now') WHERE department_id = ? AND status = 'AKTIV'`
   ),
   getAllAuditPlans: db.prepare(
-    `SELECT ap.id, ap.department_id, ap.year, ap.status, ap.revision, ap.created_at, ap.updated_at,
+    `SELECT ap.id, ap.department_id, ap.year, ap.status, ap.revision, ap.plan_type, ap.created_at, ap.updated_at,
             d.name as department_name, c.name as company_name
      FROM audit_plan ap
      JOIN department d ON d.id = ap.department_id
