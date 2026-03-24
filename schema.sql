@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS company (
   street TEXT DEFAULT '',
   postal_code TEXT DEFAULT '',
   city TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
+  fax TEXT DEFAULT '',
   logo BLOB,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
@@ -156,6 +158,96 @@ CREATE TABLE IF NOT EXISTS audit_log (
   department_name TEXT DEFAULT '',
   details TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ── AC-Change Module ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS change_request (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES company(id) ON DELETE CASCADE,
+  department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
+  change_no TEXT DEFAULT '',
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  category TEXT DEFAULT 'OFFEN',
+  status TEXT DEFAULT 'DRAFT',
+  priority TEXT DEFAULT 'MEDIUM',
+  requested_by TEXT DEFAULT '',
+  requested_date TEXT,
+  target_date TEXT,
+  implemented_date TEXT,
+  closed_date TEXT,
+  change_type TEXT DEFAULT '',
+  revision INTEGER DEFAULT 0,
+  signed_by TEXT DEFAULT '',
+  signed_at TEXT,
+  form2_data TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS change_task (
+  id TEXT PRIMARY KEY,
+  change_request_id TEXT NOT NULL REFERENCES change_request(id) ON DELETE CASCADE,
+  sort_order INTEGER DEFAULT 0,
+  process TEXT DEFAULT '',
+  area TEXT DEFAULT '',
+  safety_note TEXT DEFAULT '',
+  measures TEXT DEFAULT '',
+  responsible_person TEXT DEFAULT '',
+  target_date TEXT,
+  completion_date TEXT,
+  section_header TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS risk_analysis (
+  id TEXT PRIMARY KEY,
+  change_request_id TEXT NOT NULL REFERENCES change_request(id) ON DELETE CASCADE,
+  title TEXT DEFAULT '',
+  version INTEGER DEFAULT 1,
+  version_date TEXT,
+  author TEXT DEFAULT '',
+  safety_manager TEXT DEFAULT '',
+  signed_at TEXT,
+  overall_initial TEXT DEFAULT '',
+  overall_residual TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS risk_analysis_history (
+  id TEXT PRIMARY KEY,
+  risk_analysis_id TEXT NOT NULL REFERENCES risk_analysis(id) ON DELETE CASCADE,
+  version INTEGER DEFAULT 1,
+  version_date TEXT,
+  author TEXT DEFAULT '',
+  reason TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS risk_item (
+  id TEXT PRIMARY KEY,
+  risk_analysis_id TEXT NOT NULL REFERENCES risk_analysis(id) ON DELETE CASCADE,
+  sort_order INTEGER DEFAULT 0,
+  risk_type TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  consequence TEXT DEFAULT '',
+  initial_probability INTEGER,
+  initial_severity INTEGER,
+  initial_score INTEGER,
+  initial_level TEXT DEFAULT '',
+  responsible_person TEXT DEFAULT '',
+  mitigation_topic TEXT DEFAULT '',
+  treatment TEXT DEFAULT '',
+  implementation_date TEXT,
+  residual_probability INTEGER,
+  residual_severity INTEGER,
+  residual_score INTEGER,
+  residual_level TEXT DEFAULT '',
+  next_step TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS trash_item (

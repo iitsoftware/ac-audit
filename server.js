@@ -155,9 +155,9 @@ function snapshotAuditPlan(planId) {
 
 function restoreCapItem(cap) {
   db.prepare(
-    `INSERT INTO cap_item (id, checklist_item_id, deadline, responsible_person, root_cause, corrective_action, preventive_action, status, completion_date, evidence, notified_at, source, source_ref_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(cap.id, cap.checklist_item_id, cap.deadline, cap.responsible_person, cap.root_cause, cap.corrective_action, cap.preventive_action, cap.status, cap.completion_date, cap.evidence, cap.notified_at, cap.source || 'audit', cap.source_ref_id || null, cap.created_at, cap.updated_at);
+    `INSERT INTO cap_item (id, checklist_item_id, deadline, responsible_person, root_cause, corrective_action, preventive_action, status, completion_date, evidence, notified_at, source, source_ref_id, department_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(cap.id, cap.checklist_item_id, cap.deadline, cap.responsible_person, cap.root_cause, cap.corrective_action, cap.preventive_action, cap.status, cap.completion_date, cap.evidence, cap.notified_at, cap.source || 'audit', cap.source_ref_id || null, cap.department_id || null, cap.created_at, cap.updated_at);
   if (cap.evidence_files) {
     for (const f of cap.evidence_files) {
       db.prepare('INSERT INTO cap_evidence_file (id, cap_item_id, filename, mime_type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(f.id, f.cap_item_id, f.filename, f.mime_type, f.data ? Buffer.from(f.data, 'base64') : null, f.created_at);
@@ -215,8 +215,16 @@ app.get('/home', (req, res) => {
   renderPage(res, 'home', { activePage: 'home', pageScript: 'home.js' });
 });
 
+app.get('/organization', (req, res) => {
+  renderPage(res, 'organization', { activePage: 'organization', pageScript: 'organization.js' });
+});
+
 app.get('/companies', (req, res) => {
   renderPage(res, 'companies', { activePage: 'companies', pageScript: 'companies.js' });
+});
+
+app.get('/change', (req, res) => {
+  renderPage(res, 'change', { activePage: 'change', pageScript: 'change.js' });
 });
 
 app.get('/settings', (req, res) => {
@@ -229,6 +237,10 @@ app.get('/api/home/stats', (req, res) => {
     const openCount = stmts.getCapStatsOpen.get().cnt;
     const overdueCount = stmts.getCapStatsOverdue.get().cnt;
     const totalAudits = stmts.getTotalAudits.get().cnt;
+    const openChanges = stmts.getOpenChangeRequests.get().cnt;
+    const totalChanges = stmts.getTotalChangeRequests.get().cnt;
+    const openTasks = db.prepare(`SELECT COUNT(*) AS cnt FROM change_task WHERE (completion_date IS NULL OR completion_date = '')`).get().cnt;
+    const totalTasks = db.prepare('SELECT COUNT(*) AS cnt FROM change_task').get().cnt;
 
     // Build enriched CAP items list via multi-query approach
     const openCaps = stmts.getOpenCapItems.all();
@@ -322,6 +334,12 @@ app.get('/api/home/stats', (req, res) => {
           openCaps: openCount,
           overdueCaps: overdueCount,
           totalAudits,
+        },
+        change: {
+          openChanges,
+          totalChanges,
+          openTasks,
+          totalTasks,
         },
       },
       capItems,
@@ -772,11 +790,11 @@ app.get('/api/companies/:id', (req, res) => {
 });
 
 app.post('/api/companies', (req, res) => {
-  const { name, street, postal_code, city, logo } = req.body;
+  const { name, street, postal_code, city, phone, fax, logo } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
   const id = uuidv4();
   const logoBuf = logo ? Buffer.from(logo, 'base64') : null;
-  stmts.createCompany.run(id, name.trim(), street || '', postal_code || '', city || '', logoBuf);
+  stmts.createCompany.run(id, name.trim(), street || '', postal_code || '', city || '', phone || '', fax || '', logoBuf);
   logAction('Firma erstellt', 'company', id, name.trim(), '', name.trim());
   const created = stmts.getCompany.get(id);
   created.has_logo = !!logoBuf;
@@ -786,9 +804,9 @@ app.post('/api/companies', (req, res) => {
 app.put('/api/companies/:id', (req, res) => {
   const existing = stmts.getCompany.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Company not found' });
-  const { name, street, postal_code, city } = req.body;
+  const { name, street, postal_code, city, phone, fax } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
-  stmts.updateCompany.run(name.trim(), street || '', postal_code || '', city || '', req.params.id);
+  stmts.updateCompany.run(name.trim(), street || '', postal_code || '', city || '', phone || '', fax || '', req.params.id);
   logAction('Firma aktualisiert', 'company', req.params.id, name.trim(), '', name.trim());
   const updated = stmts.getCompany.get(req.params.id);
   const logoRow = stmts.getCompanyLogo.get(req.params.id);
@@ -834,10 +852,10 @@ app.get('/api/companies/:companyId/departments', (req, res) => {
 app.post('/api/companies/:companyId/departments', (req, res) => {
   const company = stmts.getCompany.get(req.params.companyId);
   if (!company) return res.status(404).json({ error: 'Company not found' });
-  const { name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email } = req.body;
+  const { name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email, initial_approval_email } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
   const id = uuidv4();
-  stmts.createDepartment.run(id, req.params.companyId, name.trim(), easa_permission_number || '', regulation || '', authority_salutation || '', authority_name || '', authority_email || '');
+  stmts.createDepartment.run(id, req.params.companyId, name.trim(), easa_permission_number || '', regulation || '', authority_salutation || '', authority_name || '', authority_email || '', initial_approval_email || '');
   logAction('Abteilung erstellt', 'department', id, name.trim(), '', company.name, name.trim());
   res.status(201).json(stmts.getDepartment.get(id));
 });
@@ -846,9 +864,9 @@ app.put('/api/departments/:id', (req, res) => {
   const existing = stmts.getDepartment.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Department not found' });
   const company = stmts.getCompany.get(existing.company_id);
-  const { name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email } = req.body;
+  const { name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email, initial_approval_email } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
-  stmts.updateDepartment.run(name.trim(), easa_permission_number || '', regulation || '', authority_salutation || '', authority_name || '', authority_email || '', req.params.id);
+  stmts.updateDepartment.run(name.trim(), easa_permission_number || '', regulation || '', authority_salutation || '', authority_name || '', authority_email || '', initial_approval_email || '', req.params.id);
   logAction('Abteilung aktualisiert', 'department', req.params.id, name.trim(), '', company ? company.name : '', name.trim());
   res.json(stmts.getDepartment.get(req.params.id));
 });
@@ -1020,7 +1038,7 @@ app.post('/api/audit-plans/:id/copy', (req, res) => {
         );
         if (['O', 'L1', 'L2', 'L3'].includes(item.evaluation)) {
           const dl = calcCapDeadline(item.evaluation, line.performed_date);
-          stmts.createCapItem.run(uuidv4(), newItemId, dl, '', '', '', '', 'OPEN', null, '');
+          stmts.createCapItem.run(uuidv4(), newItemId, dl, '', '', '', '', 'OPEN', null, '', targetDeptId, 'audit', null);
         }
       }
     }
@@ -1346,7 +1364,9 @@ app.post('/api/audit-plan-lines/:lineId/checklist-items', (req, res) => {
   const evalVal = b.evaluation || '';
   if (['O', 'L1', 'L2', 'L3'].includes(evalVal)) {
     const dl = calcCapDeadline(evalVal, line.performed_date);
-    stmts.createCapItem.run(uuidv4(), id, dl, '', '', '', '', 'OPEN', null, '');
+    const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+    const deptId = plan ? plan.department_id : null;
+    stmts.createCapItem.run(uuidv4(), id, dl, '', '', '', '', 'OPEN', null, '', deptId, 'audit', null);
   }
   res.status(201).json(stmts.getChecklistItem.get(id));
 });
@@ -1368,7 +1388,9 @@ app.put('/api/checklist-items/:id', (req, res) => {
   if (needsCap && !existingCap) {
     const lineForCap = stmts.getAuditPlanLine.get(existing.audit_plan_line_id);
     const dl = calcCapDeadline(evalVal, lineForCap ? lineForCap.performed_date : null);
-    stmts.createCapItem.run(uuidv4(), req.params.id, dl, '', '', '', '', 'OPEN', null, '');
+    const planForCap = lineForCap ? stmts.getAuditPlan.get(lineForCap.audit_plan_id) : null;
+    const deptIdForCap = planForCap ? planForCap.department_id : null;
+    stmts.createCapItem.run(uuidv4(), req.params.id, dl, '', '', '', '', 'OPEN', null, '', deptIdForCap, 'audit', null);
   } else if (!needsCap && existingCap) {
     stmts.deleteCapItemByChecklistItem.run(req.params.id);
   }
@@ -1585,7 +1607,9 @@ app.post('/api/audit-plans/:id/import-audits', (req, res) => {
           if (['O', 'L1', 'L2', 'L3'].includes(item.evaluation)) {
             const perfDate = line.performed_date || meta.audit_end_date || line.audit_end_date;
             const dl = calcCapDeadline(item.evaluation, perfDate);
-            stmts.createCapItem.run(uuidv4(), ciId, dl, '', '', '', '', 'OPEN', null, '');
+            const planForImport = stmts.getAuditPlan.get(req.params.id);
+            const deptIdForImport = planForImport ? planForImport.department_id : null;
+            stmts.createCapItem.run(uuidv4(), ciId, dl, '', '', '', '', 'OPEN', null, '', deptIdForImport, 'audit', null);
           }
         }
 
@@ -1765,11 +1789,11 @@ app.post('/api/cap-items/send-email', async (req, res) => {
       const qmTitle = qm ? 'Compliance Monitoring Manager' : '';
 
       subject = `Corrective Action Plan – ${company.name} (${dept.name})`;
-      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Corrective Action Plan der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n${qmName}${qmTitle ? '\n' + qmTitle : ''}\n${company.name}`;
+      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Corrective Action Plan der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}${qmTitle ? '\n' + qmTitle : ''}\n${company.name}\n\n`;
       if (qm && qm.email) bcc = qm.email;
     } else {
       subject = `Corrective Action Plan (${dept.name})`;
-      text = `Hallo,\n\nanbei der Corrective Action Plan für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n${company.name}`;
+      text = `Hallo,\n\nanbei der Corrective Action Plan für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${company.name}\n\n`;
     }
 
     const mailOpts = {
@@ -2021,13 +2045,13 @@ app.post('/api/audit-plans/:id/send-email', async (req, res) => {
       const qmTitle = qm ? 'Compliance Monitoring Manager' : '';
 
       subject = `Auditplan ${plan.year} – ${suffix} Audits – ${company.name} (${dept.name})`;
-      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Auditplan ${plan.year} – ${suffix} Audits der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n${qmName}${qmTitle ? '\n' + qmTitle : ''}\n${company.name}`;
+      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Auditplan ${plan.year} – ${suffix} Audits der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}${qmTitle ? '\n' + qmTitle : ''}\n${company.name}\n\n`;
       // BCC the QM
       if (qm && qm.email) bcc = qm.email;
     } else {
       // Regular email
       subject = `Auditplan ${plan.year} – ${suffix} Audits (${dept.name})`;
-      text = `Hallo,\n\nanbei der Auditplan ${plan.year} – ${suffix} Audits für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n${company.name}`;
+      text = `Hallo,\n\nanbei der Auditplan ${plan.year} – ${suffix} Audits für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${company.name}\n\n`;
     }
 
     const mailOpts = {
@@ -2726,19 +2750,24 @@ function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWh
 }
 
 // ── PDF Helper: Add footer to all pages ──────────────────────
-function addPdfFooter(doc) {
-  const pageW = 595.28;
-  const tableRight = pageW - 50;
+function addPdfFooter(doc, opts = {}) {
+  const label = opts.label || 'Erstellt mit ac-audit';
   const pages = doc.bufferedPageRange();
   for (let p = pages.start; p < pages.start + pages.count; p++) {
     doc.switchToPage(p);
-    const footerY = 770;
+    const pageW = doc.page.width;
+    const pageH = doc.page.height;
+    const marginL = 40;
+    const tableRight = pageW - 40;
+    const footerY = pageH - 30;
+    doc.save();
     doc.strokeColor('#000000').lineWidth(0.5);
-    doc.moveTo(50, footerY).lineTo(tableRight, footerY).stroke();
+    doc.moveTo(marginL, footerY).lineTo(tableRight, footerY).stroke();
     doc.fontSize(7).fillColor('#000000').font('Helvetica');
-    doc.text('Erstellt mit ac-audit', 50, footerY + 4, { lineBreak: false });
+    doc.text(label, marginL, footerY + 4, { lineBreak: false, height: 10 });
     const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
-    doc.text(pageLabel, 50, footerY + 4, { width: tableRight - 50, align: 'right', lineBreak: false });
+    doc.text(pageLabel, tableRight - 60, footerY + 4, { width: 60, align: 'right', lineBreak: false, height: 10 });
+    doc.restore();
   }
 }
 
@@ -2937,6 +2966,1229 @@ app.post('/api/trash/empty', (req, res) => {
 
 app.get('/trash', (req, res) => {
   renderPage(res, 'trash', { activePage: 'trash', pageScript: 'trash.js' });
+});
+
+// ── API: Department-level CAPs (shared) ──────────────────────
+
+app.get('/api/departments/:departmentId/cap-items', (req, res) => {
+  const dept = stmts.getDepartment.get(req.params.departmentId);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
+  res.json(stmts.getCapItemsByDepartment.all(req.params.departmentId));
+});
+
+app.post('/api/departments/:departmentId/cap-items', (req, res) => {
+  const dept = stmts.getDepartment.get(req.params.departmentId);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
+  const { source, source_ref_id, deadline, responsible_person } = req.body;
+  const id = uuidv4();
+  stmts.createCapItemGeneric.run(id, req.params.departmentId, source || 'manual', source_ref_id || null, deadline || null, responsible_person || '');
+  res.status(201).json({ id });
+});
+
+// ── API: Change Requests ─────────────────────────────────────
+
+app.get('/api/departments/:departmentId/change-requests', (req, res) => {
+  const dept = stmts.getDepartment.get(req.params.departmentId);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
+  res.json(stmts.getChangeRequestsByDept.all(req.params.departmentId));
+});
+
+app.post('/api/departments/:departmentId/change-requests', (req, res) => {
+  const dept = stmts.getDepartment.get(req.params.departmentId);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
+  const { title, description, category, priority, requested_by, requested_date, target_date, change_type } = req.body;
+  if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
+  const id = uuidv4();
+  const maxNo = stmts.getMaxChangeNo.get(req.params.departmentId).max_no;
+  const changeNo = 'MOC-' + String(maxNo + 1).padStart(3, '0');
+  stmts.createChangeRequest.run(id, dept.company_id, req.params.departmentId, changeNo, title.trim(), description || '', category || 'OFFEN', priority || 'MEDIUM', requested_by || '', requested_date || null, target_date || null, change_type || '');
+  // Auto-create first task: Prüfung Prior/Non-Prior Approval
+  const taskId = uuidv4();
+  stmts.createChangeTask.run(taskId, id, 1, 'Prüfung Prior/Non-Prior Approval', 'Antrag', '', '', requested_by || '', null, null, '');
+  const company = stmts.getCompany.get(dept.company_id);
+  logAction('Change Request erstellt', 'change_request', id, changeNo + ' ' + title.trim(), '', company ? company.name : '', dept.name);
+  res.status(201).json(stmts.getChangeRequest.get(id));
+});
+
+app.get('/api/change-requests/:id', (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  res.json(cr);
+});
+
+app.put('/api/change-requests/:id', (req, res) => {
+  const existing = stmts.getChangeRequest.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Change request not found' });
+  const { title, description, category, priority, requested_by, requested_date, target_date, change_type } = req.body;
+  if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
+  stmts.updateChangeRequest.run(title.trim(), description || '', category || 'OFFEN', priority || 'MEDIUM', requested_by || '', requested_date || null, target_date || null, change_type || '', req.params.id);
+  res.json(stmts.getChangeRequest.get(req.params.id));
+});
+
+app.delete('/api/change-requests/:id', (req, res) => {
+  const existing = stmts.getChangeRequest.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Change request not found' });
+  try {
+    const snapshot = JSON.stringify(existing);
+    const dept = stmts.getDepartment.get(existing.department_id);
+    const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+    stmts.createTrashItem.run(uuidv4(), 'change_request', existing.id, existing.change_no + ' ' + existing.title, company ? company.name : '', dept ? dept.name : '', existing.department_id, 'department', snapshot);
+    logAction('Change Request gelöscht', 'change_request', existing.id, existing.change_no, '', company ? company.name : '', dept ? dept.name : '');
+  } catch {}
+  stmts.deleteChangeRequest.run(req.params.id);
+  res.status(204).end();
+});
+
+// ── API: Change Request Status ─────────────────────────────
+app.patch('/api/change-requests/:id/status', (req, res) => {
+  const existing = stmts.getChangeRequest.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Change request not found' });
+  const { status } = req.body;
+  const valid = ['DRAFT', 'IN_REVIEW', 'APPROVED', 'IMPLEMENTED', 'CLOSED', 'REJECTED'];
+  if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  stmts.updateChangeRequestStatus.run(status, req.params.id);
+  const dept = stmts.getDepartment.get(existing.department_id);
+  const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+  logAction('Change Status geändert', 'change_request', req.params.id, existing.change_no + ' → ' + status, '', company ? company.name : '', dept ? dept.name : '');
+  res.json(stmts.getChangeRequest.get(req.params.id));
+});
+
+// ── API: Change Tasks ─────────────────────────────────────────
+app.get('/api/change-requests/:id/tasks', (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  res.json(stmts.getChangeTasksByRequest.all(req.params.id));
+});
+
+app.post('/api/change-requests/:id/tasks', (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  const { process, area, safety_note, measures, responsible_person, target_date, completion_date, section_header } = req.body;
+  const id = uuidv4();
+  const maxOrder = stmts.getMaxChangeTaskOrder.get(req.params.id).max_order;
+  stmts.createChangeTask.run(id, req.params.id, maxOrder + 1, process || '', area || '', safety_note || '', measures || '', responsible_person || '', target_date || null, completion_date || null, section_header || '');
+  const dept = stmts.getDepartment.get(cr.department_id);
+  const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+  logAction('Aufgabe erstellt', 'change_task', id, (process || '').substring(0, 60), '', company ? company.name : '', dept ? dept.name : '');
+  res.status(201).json(stmts.getChangeTask.get(id));
+});
+
+app.put('/api/change-tasks/:id', (req, res) => {
+  const existing = stmts.getChangeTask.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Task not found' });
+  const { sort_order, process, area, safety_note, measures, responsible_person, target_date, completion_date, section_header } = req.body;
+  stmts.updateChangeTask.run(
+    sort_order != null ? sort_order : existing.sort_order,
+    process || '', area || '', safety_note || '', measures || '',
+    responsible_person || '', target_date || null, completion_date || null, section_header || '',
+    req.params.id
+  );
+  res.json(stmts.getChangeTask.get(req.params.id));
+});
+
+app.delete('/api/change-tasks/:id', (req, res) => {
+  const existing = stmts.getChangeTask.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Task not found' });
+  stmts.deleteChangeTask.run(req.params.id);
+  res.status(204).end();
+});
+
+// ── API: Change Request Form 2 Data ─────────────────────────
+app.put('/api/change-requests/:id/form2-data', (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  const json = JSON.stringify(req.body || {});
+  db.prepare(`UPDATE change_request SET form2_data = ?, updated_at = datetime('now') WHERE id = ?`).run(json, req.params.id);
+  res.json({ ok: true });
+});
+
+// ── API: Risk Analysis ────────────────────────────────────────
+
+function computeRiskScore(p, s) {
+  if (!p || !s) return { score: null, level: '' };
+  const score = p * s;
+  let level = 'Gering oder kein Risiko';
+  if (score >= 12) level = 'Nicht akzeptabel';
+  else if (score >= 4) level = 'Akzeptabel';
+  return { score, level };
+}
+
+app.get('/api/change-requests/:id/risk-analysis', (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  const ra = stmts.getRiskAnalysisByRequest.get(req.params.id);
+  if (!ra) return res.json(null);
+  const itemCount = stmts.getRiskItemCount.get(ra.id).cnt;
+  res.json({ ...ra, item_count: itemCount });
+});
+
+app.post('/api/change-requests/:id/risk-analysis', (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  const existing = stmts.getRiskAnalysisByRequest.get(req.params.id);
+  if (existing) return res.status(409).json({ error: 'Risk analysis already exists' });
+  const { title, author, safety_manager } = req.body;
+  const id = uuidv4();
+  const today = new Date().toISOString().slice(0, 10);
+  stmts.createRiskAnalysis.run(id, req.params.id, title || cr.title || '', 1, today, author || '', safety_manager || '', '', '');
+  // Create initial history entry
+  stmts.createRiskAnalysisHistory.run(uuidv4(), id, 1, today, author || '', 'Erstellt');
+  const dept = stmts.getDepartment.get(cr.department_id);
+  const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+  logAction('Risikoanalyse erstellt', 'risk_analysis', id, cr.change_no, '', company ? company.name : '', dept ? dept.name : '');
+  res.status(201).json(stmts.getRiskAnalysis.get(id));
+});
+
+app.get('/api/risk-analysis/:id', (req, res) => {
+  const ra = stmts.getRiskAnalysis.get(req.params.id);
+  if (!ra) return res.status(404).json({ error: 'Risk analysis not found' });
+  const itemCount = stmts.getRiskItemCount.get(ra.id).cnt;
+  res.json({ ...ra, item_count: itemCount });
+});
+
+app.put('/api/risk-analysis/:id', (req, res) => {
+  const existing = stmts.getRiskAnalysis.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Risk analysis not found' });
+  const { title, version, version_date, author, safety_manager, signed_at, overall_initial, overall_residual } = req.body;
+  stmts.updateRiskAnalysis.run(
+    title || '', version != null ? version : existing.version, version_date || null,
+    author || existing.author || '', safety_manager || '', signed_at || null,
+    overall_initial || '', overall_residual || '',
+    req.params.id
+  );
+  // Auto-history for meaningful changes
+  const changes = [];
+  if ((title || '') !== (existing.title || '')) changes.push('Titel');
+  if ((safety_manager || '') !== (existing.safety_manager || '')) changes.push('Safety Manager');
+  if ((signed_at || '') !== (existing.signed_at || '')) changes.push('Freigabe');
+  res.json(stmts.getRiskAnalysis.get(req.params.id));
+});
+
+app.get('/api/risk-analysis/:id/history', (req, res) => {
+  const ra = stmts.getRiskAnalysis.get(req.params.id);
+  if (!ra) return res.status(404).json({ error: 'Risk analysis not found' });
+  res.json(stmts.getRiskAnalysisHistory.all(req.params.id));
+});
+
+app.post('/api/risk-analysis/:id/history', (req, res) => {
+  const ra = stmts.getRiskAnalysis.get(req.params.id);
+  if (!ra) return res.status(404).json({ error: 'Risk analysis not found' });
+  const { version, version_date, author, reason } = req.body;
+  const id = uuidv4();
+  stmts.createRiskAnalysisHistory.run(id, req.params.id, version || ra.version + 1, version_date || null, author || '', reason || '');
+  res.status(201).json({ id, risk_analysis_id: req.params.id, version: version || ra.version + 1, version_date, author, reason });
+});
+
+// ── API: Risk Items ───────────────────────────────────────────
+app.get('/api/risk-analysis/:id/items', (req, res) => {
+  const ra = stmts.getRiskAnalysis.get(req.params.id);
+  if (!ra) return res.status(404).json({ error: 'Risk analysis not found' });
+  res.json(stmts.getRiskItemsByAnalysis.all(req.params.id));
+});
+
+// Helper: auto-add history entry for risk analysis changes
+function addRiskHistoryAuto(raId, reason) {
+  const ra = stmts.getRiskAnalysis.get(raId);
+  if (!ra) return;
+  const cr = stmts.getChangeRequest.get(ra.change_request_id);
+  const dept = cr ? stmts.getDepartment.get(cr.department_id) : null;
+  const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+  const personsAll = company ? stmts.getPersonsByCompany.all(company.id) : [];
+  const qm = personsAll.find(p => p.role === 'QM' && dept && p.department_id === dept.id);
+  const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
+  const history = stmts.getRiskAnalysisHistory.all(raId);
+  const nextVersion = history.length > 0 ? Math.max(...history.map(h => h.version || 0)) + 1 : 1;
+  const today = new Date().toISOString().slice(0, 10);
+  stmts.createRiskAnalysisHistory.run(uuidv4(), raId, nextVersion, today, qmName, reason);
+}
+
+app.post('/api/risk-analysis/:id/items', (req, res) => {
+  const ra = stmts.getRiskAnalysis.get(req.params.id);
+  if (!ra) return res.status(404).json({ error: 'Risk analysis not found' });
+  const b = req.body;
+  const id = uuidv4();
+  const existingItems = stmts.getRiskItemsByAnalysis.all(req.params.id);
+  const sortOrder = existingItems.length + 1;
+  const ini = computeRiskScore(b.initial_probability, b.initial_severity);
+  const res2 = computeRiskScore(b.residual_probability, b.residual_severity);
+  stmts.createRiskItem.run(id, req.params.id, sortOrder,
+    b.risk_type || '', b.description || '', b.consequence || '',
+    b.initial_probability || null, b.initial_severity || null, ini.score, ini.level,
+    b.responsible_person || '', b.mitigation_topic || '', b.treatment || '', b.implementation_date || null,
+    b.residual_probability || null, b.residual_severity || null, res2.score, res2.level,
+    b.next_step || ''
+  );
+  addRiskHistoryAuto(req.params.id, `Risiko hinzugefügt: ${b.risk_type || b.description || ''}`);
+  res.status(201).json(stmts.getRiskItem.get(id));
+});
+
+app.put('/api/risk-items/:id', (req, res) => {
+  const existing = stmts.getRiskItem.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Risk item not found' });
+  const b = req.body;
+  const ini = computeRiskScore(b.initial_probability, b.initial_severity);
+  const res2 = computeRiskScore(b.residual_probability, b.residual_severity);
+  // Detect which fields changed
+  const fieldLabels = {
+    risk_type: 'Risikotyp', description: 'Beschreibung', consequence: 'Auswirkung',
+    responsible_person: 'Verantwortlich', mitigation_topic: 'Maßnahme', treatment: 'Behandlung',
+    next_step: 'Nächster Schritt',
+  };
+  const changes = [];
+  for (const [key, label] of Object.entries(fieldLabels)) {
+    if ((b[key] || '') !== (existing[key] || '')) changes.push(label);
+  }
+  if ((b.initial_probability || null) != existing.initial_probability || (b.initial_severity || null) != existing.initial_severity) changes.push('Anfangsrisiko');
+  if ((b.residual_probability || null) != existing.residual_probability || (b.residual_severity || null) != existing.residual_severity) changes.push('Restrisiko');
+  stmts.updateRiskItem.run(
+    b.sort_order != null ? b.sort_order : existing.sort_order,
+    b.risk_type || '', b.description || '', b.consequence || '',
+    b.initial_probability || null, b.initial_severity || null, ini.score, ini.level,
+    b.responsible_person || '', b.mitigation_topic || '', b.treatment || '', b.implementation_date || null,
+    b.residual_probability || null, b.residual_severity || null, res2.score, res2.level,
+    b.next_step || '',
+    req.params.id
+  );
+  res.json(stmts.getRiskItem.get(req.params.id));
+});
+
+app.delete('/api/risk-items/:id', (req, res) => {
+  const existing = stmts.getRiskItem.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Risk item not found' });
+  const raId = existing.risk_analysis_id;
+  const desc = existing.risk_type || existing.description || '';
+  stmts.deleteRiskItem.run(req.params.id);
+  addRiskHistoryAuto(raId, `Risiko gelöscht: ${desc}`);
+  res.status(204).end();
+});
+
+// ── API: Import Change Management .xlsx ──────────────────────
+app.post('/api/change-requests/:id/import-tasks', (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  const { file } = req.body;
+  if (!file) return res.status(400).json({ error: 'File data required' });
+
+  try {
+    const buf = Buffer.from(file, 'base64');
+    const wb = XLSX.read(buf, { type: 'buffer' });
+    const sheetName = wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // Detect layout: CAMO vs FB
+    let headerRowIdx = -1;
+    let isFB = false;
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      const rowStr = (rows[i] || []).map(c => String(c).toLowerCase()).join('|');
+      if (rowStr.includes('prozesse') || rowStr.includes('maßnahmen') || rowStr.includes('massnahmen')) {
+        headerRowIdx = i;
+        isFB = rowStr.includes('bemerkungen') || rowStr.includes('verantwortlichkeit');
+        break;
+      }
+    }
+
+    if (headerRowIdx < 0) return res.status(400).json({ error: 'Konnte Spaltenüberschriften nicht finden' });
+
+    // Extract header info from rows before header
+    let importTitle = '';
+    for (let i = 0; i < headerRowIdx; i++) {
+      const firstCell = rows[i] && rows[i][0] ? String(rows[i][0]).trim() : '';
+      if (firstCell && firstCell.length > 5 && !importTitle) importTitle = firstCell;
+    }
+
+    // Map column indices — process and measures are distinct fields
+    const headerRow = rows[headerRowIdx].map(c => String(c).toLowerCase().trim());
+    const colMap = {};
+    headerRow.forEach((h, idx) => {
+      if (h.includes('nr') && !colMap.nr) colMap.nr = idx;
+      // "eingeleitete Maßnahmen" / "To Do" / "Bemerkungen" → measures (must check before process)
+      if (h.includes('eingeleitete') || h.includes('to do') || h.includes('bemerkungen')) {
+        colMap.measures = idx;
+      }
+      // "Prozesse" or standalone "Maßnahmen" (not "eingeleitete") → process
+      else if ((h.includes('prozesse') || h.includes('maßnahmen') || h.includes('massnahmen')) && !colMap.process) {
+        colMap.process = idx;
+      }
+      if (h.includes('sicherheitsbewertung')) colMap.safety_note = idx;
+      if (h.includes('bereich')) colMap.area = idx;
+      if (h.includes('verantwortlich') || h.includes('verantwortlichkeit')) colMap.responsible = idx;
+      if (h.includes('datum') || h.includes('ziel')) colMap.target_date = idx;
+      if (h.includes('erledigt') || h.includes('status')) colMap.completion = idx;
+    });
+
+    // Delete existing tasks before import
+    const existingTasks = stmts.getChangeTasksByRequest.all(cr.id);
+    for (const t of existingTasks) stmts.deleteChangeTask.run(t.id);
+
+    let imported = 0;
+    let currentSectionHeader = '';
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.every(c => !c || String(c).trim() === '')) continue;
+
+      const processVal = colMap.process != null ? String(row[colMap.process] || '').trim() : '';
+      const areaVal = colMap.area != null ? String(row[colMap.area] || '').trim() : '';
+
+      // Detect section header: row with text in first column but no process content
+      if (processVal === '' && areaVal === '' && row[0] && String(row[0]).trim().length > 1) {
+        const candidate = String(row[0]).trim();
+        // Only treat as section header if it's not a number
+        if (isNaN(candidate)) {
+          currentSectionHeader = candidate;
+          continue;
+        }
+      }
+
+      // Skip empty process rows
+      if (!processVal && !areaVal) continue;
+
+      let targetDateVal = colMap.target_date != null ? row[colMap.target_date] : null;
+      if (typeof targetDateVal === 'number') targetDateVal = excelDateToISO(targetDateVal);
+      else if (targetDateVal) targetDateVal = null; // text dates not parsed
+
+      let completionVal = colMap.completion != null ? row[colMap.completion] : null;
+      if (typeof completionVal === 'number') completionVal = excelDateToISO(completionVal);
+      else if (completionVal && String(completionVal).trim().toLowerCase() === 'erledigt') {
+        completionVal = new Date().toISOString().slice(0, 10);
+      } else completionVal = null;
+
+      const id = uuidv4();
+      imported++;
+      stmts.createChangeTask.run(id, cr.id, imported,
+        processVal,
+        areaVal,
+        colMap.safety_note != null ? String(row[colMap.safety_note] || '').trim() : '',
+        colMap.measures != null ? String(row[colMap.measures] || '').trim() : '',
+        colMap.responsible != null ? String(row[colMap.responsible] || '').trim() : '',
+        targetDateVal, completionVal,
+        currentSectionHeader
+      );
+    }
+
+    // Update change request title if we found one in the header
+    if (importTitle && !cr.title) {
+      db.prepare(`UPDATE change_request SET title = ?, updated_at = datetime('now') WHERE id = ?`).run(importTitle, cr.id);
+    }
+
+    const dept = stmts.getDepartment.get(cr.department_id);
+    const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+    logAction('Aufgaben importiert', 'change_request', cr.id, cr.change_no + ' (' + imported + ' Aufgaben)', '', company ? company.name : '', dept ? dept.name : '');
+    res.json({ imported, title: importTitle || cr.title });
+  } catch (e) {
+    res.status(500).json({ error: 'Import fehlgeschlagen: ' + e.message });
+  }
+});
+
+// ── API: Import Risikoanalyse .xlsx ──────────────────────────
+app.post('/api/change-requests/:id/import-risk-analysis', (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  const { file } = req.body;
+  if (!file) return res.status(400).json({ error: 'File data required' });
+
+  try {
+    const buf = Buffer.from(file, 'base64');
+    const wb = XLSX.read(buf, { type: 'buffer' });
+
+    const findSheet = (patterns) => {
+      for (const name of wb.SheetNames) {
+        const lower = name.toLowerCase();
+        for (const p of patterns) { if (lower.includes(p)) return wb.Sheets[name]; }
+      }
+      return null;
+    };
+
+    const historieSheet = findSheet(['historie', 'history', 'version']);
+    const detailSheet = findSheet(['detail']);
+    const mainSheet = detailSheet || wb.Sheets[wb.SheetNames[wb.SheetNames.length > 2 ? 2 : 0]];
+
+    // Delete existing risk analysis if present
+    const existingRA = stmts.getRiskAnalysisByRequest.get(cr.id);
+    if (existingRA) {
+      db.prepare('DELETE FROM risk_item WHERE risk_analysis_id = ?').run(existingRA.id);
+      db.prepare('DELETE FROM risk_analysis_history WHERE risk_analysis_id = ?').run(existingRA.id);
+      db.prepare('DELETE FROM risk_analysis WHERE id = ?').run(existingRA.id);
+    }
+
+    let raTitle = cr.title;
+    let raAuthor = '';
+    let raSafetyManager = '';
+    let overallInitial = '';
+    let overallResidual = '';
+
+    // Extract title from first row of detail sheet
+    if (mainSheet) {
+      const allRows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, defval: '' });
+      if (allRows[0] && allRows[0][1]) raTitle = String(allRows[0][1]).trim();
+      if (!raTitle && allRows[0] && allRows[0][0]) raTitle = String(allRows[0][0]).trim();
+    }
+
+    const raId = uuidv4();
+    const today = new Date().toISOString().slice(0, 10);
+    stmts.createRiskAnalysis.run(raId, cr.id, raTitle, 1, today, raAuthor, raSafetyManager, overallInitial, overallResidual);
+
+    // ── Parse Historie ──
+    let historyCount = 0;
+    if (historieSheet) {
+      const histRows = XLSX.utils.sheet_to_json(historieSheet, { header: 1, defval: '' });
+      let hdrIdx = -1;
+      for (let i = 0; i < Math.min(histRows.length, 10); i++) {
+        const rowStr = histRows[i].map(c => String(c).toLowerCase()).join('|');
+        if (rowStr.includes('version') && (rowStr.includes('datum') || rowStr.includes('autor'))) { hdrIdx = i; break; }
+      }
+      if (hdrIdx >= 0) {
+        const hHdr = histRows[hdrIdx].map(c => String(c).toLowerCase().trim());
+        const hColMap = {};
+        hHdr.forEach((h, idx) => {
+          if (h.includes('version') && !hColMap.version) hColMap.version = idx;
+          if (h.includes('datum') || h.includes('date')) hColMap.date = idx;
+          if (h.includes('autor') || h.includes('author')) hColMap.author = idx;
+          if (h.includes('änderung') || h.includes('grund') || h.includes('bemerkung')) hColMap.reason = idx;
+        });
+        for (let i = hdrIdx + 1; i < histRows.length; i++) {
+          const row = histRows[i];
+          if (!row || row.every(c => !c || String(c).trim() === '')) continue;
+          let ver = hColMap.version != null ? row[hColMap.version] : historyCount + 1;
+          if (typeof ver === 'string') ver = parseInt(ver) || historyCount + 1;
+          let dateVal = hColMap.date != null ? row[hColMap.date] : null;
+          if (typeof dateVal === 'number') dateVal = excelDateToISO(dateVal);
+          else dateVal = null;
+          stmts.createRiskAnalysisHistory.run(uuidv4(), raId,
+            ver, dateVal,
+            hColMap.author != null ? String(row[hColMap.author] || '').trim() : '',
+            hColMap.reason != null ? String(row[hColMap.reason] || '').trim() : ''
+          );
+          historyCount++;
+        }
+      }
+    }
+    if (historyCount === 0) {
+      stmts.createRiskAnalysisHistory.run(uuidv4(), raId, 1, today, '', 'Importiert');
+    }
+
+    // ── Parse Detail sheet for risk items ──
+    let itemCount = 0;
+    if (mainSheet) {
+      const detailRows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, defval: '' });
+
+      // Find header row containing "Risikotyp" or "Risiko-beschreibung"
+      let dHdrIdx = -1;
+      for (let i = 0; i < Math.min(detailRows.length, 15); i++) {
+        const rowStr = detailRows[i].map(c => String(c).toLowerCase().replace(/[\s-]/g, '')).join('|');
+        if (rowStr.includes('risikotyp') || rowStr.includes('risikobeschreibung')) { dHdrIdx = i; break; }
+      }
+      if (dHdrIdx < 0) throw new Error('Konnte Spaltenüberschriften nicht finden (Risikotyp/Risikobeschreibung)');
+
+      // Map columns by header text
+      const dHdr = detailRows[dHdrIdx].map(c => String(c).toLowerCase().replace(/[\s-]/g, '').trim());
+      const dColMap = {};
+      // Collect all probability and severity columns to distinguish initial vs residual
+      const probCols = [];
+      const sevCols = [];
+      dHdr.forEach((h, idx) => {
+        if ((h.includes('risikotyp') || h === 'typ') && dColMap.risk_type == null) dColMap.risk_type = idx;
+        if (h.includes('risikobeschreibung') && dColMap.description == null) dColMap.description = idx;
+        if (h.includes('auswirkung')) dColMap.consequence = idx;
+        if (h.includes('wahrscheinlichkeit')) probCols.push(idx);
+        if (h.includes('schwere')) sevCols.push(idx);
+        if (h.includes('einbindung') || h.includes('verantwortlich')) dColMap.responsible = idx;
+        if (h.includes('themadermassnahme') || (h.includes('thema') && h.includes('massnahme'))) dColMap.mitigation = idx;
+        if (h.includes('behandlung')) dColMap.treatment = idx;
+        if (h.includes('terminfür') || (h.includes('termin') && h.includes('umsetzung'))) dColMap.impl_date = idx;
+        if (h.includes('nächster') || h.includes('nächsterschritt')) dColMap.next_step = idx;
+      });
+      // First pair = initial, second pair = residual
+      if (probCols.length >= 2) { dColMap.init_prob = probCols[0]; dColMap.res_prob = probCols[1]; }
+      else if (probCols.length === 1) dColMap.init_prob = probCols[0];
+      if (sevCols.length >= 2) { dColMap.init_sev = sevCols[0]; dColMap.res_sev = sevCols[1]; }
+      else if (sevCols.length === 1) dColMap.init_sev = sevCols[0];
+
+      // Parse data rows — stop when we hit the embedded risk matrix or empty section
+      for (let i = dHdrIdx + 1; i < detailRows.length; i++) {
+        const row = detailRows[i];
+        if (!row) continue;
+
+        // Stop at embedded matrix (row starting with "Risiko" in lower columns without risk data)
+        const col5Val = String(row[5] || '').toLowerCase();
+        if (col5Val.includes('risikoschwere') || col5Val.includes('geringfügig')) break;
+
+        // Skip empty rows
+        const riskType = dColMap.risk_type != null ? String(row[dColMap.risk_type] || '').trim() : '';
+        const desc = dColMap.description != null ? String(row[dColMap.description] || '').trim() : '';
+        if (!desc && !riskType) continue;
+
+        const initP = dColMap.init_prob != null ? parseInt(row[dColMap.init_prob]) || null : null;
+        const initS = dColMap.init_sev != null ? parseInt(row[dColMap.init_sev]) || null : null;
+        const resP = dColMap.res_prob != null ? parseInt(row[dColMap.res_prob]) || null : null;
+        const resS = dColMap.res_sev != null ? parseInt(row[dColMap.res_sev]) || null : null;
+        const ini = computeRiskScore(initP, initS);
+        const residual = computeRiskScore(resP, resS);
+
+        let implDate = dColMap.impl_date != null ? row[dColMap.impl_date] : null;
+        if (typeof implDate === 'number') implDate = excelDateToISO(implDate);
+        else if (implDate && typeof implDate === 'string' && implDate.trim()) implDate = null; // text dates not parsed
+        else implDate = null;
+
+        itemCount++;
+        stmts.createRiskItem.run(uuidv4(), raId, itemCount,
+          riskType, desc,
+          dColMap.consequence != null ? String(row[dColMap.consequence] || '').trim() : '',
+          initP, initS, ini.score, ini.level,
+          dColMap.responsible != null ? String(row[dColMap.responsible] || '').trim() : '',
+          dColMap.mitigation != null ? String(row[dColMap.mitigation] || '').trim() : '',
+          dColMap.treatment != null ? String(row[dColMap.treatment] || '').trim() : '',
+          implDate,
+          resP, resS, residual.score, residual.level,
+          dColMap.next_step != null ? String(row[dColMap.next_step] || '').trim() : ''
+        );
+      }
+
+      // Extract footer: Safety Manager, overall assessments
+      for (let i = dHdrIdx + 1; i < detailRows.length; i++) {
+        const row = detailRows[i];
+        if (!row) continue;
+        const rowStr = row.map(c => String(c).toLowerCase()).join('|');
+        if (rowStr.includes('safety manager') || rowStr.includes('unterschrift')) {
+          // Name is usually in column 9 or nearby
+          for (let c = 5; c < row.length; c++) {
+            const v = String(row[c] || '').trim();
+            if (v && v.length > 2 && !v.match(/^\d/) && !v.toLowerCase().includes('datum')) { raSafetyManager = v; break; }
+          }
+          // Date in column 5
+          if (typeof row[5] === 'number') {
+            const signedDate = excelDateToISO(row[5]);
+            // Update signed_at
+            if (signedDate) stmts.updateRiskAnalysis.run(raTitle, 1, signedDate, '', raSafetyManager, signedDate, overallInitial, overallResidual, raId);
+          }
+        }
+        if (rowStr.includes('anfangsrisiko') || rowStr.includes('einschätzung anfangs')) {
+          overallInitial = String(row[5] || '').trim();
+        }
+        if (rowStr.includes('nach der ma') || rowStr.includes('einschätzung risiko nach')) {
+          overallResidual = String(row[5] || '').trim();
+        }
+      }
+      // Final update with all extracted metadata
+      if (overallInitial || overallResidual || raSafetyManager) {
+        const ra = stmts.getRiskAnalysis.get(raId);
+        stmts.updateRiskAnalysis.run(raTitle, ra.version, ra.version_date, raAuthor, raSafetyManager, ra.signed_at, overallInitial, overallResidual, raId);
+      }
+    }
+
+    const dept = stmts.getDepartment.get(cr.department_id);
+    const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+    logAction('Risikoanalyse importiert', 'risk_analysis', raId, cr.change_no + ' (' + itemCount + ' Risiken)', '', company ? company.name : '', dept ? dept.name : '');
+    res.json({ imported: itemCount, history: historyCount, title: raTitle });
+  } catch (e) {
+    res.status(500).json({ error: 'Import fehlgeschlagen: ' + e.message });
+  }
+});
+
+// ── API: Risk Analysis PDF ────────────────────────────────────
+function renderRiskAnalysisPdf(doc, { ra, cr, dept, company, logoRow, items, qm }) {
+  function fmtDE(isoStr) {
+    if (!isoStr) return '';
+    const d = isoStr.substring(0, 10).split('-');
+    return d.length === 3 ? `${d[2]}.${d[1]}.${d[0]}` : isoStr;
+  }
+  function riskColor(score) {
+    if (score >= 12) return '#ef4444';
+    if (score >= 4) return '#eab308';
+    return '#22c55e';
+  }
+  function riskLabel(score) {
+    if (score >= 12) return 'Nicht akzeptabel';
+    if (score >= 4) return 'Akzeptabel';
+    return 'Gering oder kein Risiko';
+  }
+
+  const marginL = 40;
+  const maxY = 540; // page break threshold (landscape A4 height ~595, minus footer)
+  let y = 40;
+
+  // ── Header (like audit plans) ──
+  if (logoRow && logoRow.logo) {
+    try { doc.image(logoRow.logo, marginL, y, { height: 50 }); y += 60; } catch { /* skip */ }
+  }
+  doc.fontSize(16).font('Helvetica-Bold').text(company ? company.name : '', marginL, y);
+  y += 25;
+  doc.fontSize(10).font('Helvetica');
+  let subLine = dept ? dept.name : '';
+  if (dept && dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
+  if (dept && dept.regulation) subLine += `  |  ${dept.regulation}`;
+  doc.text(subLine, marginL, y);
+  y += 30;
+
+  // ── Title ──
+  doc.fontSize(14).font('Helvetica-Bold').text('Risikoanalyse: ' + (ra.title || ''), marginL, y);
+  y += 18;
+  if (cr) { doc.fontSize(9).font('Helvetica').text(cr.change_no + (cr.title ? ' – ' + cr.title : ''), marginL, y); y += 15; }
+  y += 10;
+
+  // ── Table ──
+  const pageW = doc.page.width;
+  const fullTableW = pageW - marginL - 40; // use full width between margins
+  const baseCols = [
+    { key: 'nr', label: 'Nr.', w: 22 },
+    { key: 'risk_type', label: 'Risikotyp', w: 52 },
+    { key: 'description', label: 'Beschreibung', w: 85 },
+    { key: 'consequence', label: 'Auswirkung', w: 85 },
+    { key: 'ip', label: 'W', w: 16 }, { key: 'is', label: 'S', w: 16 }, { key: 'ic', label: '', w: 16 },
+    { key: 'responsible', label: 'Verantwortlich', w: 65 },
+    { key: 'mitigation', label: 'Maßnahme', w: 75 },
+    { key: 'treatment', label: 'Behandlung', w: 85 },
+    { key: 'rp', label: 'W', w: 16 }, { key: 'rs', label: 'S', w: 16 }, { key: 'rc', label: '', w: 16 },
+    { key: 'next_step', label: 'Nächster Schritt', w: 96 },
+  ];
+  // Scale columns to fill full width
+  const baseW = baseCols.reduce((s, c) => s + c.w, 0);
+  const scale = fullTableW / baseW;
+  const cols = baseCols.map(c => ({ ...c, w: Math.round(c.w * scale) }));
+  const tableW = cols.reduce((s, c) => s + c.w, 0);
+  const anfX = cols.slice(0, 4).reduce((s, c) => s + c.w, marginL);
+  const anfW = cols[4].w + cols[5].w + cols[6].w;
+  const restX = cols.slice(0, 10).reduce((s, c) => s + c.w, marginL);
+  const restW = cols[10].w + cols[11].w + cols[12].w;
+
+  // Reusable table header renderer
+  function drawTableHeader() {
+    doc.fontSize(7).font('Helvetica-Bold');
+    // Group headers with blue background
+    doc.rect(anfX, y, anfW, 10).fill('#2563eb');
+    doc.fillColor('#fff').text('Anfangsrisiko', anfX + 2, y + 2, { width: anfW - 4 });
+    doc.rect(restX, y, restW, 10).fill('#2563eb');
+    doc.fillColor('#fff').text('Restrisiko', restX + 2, y + 2, { width: restW - 4 });
+    doc.fillColor('#000');
+    y += 12;
+    doc.rect(marginL, y, tableW, 13).fill('#2563eb'); doc.fillColor('#fff');
+    let x = marginL;
+    for (const col of cols) { doc.text(col.label, x + 2, y + 3, { width: col.w - 4 }); x += col.w; }
+    doc.fillColor('#000');
+    y += 15;
+    doc.font('Helvetica').fontSize(6.5);
+  }
+
+  drawTableHeader();
+
+  // Data rows with dynamic height
+  const textCols = ['description', 'consequence', 'responsible', 'mitigation', 'treatment', 'next_step', 'risk_type'];
+
+  items.forEach((item, idx) => {
+    const vals = {
+      nr: String(idx + 1), risk_type: item.risk_type || '', description: item.description || '',
+      consequence: item.consequence || '', ip: String(item.initial_probability || ''),
+      is: String(item.initial_severity || ''), ic: '', responsible: item.responsible_person || '',
+      mitigation: item.mitigation_topic || '', treatment: item.treatment || '',
+      rp: String(item.residual_probability || ''), rs: String(item.residual_severity || ''),
+      rc: '', next_step: item.next_step || '',
+    };
+
+    // Compute row height
+    let maxH = 14;
+    for (const col of cols) {
+      if (textCols.includes(col.key) && vals[col.key]) {
+        const h = doc.heightOfString(vals[col.key], { width: col.w - 4, fontSize: 6.5 });
+        if (h + 6 > maxH) maxH = h + 6;
+      }
+    }
+    maxH = Math.min(maxH, 80);
+
+    // Page break with repeated header
+    if (y + maxH > maxY) {
+      doc.addPage();
+      y = 40;
+      drawTableHeader();
+    }
+
+    // Zebra stripe
+    if (idx % 2 === 0) doc.rect(marginL, y, tableW, maxH).fill('#f8fafc').fillColor('#000');
+    doc.moveTo(marginL, y + maxH).lineTo(marginL + tableW, y + maxH).strokeColor('#e2e8f0').lineWidth(0.3).stroke();
+
+    let x = marginL;
+    for (const col of cols) {
+      if (col.key === 'ic' && item.initial_score) {
+        doc.rect(x + 3, y + 2, 10, 10).fill(riskColor(item.initial_score)).fillColor('#000');
+      } else if (col.key === 'rc' && item.residual_score) {
+        doc.rect(x + 3, y + 2, 10, 10).fill(riskColor(item.residual_score)).fillColor('#000');
+      } else {
+        doc.text(String(vals[col.key]), x + 2, y + 3, { width: col.w - 4, height: maxH - 4 });
+      }
+      x += col.w;
+    }
+    y += maxH;
+  });
+
+  y += 20;
+
+  // ── Overall Risk + Signature + Matrix Legend ──
+  // Ensure the entire footer block fits: overall risk + signature + matrix (~300pt)
+  if (y + 300 > maxY) { doc.addPage(); y = 40; }
+  const footerStartY = y;
+  const maxInitScore = Math.max(0, ...items.map(i => i.initial_score || 0));
+  const maxResScore = Math.max(0, ...items.map(i => i.residual_score || 0));
+
+  doc.fontSize(9).font('Helvetica-Bold');
+  if (maxInitScore > 0) {
+    doc.rect(marginL, y, 12, 12).fill(riskColor(maxInitScore)).fillColor('#000');
+    doc.text(`  Gesamt-Anfangsrisiko: ${riskLabel(maxInitScore)}`, marginL + 16, y + 1);
+    y += 18;
+  }
+  if (maxResScore > 0) {
+    doc.rect(marginL, y, 12, 12).fill(riskColor(maxResScore)).fillColor('#000');
+    doc.text(`  Gesamt-Restrisiko: ${riskLabel(maxResScore)}`, marginL + 16, y + 1);
+    y += 18;
+  }
+  y += 30;
+
+  // ── Signature block ──
+  const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : (ra.safety_manager || '');
+
+  // Ort, Datum above signature
+  doc.fontSize(9).font('Helvetica');
+  doc.text(`${company ? company.city || '' : ''}, ${fmtDE(new Date().toISOString().slice(0, 10))}`, marginL, y);
+  y += 20;
+
+  // Signature image
+  if (qm) {
+    const sigRow = stmts.getPersonSignature.get(qm.id);
+    if (sigRow && sigRow.signature) {
+      try { doc.image(sigRow.signature, marginL, y, { height: 40 }); y += 45; } catch { /* skip */ }
+    }
+  }
+
+  // Line
+  doc.moveTo(marginL, y).lineTo(marginL + 200, y).strokeColor('#000').lineWidth(0.5).stroke();
+  y += 5;
+  doc.fontSize(9).font('Helvetica');
+  doc.text(qmName, marginL, y);
+  y += 12;
+  doc.text('Safety Manager', marginL, y);
+
+  // ── Risk Matrix Legend (right side, matching XLSX layout) ──
+  const matrixRight = marginL + tableW; // align with table right edge
+  const matrixLeft = pageW / 2 + 20;
+  const availW = matrixRight - matrixLeft;
+  const labelW = Math.round(availW * 0.35); // space for row labels + factor
+  const gridW = availW - labelW;
+  const cellSz = Math.floor(gridW / 5);
+  const gridX = matrixLeft + labelW;
+  let my = footerStartY;
+
+  const probLabels = ['häufig', 'gelegentlich', 'gering', 'unwahrscheinlich', 'extrem\nunwahrscheinlich'];
+  const sevLabels = ['geringfügig', 'gering', 'bedeutend', 'gefährlich', 'katastrophal'];
+  const probFactors = [5, 4, 3, 2, 1];
+  const sevFactors = [1, 2, 3, 4, 5];
+
+  // "Risikoschwere" header
+  doc.fontSize(8).font('Helvetica-Bold');
+  doc.text('Risikoschwere', gridX, my, { width: cellSz * 5, align: 'center' });
+  my += 12;
+
+  // Severity column labels
+  doc.fontSize(6.5).font('Helvetica');
+  for (let s = 0; s < 5; s++) {
+    doc.text(sevLabels[s], gridX + s * cellSz, my, { width: cellSz, align: 'center' });
+  }
+  my += 10;
+
+  // "Faktor" row
+  doc.fontSize(7).font('Helvetica-Bold');
+  doc.text('Faktor', matrixLeft, my + 1, { width: labelW - 5, align: 'right' });
+  for (let s = 0; s < 5; s++) {
+    doc.text(String(sevFactors[s]), gridX + s * cellSz, my + 1, { width: cellSz, align: 'center' });
+  }
+  my += 14;
+
+  // "Risikowahrscheinlichkeit" vertical label — positioned 1 char before "unwahrscheinlich"
+  doc.save();
+  doc.fontSize(6.5).font('Helvetica');
+  const matrixTotalH = cellSz * 5;
+  const unwWidth = doc.widthOfString('unwahrscheinlich', { fontSize: 6.5 });
+  doc.fontSize(7).font('Helvetica-Bold');
+  const labelX = gridX - 14 - unwWidth - 4; // factor col - "unwahrscheinlich" width - 1 char
+  doc.translate(labelX, my + matrixTotalH / 2 + 40);
+  doc.rotate(-90);
+  doc.text('Risikowahrscheinlichkeit', -40, 0, { width: matrixTotalH, align: 'center' });
+  doc.restore();
+
+  // Matrix rows
+  for (let p = 0; p < 5; p++) {
+    // Row label + factor
+    doc.fontSize(6.5).font('Helvetica');
+    doc.text(probLabels[p], matrixLeft + 10, my + (cellSz - 8) / 2, { width: labelW - 22, align: 'right', lineGap: 0 });
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text(String(probFactors[p]), gridX - 12, my + (cellSz - 8) / 2, { width: 10, align: 'center' });
+
+    // Score cells
+    for (let s = 0; s < 5; s++) {
+      const score = probFactors[p] * sevFactors[s];
+      const color = riskColor(score);
+      doc.rect(gridX + s * cellSz, my, cellSz, cellSz).fill(color);
+      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold');
+      doc.text(String(score), gridX + s * cellSz, my + (cellSz - 9) / 2, { width: cellSz, align: 'center' });
+      doc.fillColor('#000');
+    }
+    // Cell borders
+    for (let s = 0; s <= 5; s++) {
+      doc.moveTo(gridX + s * cellSz, my).lineTo(gridX + s * cellSz, my + cellSz).strokeColor('#ffffff').lineWidth(1).stroke();
+    }
+    doc.moveTo(gridX, my).lineTo(gridX + cellSz * 5, my).strokeColor('#ffffff').lineWidth(1).stroke();
+    my += cellSz;
+  }
+  // Bottom border
+  doc.moveTo(gridX, my).lineTo(gridX + cellSz * 5, my).strokeColor('#ffffff').lineWidth(1).stroke();
+
+  // Legend (under matrix, one line)
+  my += 8;
+  let lx = gridX;
+  doc.fontSize(7).font('Helvetica');
+  [{ color: '#ef4444', label: 'Nicht akzeptabel' },
+   { color: '#eab308', label: 'Akzeptabel' },
+   { color: '#22c55e', label: 'Gering oder kein Risiko' }].forEach(entry => {
+    doc.rect(lx, my, 10, 10).fill(entry.color).fillColor('#000');
+    const tw = doc.widthOfString(entry.label, { fontSize: 7 });
+    doc.text(entry.label, lx + 13, my + 1);
+    lx += 13 + tw + 12;
+  });
+}
+
+app.get('/api/risk-analysis/:id/pdf', (req, res) => {
+  const ra = stmts.getRiskAnalysis.get(req.params.id);
+  if (!ra) return res.status(404).json({ error: 'Risk analysis not found' });
+  const cr = stmts.getChangeRequest.get(ra.change_request_id);
+  const dept = cr ? stmts.getDepartment.get(cr.department_id) : null;
+  const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+  const logoRow = company ? stmts.getCompanyLogo.get(company.id) : null;
+  const items = stmts.getRiskItemsByAnalysis.all(ra.id);
+  const personsAll = company ? stmts.getPersonsByCompany.all(company.id) : [];
+  const qm = personsAll.find(p => p.role === 'QM' && dept && p.department_id === dept.id);
+
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40, bufferPages: true });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="Risikoanalyse_${cr ? cr.change_no : 'RA'}.pdf"`);
+  doc.pipe(res);
+  renderRiskAnalysisPdf(doc, { ra, cr, dept, company, logoRow, items, qm });
+  addPdfFooter(doc, { label: 'Erstellt mit ac-change' });
+  doc.end();
+});
+
+// ── API: Risk Analysis Send Email ────────────────────────────
+app.post('/api/risk-analysis/:id/send-email', async (req, res) => {
+  const ra = stmts.getRiskAnalysis.get(req.params.id);
+  if (!ra) return res.status(404).json({ error: 'Risk analysis not found' });
+  const { to, authority } = req.body;
+  if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
+
+  try {
+    // Generate PDF as buffer
+    const cr = stmts.getChangeRequest.get(ra.change_request_id);
+    const dept = cr ? stmts.getDepartment.get(cr.department_id) : null;
+    const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+    const personsAll = company ? stmts.getPersonsByCompany.all(company.id) : [];
+    const qm = personsAll.find(p => p.role === 'QM' && dept && p.department_id === dept.id);
+
+    const items = stmts.getRiskItemsByAnalysis.all(ra.id);
+    const logoRow = company ? stmts.getCompanyLogo.get(company.id) : null;
+    const pdfBuffer = await new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40, bufferPages: true });
+      const chunks = [];
+      doc.on('data', chunk => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      renderRiskAnalysisPdf(doc, { ra, cr, dept, company, logoRow, items, qm });
+      addPdfFooter(doc, { label: 'Erstellt mit ac-change' });
+      doc.end();
+    });
+
+    const filename = `Risikoanalyse_${cr ? cr.change_no : 'RA'}.pdf`;
+    const nodemailer = require('nodemailer');
+    const rows = stmts.getAllSettings.all();
+    const s = {}; rows.forEach(r => { s[r.key] = r.value; });
+    if (!s.smtp_host || !s.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+
+    const port = parseInt(s.smtp_port) || 587;
+    const transporter = nodemailer.createTransport({
+      host: s.smtp_host, port, secure: port === 465,
+      auth: s.smtp_auth !== 'false' ? { user: s.smtp_user, pass: s.smtp_pass } : undefined,
+    });
+
+    const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
+    let subject, text, bcc;
+    if (authority) {
+      const sal = dept && dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
+      subject = `Risikoanalyse – ${cr ? cr.change_no : ''} – ${company ? company.name : ''} (${dept ? dept.name : ''})`;
+      text = `${sal.trim()},\n\nanbei übersenden wir Ihnen die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}${qm ? '\nCompliance Monitoring Manager' : ''}\n${company ? company.name : ''}\n\n`;
+      if (qm && qm.email) bcc = qm.email;
+    } else {
+      subject = `Risikoanalyse – ${cr ? cr.change_no : ''} (${dept ? dept.name : ''})`;
+      text = `Hallo,\n\nanbei die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${company ? company.name : ''}\n\n`;
+    }
+
+    const mailOpts = { from: s.smtp_user, to, subject, text, attachments: [{ filename, content: pdfBuffer, contentType: 'application/pdf' }] };
+    if (bcc) mailOpts.bcc = bcc;
+    await transporter.sendMail(mailOpts);
+
+    logAction('Risikoanalyse gesendet', 'risk_analysis', ra.id, cr ? cr.change_no : '', `An: ${to}${authority ? ' (Behörde)' : ''}`, company ? company.name : '', dept ? dept.name : '');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── API: EASA Form 2 PDF ─────────────────────────────────────
+app.get('/api/change-requests/:id/easa-form2/pdf', async (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  const dept = stmts.getDepartment.get(cr.department_id);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
+  const company = stmts.getCompany.get(dept.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  const personsAll = stmts.getPersonsByCompany.all(company.id);
+  const accountable = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
+  const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+
+  // Get form data from query string
+  const formData = {
+    antragsart: req.query.antragsart || 'aenderung',
+    standorte: req.query.standorte || 'siehe oben',
+    telefon: req.query.telefon || '',
+    fax: req.query.fax || '',
+    genart: req.query.genart || 'teil-145',
+    scope_5a: req.query.scope_5a || '',
+    scope_5b: req.query.scope_5b || '',
+    scope_5c: req.query.scope_5c || '',
+    scope_5d: req.query.scope_5d || '',
+    scope_single: req.query.scope_single || '',
+    check_5a: req.query.check_5a === 'true',
+    check_5b: req.query.check_5b === 'true',
+    check_5c: req.query.check_5c === 'true',
+    check_5d: req.query.check_5d === 'true',
+    einverstaendnis: req.query.einverstaendnis || 'ja',
+  };
+
+  try {
+    const buffer = await generateEasaForm2Buffer({ cr, dept, company, accountable, qm, formData });
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="EASA_Form2_${cr.change_no}.pdf"`);
+    res.send(buffer);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// EASA Form 2 — fill LBA template PDF form fields using pdf-lib
+// Supports CAMO and Part-145 templates based on department regulation
+async function generateEasaForm2Buffer({ cr, dept, company, accountable, qm, formData }) {
+  const { PDFDocument: PDFLib } = require('pdf-lib');
+  function fmtDate(isoStr) {
+    if (!isoStr) return '';
+    const d = isoStr.substring(0, 10).split('-');
+    if (d.length !== 3) return isoStr;
+    return `${d[2]}.${d[1]}.${d[0]}`;
+  }
+
+  const regAndName = ((dept.regulation || '') + ' ' + (dept.name || '')).toLowerCase();
+  const is145 = regAndName.includes('145') || regAndName.includes('cao');
+  const templateFile = is145 ? 'EASA_Form_2_Part145.pdf' : 'EASA_Form_2_CAMO.pdf';
+  const templatePath = path.join(__dirname, 'public', 'templates', templateFile);
+
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`Template ${templateFile} nicht gefunden`);
+  }
+
+  const templateBuf = fs.readFileSync(templatePath);
+  const pdf = await PDFLib.load(templateBuf);
+  const form = pdf.getForm();
+  const addr = [company.street, [company.postal_code, company.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const amName = accountable ? `${accountable.first_name} ${accountable.last_name}`.trim() + ', Accountable Manager' : '';
+  const email = qm ? (qm.email || '') : '';
+
+  if (is145) {
+    // ── Part-145 / Part-CAO template ──
+    for (const field of form.getFields()) {
+      if (field.constructor.name === 'PDFTextField') field.setFontSize(10);
+    }
+
+    // Antragsart
+    try { form.getRadioGroup('Antragsart').select(formData.antragsart === 'erstgenehmigung' ? 'Erstgenehmigung' : '#c4nderung'); } catch {}
+    // Genehmigungsart (Teil-145 vs Teil-CAO)
+    try { form.getRadioGroup('Genehmigungsart').select(formData.genart === 'teil-cao' ? 'Teil-CAO' : 'Teil-145'); } catch {}
+    // Genehmigungsnummer (strip prefix)
+    const permNo145 = (dept.easa_permission_number || '').replace(/^DE\.145\.\s*/i, '').replace(/^DE\.CAO\.\s*/i, '');
+    form.getTextField('Genehmigungsnummer').setText(permNo145);
+    // Veröffentlichung
+    try { form.getRadioGroup('Veröffentlichung').select(formData.einverstaendnis === 'ja' ? 'JA' : 'NEIN'); } catch {}
+
+    form.getTextField('Name des Betriebs').setText(company.name || '');
+    form.getTextField('Adresse des Betriebs').setText(addr);
+    form.getTextField('Standorte').setText(formData.standorte || 'siehe oben');
+    form.getTextField('Bedingungen und Umfang').setText(formData.scope_single || '');
+    form.getTextField('Stellung und Name des AccM').setText(amName);
+    form.getTextField('Ort der Unterschrift').setText(company.city || '');
+    form.getTextField('Datum der Unterschrift').setText(fmtDate(new Date().toISOString().slice(0, 10)));
+    form.getTextField('Telefonnummer').setText(formData.telefon || company.phone || '');
+    form.getTextField('Faxnummer').setText(formData.fax || company.fax || '');
+    form.getTextField('E-Mail').setText(email);
+
+    // Signature for Part-145
+    if (accountable) {
+      const sigRow = stmts.getPersonSignature.get(accountable.id);
+      if (sigRow && sigRow.signature) {
+        try {
+          let sigImage;
+          try { sigImage = await pdf.embedPng(sigRow.signature); }
+          catch { sigImage = await pdf.embedJpg(sigRow.signature); }
+          // Place signature at half page width, above "Ort der Unterschrift" field
+          const ortField = form.getTextField('Ort der Unterschrift');
+          const widgets = ortField.acroField.getWidgets();
+          if (widgets.length > 0) {
+            const rect = widgets[0].getRectangle();
+            const page = pdf.getPage(0);
+            const pageW = page.getSize().width;
+            const dims = sigImage.scaleToFit(180, 45);
+            page.drawImage(sigImage, {
+              x: pageW / 2, y: rect.y + rect.height + 5,
+              width: dims.width, height: dims.height,
+            });
+          }
+        } catch {}
+      }
+    }
+
+  } else {
+    // ── CAMO template ──
+    const multilineFields = new Set([
+      'beantragte Luftfahrzeugmuster', 'beantragte Privilegien',
+      'beantragte organisatorische Änderungen', 'beantragte Änderungen Handbuch',
+      'Adresse des Unternehmens', 'Beantragte Genehmigungsstandorte',
+      'Name verantwortlicher Betriebsleiter',
+    ]);
+    for (const field of form.getFields()) {
+      if (field.constructor.name === 'PDFTextField') {
+        field.setFontSize(10);
+        if (multilineFields.has(field.getName())) field.enableMultiline();
+      }
+    }
+
+    form.getRadioGroup('Antragsart').select(formData.antragsart === 'erstgenehmigung' ? 'Erstgenehmigung' : 'Änderung');
+    const permNo = (dept.easa_permission_number || '').replace(/^DE\.CAMO\.\s*/i, '');
+    form.getTextField('Genehmigungsnummer CAMO').setText(permNo);
+    form.getTextField('Name des Unternehmens').setText(company.name || '');
+    form.getTextField('Adresse des Unternehmens').setText(addr);
+    form.getTextField('Telefon').setText(formData.telefon || company.phone || '');
+    form.getTextField('E-Mail').setText(email);
+    form.getTextField('Beantragte Genehmigungsstandorte').setText(formData.standorte || 'siehe oben');
+
+    if (formData.check_5a) form.getCheckBox('Antrag Luftfahrzeugmuster').check();
+    form.getTextField('beantragte Luftfahrzeugmuster').setText(formData.scope_5a || '');
+    if (formData.check_5b) form.getCheckBox('Antrag Privilegien').check();
+    form.getTextField('beantragte Privilegien').setText(formData.scope_5b || '');
+    if (formData.check_5c) form.getCheckBox('Antrag organisatorische Änderungen').check();
+    form.getTextField('beantragte organisatorische Änderungen').setText(formData.scope_5c || '');
+    if (formData.check_5d) form.getCheckBox('Antrag Änderungen Handbuch').check();
+    form.getTextField('beantragte Änderungen Handbuch').setText(formData.scope_5d || '');
+
+    form.getRadioGroup('Einverständniserklärung').select(formData.einverstaendnis === 'ja' ? 'Ja' : 'Nein');
+    form.getTextField('Name verantwortlicher Betriebsleiter').setText(amName);
+    form.getTextField('Datum').setText(fmtDate(new Date().toISOString().slice(0, 10)));
+
+    // Embed signature into CAMO template
+    if (accountable) {
+      const sigRow = stmts.getPersonSignature.get(accountable.id);
+      if (sigRow && sigRow.signature) {
+        try {
+          let sigImage;
+          try { sigImage = await pdf.embedPng(sigRow.signature); }
+          catch { sigImage = await pdf.embedJpg(sigRow.signature); }
+          const sigField = form.getTextField('Unterschrift Betriebsleiter');
+          const widgets = sigField.acroField.getWidgets();
+          if (widgets.length > 0) {
+            const rect = widgets[0].getRectangle();
+            const page = pdf.getPage(1);
+            const dims = sigImage.scaleToFit(rect.width, rect.height);
+            page.drawImage(sigImage, {
+              x: rect.x, y: rect.y + (rect.height - dims.height) / 2,
+              width: dims.width, height: dims.height,
+            });
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // Flatten form so fields are not editable in output
+  form.flatten();
+
+  // Remove instruction pages (keep only form pages)
+  const pageCount = pdf.getPageCount();
+  const keepPages = is145 ? 1 : 2;
+  for (let i = pageCount - 1; i >= keepPages; i--) {
+    pdf.removePage(i);
+  }
+
+  const bytes = await pdf.save();
+  return Buffer.from(bytes);
+}
+
+// ── API: Send Change Email ───────────────────────────────────
+app.post('/api/change-requests/:id/send-email', async (req, res) => {
+  const cr = stmts.getChangeRequest.get(req.params.id);
+  if (!cr) return res.status(404).json({ error: 'Change request not found' });
+  const { to, type } = req.body;
+  if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
+
+  try {
+    const dept = stmts.getDepartment.get(cr.department_id);
+    const company = dept ? stmts.getCompany.get(dept.company_id) : null;
+    const personsAll = company ? stmts.getPersonsByCompany.all(company.id) : [];
+    const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+
+    if (type === 'form2') {
+      // Generate EASA Form 2 PDF from template
+      const formData = req.body.formData || {};
+      // Ensure checkbox booleans
+      formData.check_5a = formData.check_5a === true || formData.check_5a === 'true';
+      formData.check_5b = formData.check_5b === true || formData.check_5b === 'true';
+      formData.check_5c = formData.check_5c === true || formData.check_5c === 'true';
+      formData.check_5d = formData.check_5d === true || formData.check_5d === 'true';
+      const accountable = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
+
+      const buffer = await generateEasaForm2Buffer({ cr, dept, company, accountable, qm, formData });
+      const filename = `EASA_Form2_${cr.change_no}.pdf`;
+
+      const nodemailer = require('nodemailer');
+      const rows = stmts.getAllSettings.all();
+      const s = {};
+      rows.forEach(r => { s[r.key] = r.value; });
+      if (!s.smtp_host || !s.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+
+      const port = parseInt(s.smtp_port) || 587;
+      const auth = s.smtp_auth !== 'false';
+      const transporter = nodemailer.createTransport({
+        host: s.smtp_host, port, secure: port === 465,
+        auth: auth ? { user: s.smtp_user, pass: s.smtp_pass } : undefined,
+      });
+
+      const subject = `EASA Form 2 – ${cr.change_no} – ${company.name} (${dept.name})`;
+      const text = `Sehr geehrte Damen und Herren,\n\nanbei übersenden wir Ihnen den Antrag EASA Form 2 für ${cr.change_no} – ${cr.title}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${company.name}\n\n`;
+
+      const mailOpts = {
+        from: s.smtp_user,
+        to, subject, text,
+        attachments: [{ filename, content: buffer, contentType: 'application/pdf' }],
+      };
+      if (qm && qm.email) mailOpts.bcc = qm.email;
+      await transporter.sendMail(mailOpts);
+
+      logAction('EASA Form 2 gesendet', 'change_request', cr.id, cr.change_no, `An: ${to}`, company ? company.name : '', dept ? dept.name : '');
+      res.json({ ok: true });
+    } else {
+      return res.status(400).json({ error: 'Unbekannter E-Mail-Typ' });
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Start ───────────────────────────────────────────────────

@@ -1,13 +1,11 @@
-<!-- Company Tabs -->
+<!-- Company Tabs (read-only) -->
 <div class="tab-bar" id="company-tab-bar">
   <div class="tab-bar-scroll" id="company-tabs"></div>
-  <button class="tab-add-btn" id="btn-add" title="Firma hinzuf&uuml;gen">+</button>
 </div>
 
-<!-- Department Tabs -->
+<!-- Department Tabs (read-only) -->
 <div class="tab-bar tab-bar-secondary" id="dept-tab-bar" style="display:none">
   <div class="tab-bar-scroll" id="dept-tabs"></div>
-  <button class="tab-add-btn" id="btn-add-dept" title="Abteilung hinzuf&uuml;gen">+</button>
 </div>
 
 <!-- Main Content -->
@@ -19,146 +17,6 @@
     <div id="pane-content-list"></div>
   </div>
 </main>
-
-<!-- Company Add / Edit dialog -->
-<dialog id="company-dialog">
-  <div class="dialog-header" id="dialog-title">Firma hinzuf&uuml;gen</div>
-  <form id="company-form" method="dialog">
-    <div class="dialog-body">
-      <input type="hidden" id="form-id">
-      <div class="form-group">
-        <label for="form-name">Name *</label>
-        <input type="text" id="form-name" required>
-      </div>
-      <div class="form-group">
-        <label for="form-street">Stra&szlig;e</label>
-        <input type="text" id="form-street">
-      </div>
-      <div class="form-group">
-        <label for="form-postal">PLZ</label>
-        <input type="text" id="form-postal">
-      </div>
-      <div class="form-group">
-        <label for="form-city">Stadt</label>
-        <input type="text" id="form-city">
-      </div>
-      <div class="form-group">
-        <label for="form-logo">Logo</label>
-        <input type="file" id="form-logo" accept="image/*">
-        <div class="logo-preview-row" id="logo-preview-row" style="display:none">
-          <img id="logo-preview" class="logo-preview">
-          <button type="button" class="remove-logo-btn" id="remove-logo-btn">Entfernen</button>
-        </div>
-      </div>
-      <div id="company-persons-section" style="display:none">
-        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
-        <div class="form-group">
-          <label>Accountable Manager</label>
-          <div class="form-row">
-            <input type="text" id="form-acc-firstname" placeholder="Vorname" class="form-group">
-            <input type="text" id="form-acc-lastname" placeholder="Nachname" class="form-group">
-          </div>
-          <input type="email" id="form-acc-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
-          <div class="sig-upload-row">
-            <input type="file" id="form-acc-sig" accept="image/*" class="sig-file-input">
-            <div class="logo-preview-row" id="form-acc-sig-preview-row" style="display:none">
-              <img id="form-acc-sig-preview" class="sig-preview">
-              <button type="button" class="remove-logo-btn" data-sig="acc">Entfernen</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="dialog-footer">
-      <button type="button" class="btn btn-secondary" id="btn-cancel">Abbrechen</button>
-      <button type="submit" class="btn btn-primary" id="btn-save">Speichern</button>
-    </div>
-  </form>
-</dialog>
-
-<!-- Company Delete confirmation dialog -->
-<dialog id="delete-dialog">
-  <div class="dialog-header">Firma l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll <strong id="delete-name"></strong> wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
-
-<!-- Department Add / Edit dialog -->
-<dialog id="dept-dialog">
-  <div class="dialog-header" id="dept-dialog-title">Abteilung hinzuf&uuml;gen</div>
-  <form id="dept-form" method="dialog">
-    <div class="dialog-body">
-      <input type="hidden" id="dept-form-id">
-      <div class="form-group">
-        <label for="dept-form-name">Name *</label>
-        <input type="text" id="dept-form-name" required>
-      </div>
-      <div class="form-group">
-        <label for="dept-form-easa">EASA Genehmigungsnummer</label>
-        <input type="text" id="dept-form-easa">
-      </div>
-      <div class="form-group">
-        <label for="dept-form-regulation">Regulation</label>
-        <input type="text" id="dept-form-regulation">
-      </div>
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
-      <div class="form-group">
-        <label>Zust&auml;ndige Aufsichtsperson Beh&ouml;rde</label>
-        <div class="form-row">
-          <select id="dept-form-authority-salutation" style="width:auto;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
-            <option value="">Anrede</option>
-            <option value="Herr">Herr</option>
-            <option value="Frau">Frau</option>
-          </select>
-          <input type="text" id="dept-form-authority-name" placeholder="Name" class="form-group">
-        </div>
-        <input type="email" id="dept-form-authority-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
-      </div>
-      <div id="dept-persons-section" style="display:none">
-        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
-        <div class="form-group">
-          <label>Compliance Monitoring Manager</label>
-          <div class="form-row">
-            <input type="text" id="dept-form-qm-firstname" placeholder="Vorname" class="form-group">
-            <input type="text" id="dept-form-qm-lastname" placeholder="Nachname" class="form-group">
-          </div>
-          <input type="email" id="dept-form-qm-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
-          <div class="sig-upload-row">
-            <input type="file" id="dept-form-qm-sig" accept="image/*" class="sig-file-input">
-            <div class="logo-preview-row" id="dept-form-qm-sig-preview-row" style="display:none">
-              <img id="dept-form-qm-sig-preview" class="sig-preview">
-              <button type="button" class="remove-logo-btn" data-sig="dept-qm">Entfernen</button>
-            </div>
-          </div>
-        </div>
-        <div class="form-group">
-          <label id="dept-form-al-label">Abteilungsleiter</label>
-          <div class="form-row">
-            <input type="text" id="dept-form-al-firstname" placeholder="Vorname" class="form-group">
-            <input type="text" id="dept-form-al-lastname" placeholder="Nachname" class="form-group">
-          </div>
-          <input type="email" id="dept-form-al-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
-          <div class="sig-upload-row">
-            <input type="file" id="dept-form-al-sig" accept="image/*" class="sig-file-input">
-            <div class="logo-preview-row" id="dept-form-al-sig-preview-row" style="display:none">
-              <img id="dept-form-al-sig-preview" class="sig-preview">
-              <button type="button" class="remove-logo-btn" data-sig="dept-al">Entfernen</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="dialog-footer">
-      <button type="button" class="btn btn-secondary" id="dept-btn-cancel">Abbrechen</button>
-      <button type="submit" class="btn btn-primary" id="dept-btn-save">Speichern</button>
-    </div>
-  </form>
-</dialog>
 
 <!-- Audit Plan Add / Edit dialog -->
 <dialog id="plan-dialog">
@@ -224,18 +82,6 @@
   <div class="dialog-footer">
     <button class="btn btn-secondary" id="plan-delete-cancel">Abbrechen</button>
     <button class="btn btn-danger" id="plan-delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
-
-<!-- Department Delete confirmation dialog -->
-<dialog id="dept-delete-dialog">
-  <div class="dialog-header">Abteilung l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll <strong id="dept-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="dept-delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="dept-delete-confirm">L&ouml;schen</button>
   </div>
 </dialog>
 

@@ -2,7 +2,9 @@
 
 (async function () {
   const tileAudit = document.getElementById('tile-audit');
+  const tileChange = document.getElementById('tile-change');
   const auditStats = document.getElementById('audit-stats');
+  const changeStats = document.getElementById('change-stats');
   const capContainer = document.getElementById('cap-table-container');
   const filterBar = document.getElementById('home-cap-filters');
   let activeFilter = null;
@@ -15,10 +17,9 @@
     { key: 'L3', label: 'LEVEL 3',     css: 'tag-observation' },
   ];
 
-  // Navigate to companies on tile click
-  tileAudit.addEventListener('click', () => {
-    window.location.href = '/companies';
-  });
+  // Navigate on tile clicks
+  tileAudit.addEventListener('click', () => { window.location.href = '/companies'; });
+  tileChange.addEventListener('click', () => { window.location.href = '/change'; });
 
   // Filter button clicks
   filterBar.addEventListener('click', (e) => {
@@ -37,14 +38,23 @@
   try {
     const data = await fetchJSON('/api/home/stats');
     const audit = data.modules.audit;
+    const change = data.modules.change || {};
     allCapItems = data.capItems;
 
-    // Render tile stats
+    // Render audit tile stats
     const overdueClass = audit.overdueCaps > 0 ? ' home-tile__stat--danger' : '';
     auditStats.innerHTML =
       `<span class="home-tile__stat">${audit.openCaps} offene CAPs</span>` +
       `<span class="home-tile__stat${overdueClass}">${audit.overdueCaps} überfällig</span>` +
       `<span class="home-tile__stat home-tile__stat--muted">${audit.totalAudits} Audits gesamt</span>`;
+
+    // Render change tile stats
+    if (changeStats) {
+      changeStats.innerHTML =
+        `<span class="home-tile__stat">${change.openChanges || 0} offene Changes</span>` +
+        `<span class="home-tile__stat">${change.openTasks || 0} offene Aufgaben</span>` +
+        `<span class="home-tile__stat home-tile__stat--muted">${change.totalChanges || 0} Changes gesamt</span>`;
+    }
 
     renderFilterBar();
     renderCapTable();
@@ -86,7 +96,6 @@
 
     let html = `<div class="home-cap-table-wrap"><table class="home-cap-table">
       <thead><tr>
-        <th>Modul</th>
         <th>Firma</th>
         <th>Abteilung</th>
         <th>Audit Nr.</th>
@@ -114,7 +123,6 @@
         : '<span class="home-cap-badge home-cap-badge--open">Offen</span>';
 
       html += `<tr${rowClass} data-cap-id="${cap.id}" style="cursor:pointer">
-        <td><span class="home-cap-badge home-cap-badge--module">${escapeHtml((cap.source || 'audit').toUpperCase())}</span></td>
         <td>${escapeHtml(cap.companyName)}</td>
         <td>${escapeHtml(cap.departmentName)}</td>
         <td>${escapeHtml(cap.auditNo || '')}</td>
@@ -135,18 +143,32 @@
         const cap = allCapItems.find(c => c.id === capId);
         if (!cap) return;
 
-        const navState = {
-          selectedId: cap.companyId,
-          navPath: [
-            { type: 'department', id: cap.departmentId, name: cap.departmentName },
-            { type: 'audit-plan', id: cap.auditPlanId, name: String(cap.auditPlanYear) },
-            { type: 'cap-item', id: cap.id, name: 'CAP' },
-          ],
-          capFilter: null,
-          auditLineFilters: [],
-        };
-        localStorage.setItem('ac-audit-nav-state', JSON.stringify(navState));
-        window.location.href = '/companies';
+        const source = (cap.source || 'audit').toUpperCase();
+        if (source === 'CHANGE') {
+          // Deep-link into change module
+          const navState = {
+            selectedId: cap.companyId,
+            navPath: [
+              { type: 'department', id: cap.departmentId, name: cap.departmentName },
+            ],
+          };
+          localStorage.setItem('ac-change-nav-state', JSON.stringify(navState));
+          window.location.href = '/change';
+        } else {
+          // Deep-link into audit module
+          const navState = {
+            selectedId: cap.companyId,
+            navPath: [
+              { type: 'department', id: cap.departmentId, name: cap.departmentName },
+              { type: 'audit-plan', id: cap.auditPlanId, name: String(cap.auditPlanYear) },
+              { type: 'cap-item', id: cap.id, name: 'CAP' },
+            ],
+            capFilter: null,
+            auditLineFilters: [],
+          };
+          localStorage.setItem('ac-audit-nav-state', JSON.stringify(navState));
+          window.location.href = '/companies';
+        }
       });
     });
   }

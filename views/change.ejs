@@ -1,0 +1,473 @@
+<!-- Company Tabs (read-only) -->
+<div class="tab-bar" id="company-tab-bar">
+  <div class="tab-bar-scroll" id="company-tabs"></div>
+</div>
+
+<!-- Department Tabs (read-only) -->
+<div class="tab-bar tab-bar-secondary" id="dept-tab-bar" style="display:none">
+  <div class="tab-bar-scroll" id="dept-tabs"></div>
+</div>
+
+<!-- Main Content -->
+<main class="main-content-full" id="main-content">
+  <div class="empty-state" id="empty-state">Firma ausw&auml;hlen</div>
+  <div id="right-pane-content" style="display:none">
+    <nav class="breadcrumb" id="breadcrumb"></nav>
+    <div class="pane-content-header" id="pane-content-header"></div>
+    <div id="pane-content-list"></div>
+  </div>
+</main>
+
+<!-- Change Request Add / Edit dialog -->
+<dialog id="change-dialog">
+  <div class="dialog-header" id="change-dialog-title">Change Request hinzuf&uuml;gen</div>
+  <form id="change-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="change-form-id">
+      <div class="form-group">
+        <label for="change-form-title">Titel *</label>
+        <input type="text" id="change-form-title" required>
+      </div>
+      <div class="form-group">
+        <label for="change-form-description">Beschreibung</label>
+        <textarea id="change-form-description" rows="3"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="change-form-change-type">Änderungsart</label>
+          <input type="text" id="change-form-change-type" placeholder="z.B. Erweiterung SoW">
+        </div>
+        <div class="form-group">
+          <label for="change-form-category">Kategorie</label>
+          <select id="change-form-category">
+            <option value="OFFEN">Offen</option>
+            <option value="NON_PRIOR">Non-Prior Approval</option>
+            <option value="PRIOR">Prior Approval</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="change-form-priority">Priorit&auml;t</label>
+          <select id="change-form-priority">
+            <option value="LOW">Niedrig</option>
+            <option value="MEDIUM" selected>Mittel</option>
+            <option value="HIGH">Hoch</option>
+            <option value="CRITICAL">Kritisch</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="change-form-requested-by">Beantragt von</label>
+          <input type="text" id="change-form-requested-by">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="change-form-requested-date">Antragsdatum</label>
+          <input type="text" id="change-form-requested-date" placeholder="TT.MM.JJJJ">
+        </div>
+        <div class="form-group">
+          <label for="change-form-target-date">Zieldatum</label>
+          <input type="text" id="change-form-target-date" placeholder="TT.MM.JJJJ">
+        </div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="change-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="change-btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Change Delete confirmation -->
+<dialog id="change-delete-dialog">
+  <div class="dialog-header">Change Request l&ouml;schen</div>
+  <div class="dialog-body">
+    <p>Soll <strong id="change-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="change-delete-cancel">Abbrechen</button>
+    <button class="btn btn-danger" id="change-delete-confirm">L&ouml;schen</button>
+  </div>
+</dialog>
+
+<!-- Task Add / Edit dialog -->
+<dialog id="task-dialog">
+  <div class="dialog-header" id="task-dialog-title">Aufgabe hinzuf&uuml;gen</div>
+  <form id="task-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="task-form-id">
+      <div class="form-group">
+        <label for="task-form-process">Prozesse *</label>
+        <textarea id="task-form-process" rows="2" required></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="task-form-area">Bereich</label>
+          <input type="text" id="task-form-area" placeholder="z.B. Dokumentation, Personal, Antrag">
+        </div>
+        <div class="form-group">
+          <label for="task-form-section-header">Abschnitts-&Uuml;berschrift</label>
+          <input type="text" id="task-form-section-header" placeholder="z.B. Maschine, Piloten">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="task-form-safety-note">Sicherheitsbewertung</label>
+        <input type="text" id="task-form-safety-note">
+      </div>
+      <div class="form-group">
+        <label for="task-form-measures">eingeleitete Ma&szlig;nahmen / To Do</label>
+        <textarea id="task-form-measures" rows="2"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="task-form-responsible">Verantwortlich</label>
+          <input type="text" id="task-form-responsible">
+        </div>
+        <div class="form-group">
+          <label for="task-form-target-date">Zieldatum</label>
+          <input type="text" id="task-form-target-date" placeholder="TT.MM.JJJJ">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="task-form-completion-date">Erledigt am</label>
+        <input type="text" id="task-form-completion-date" placeholder="TT.MM.JJJJ (leer = offen)">
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="task-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="task-btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Task Delete confirmation -->
+<dialog id="task-delete-dialog">
+  <div class="dialog-header">Aufgabe l&ouml;schen</div>
+  <div class="dialog-body">
+    <p>Soll diese Aufgabe wirklich gel&ouml;scht werden?</p>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="task-delete-cancel">Abbrechen</button>
+    <button class="btn btn-danger" id="task-delete-confirm">L&ouml;schen</button>
+  </div>
+</dialog>
+
+<!-- Risk Item Add / Edit dialog -->
+<dialog id="risk-item-dialog" style="max-width:800px">
+  <div class="dialog-header" id="risk-item-dialog-title">Risiko hinzuf&uuml;gen</div>
+  <form id="risk-item-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="risk-item-form-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="risk-item-form-risk-type">Risikotyp</label>
+          <input type="text" id="risk-item-form-risk-type" placeholder="z.B. Hubschrauber, Mensch">
+        </div>
+        <div class="form-group">
+          <label for="risk-item-form-responsible">Verantwortlich</label>
+          <input type="text" id="risk-item-form-responsible">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="risk-item-form-description">Risikobeschreibung *</label>
+        <textarea id="risk-item-form-description" rows="2" required></textarea>
+      </div>
+      <div class="form-group">
+        <label for="risk-item-form-consequence">Auswirkung</label>
+        <textarea id="risk-item-form-consequence" rows="2"></textarea>
+      </div>
+      <div class="form-row" style="align-items:flex-start">
+        <div class="form-group" style="flex:1">
+          <label>Anfangsrisiko</label>
+          <div id="risk-item-matrix-initial" style="margin-top:4px"></div>
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>Restrisiko</label>
+          <div id="risk-item-matrix-residual" style="margin-top:4px"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="risk-item-form-mitigation">Thema der Ma&szlig;nahme</label>
+        <input type="text" id="risk-item-form-mitigation">
+      </div>
+      <div class="form-group">
+        <label for="risk-item-form-treatment">Behandlung und Kontrolle</label>
+        <textarea id="risk-item-form-treatment" rows="2"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="risk-item-form-impl-date">Termin f&uuml;r Umsetzung</label>
+          <input type="text" id="risk-item-form-impl-date" placeholder="TT.MM.JJJJ">
+        </div>
+        <div class="form-group">
+          <label for="risk-item-form-next-step">N&auml;chster Schritt</label>
+          <input type="text" id="risk-item-form-next-step">
+        </div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="risk-item-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="risk-item-btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Risk Item Delete confirmation -->
+<dialog id="risk-item-delete-dialog">
+  <div class="dialog-header">Risiko l&ouml;schen</div>
+  <div class="dialog-body">
+    <p>Soll dieses Risiko wirklich gel&ouml;scht werden?</p>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="risk-item-delete-cancel">Abbrechen</button>
+    <button class="btn btn-danger" id="risk-item-delete-confirm">L&ouml;schen</button>
+  </div>
+</dialog>
+
+<!-- Risk Analysis metadata dialog -->
+<dialog id="risk-meta-dialog">
+  <div class="dialog-header">Risikoanalyse bearbeiten</div>
+  <form id="risk-meta-form" method="dialog">
+    <div class="dialog-body">
+      <div class="form-group">
+        <label for="risk-meta-title">Titel</label>
+        <input type="text" id="risk-meta-title">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="risk-meta-author">Autor</label>
+          <input type="text" id="risk-meta-author">
+        </div>
+        <div class="form-group">
+          <label for="risk-meta-safety-manager">Safety Manager</label>
+          <input type="text" id="risk-meta-safety-manager">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="risk-meta-overall-initial">Gesamt-Anfangsrisiko</label>
+          <input type="text" id="risk-meta-overall-initial">
+        </div>
+        <div class="form-group">
+          <label for="risk-meta-overall-residual">Gesamt-Restrisiko</label>
+          <input type="text" id="risk-meta-overall-residual">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="risk-meta-signed-at">Freigabe-Datum</label>
+          <input type="text" id="risk-meta-signed-at" placeholder="TT.MM.JJJJ">
+        </div>
+        <div class="form-group"></div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="risk-meta-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Risk History entry dialog -->
+<dialog id="risk-history-dialog">
+  <div class="dialog-header">Versions-Eintrag hinzuf&uuml;gen</div>
+  <form id="risk-history-form" method="dialog">
+    <div class="dialog-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="risk-history-version">Version</label>
+          <input type="number" id="risk-history-version" min="1">
+        </div>
+        <div class="form-group">
+          <label for="risk-history-date">Datum</label>
+          <input type="text" id="risk-history-date" placeholder="TT.MM.JJJJ">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="risk-history-author">Autor</label>
+        <input type="text" id="risk-history-author">
+      </div>
+      <div class="form-group">
+        <label for="risk-history-reason">&Auml;nderungsgrund</label>
+        <input type="text" id="risk-history-reason">
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="risk-history-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary">Hinzuf&uuml;gen</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Import Tasks dialog -->
+<dialog id="import-tasks-dialog">
+  <div class="dialog-header">Aufgabenliste importieren (.xlsx)</div>
+  <div class="dialog-body">
+    <p>Change Management Tracker als .xlsx-Datei hochladen. Vorhandene Aufgaben werden ersetzt.</p>
+    <div class="form-group">
+      <input type="file" id="import-tasks-file" accept=".xlsx,.xls">
+    </div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="import-tasks-cancel">Abbrechen</button>
+    <button class="btn btn-primary" id="import-tasks-confirm">Importieren</button>
+  </div>
+</dialog>
+
+<!-- Import Risk Analysis dialog -->
+<dialog id="import-risk-dialog">
+  <div class="dialog-header">Risikoanalyse importieren (.xlsx)</div>
+  <div class="dialog-body">
+    <p>Risikoanalyse als .xlsx-Datei hochladen. Vorhandene Analyse wird ersetzt.</p>
+    <div class="form-group">
+      <input type="file" id="import-risk-file" accept=".xlsx,.xls">
+    </div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="import-risk-cancel">Abbrechen</button>
+    <button class="btn btn-primary" id="import-risk-confirm">Importieren</button>
+  </div>
+</dialog>
+
+<!-- EASA Form 2 dialog -->
+<dialog id="easa-form2-dialog" style="max-width:600px">
+  <div class="dialog-header" id="easa-form2-dialog-title">EASA Form 2</div>
+  <form id="easa-form2-form" method="dialog">
+    <div class="dialog-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Antragsart</label>
+          <select id="easa-form2-antragsart">
+            <option value="aenderung">&Auml;nderung</option>
+            <option value="erstgenehmigung">Erstgenehmigung</option>
+          </select>
+        </div>
+        <div class="form-group" id="easa-form2-genart-group" style="display:none">
+          <label>Genehmigungsart</label>
+          <select id="easa-form2-genart">
+            <option value="teil-145">Teil-145 Genehmigung</option>
+            <option value="teil-cao">Teil-CAO Genehmigung</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Einverst&auml;ndnis Ver&ouml;ffentlichung</label>
+          <select id="easa-form2-einverstaendnis">
+            <option value="ja">Ja</option>
+            <option value="nein">Nein</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="easa-form2-standorte">Standort(e)</label>
+        <input type="text" id="easa-form2-standorte" value="siehe oben">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="easa-form2-telefon">Telefon</label>
+          <input type="text" id="easa-form2-telefon">
+        </div>
+        <div class="form-group" id="easa-form2-fax-group">
+          <label for="easa-form2-fax">Fax</label>
+          <input type="text" id="easa-form2-fax">
+        </div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:12px 0 8px">
+      <!-- CAMO: 4 sub-sections -->
+      <div id="easa-form2-scope-camo">
+        <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:8px"><strong>5. Umfang der Genehmigung / &Auml;nderung</strong></p>
+        <div class="form-group">
+          <label for="easa-form2-scope-5a">a) Genehmigung gem. CAMO.A.125 d) / CAMO.A.130 a)</label>
+          <textarea id="easa-form2-scope-5a" rows="2" placeholder="Luftfahrzeugmuster / -serien / -gruppen"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="easa-form2-scope-5b">b) Privilegien gem. CAMO.A.125 d), e), f)</label>
+          <textarea id="easa-form2-scope-5b" rows="2" placeholder="z.B. Ausstellung/Verl&auml;ngerung von ARCs"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="easa-form2-scope-5c">c) Organisatorische &Auml;nderung (Personal / Meldekette)</label>
+          <textarea id="easa-form2-scope-5c" rows="2" placeholder="z.B. Erweiterung der internen Berechtigungen"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="easa-form2-scope-5d">d) Sonstige &Auml;nderungen des Handbuchs (CAMO.A.300)</label>
+          <textarea id="easa-form2-scope-5d" rows="2" placeholder="z.B. Aufnahme Arbeitsvorbereitung"></textarea>
+        </div>
+      </div>
+      <!-- Part-145: single scope field -->
+      <div id="easa-form2-scope-145" style="display:none">
+        <div class="form-group">
+          <label for="easa-form2-scope-single"><strong>5. Bedingungen und Umfang der Genehmigung</strong></label>
+          <textarea id="easa-form2-scope-single" rows="4" placeholder="Bedingungen und Umfang der Genehmigung mit Bezug zu diesem Antrag"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="easa-form2-btn-cancel">Abbrechen</button>
+      <button type="button" class="btn btn-secondary" id="easa-form2-btn-download">PDF herunterladen</button>
+      <button type="submit" class="btn btn-primary" id="easa-form2-btn-send">Per E-Mail senden</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Email send dialog for Form 2 -->
+<dialog id="change-email-dialog">
+  <div class="dialog-header">EASA Form 2 senden</div>
+  <form id="change-email-form" method="dialog">
+    <div class="dialog-body">
+      <div class="form-group">
+        <label for="change-email-to">E-Mail-Adresse</label>
+        <input type="email" id="change-email-to" required placeholder="empfaenger@example.com" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="change-email-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary">Senden</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Risk Analysis Share dialog -->
+<dialog id="ra-share-dialog">
+  <div class="dialog-header">Risikoanalyse exportieren</div>
+  <div class="dialog-body">
+    <div class="export-actions" style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-secondary" id="ra-share-download">Download PDF</button>
+      <button class="btn btn-secondary" id="ra-share-authority">An Beh&ouml;rde senden</button>
+      <button class="btn btn-secondary" id="ra-share-email">Per E-Mail senden</button>
+    </div>
+    <div id="ra-share-email-section" style="display:none;margin-top:12px">
+      <div class="form-group">
+        <label for="ra-share-email-to">E-Mail-Adresse</label>
+        <input type="email" id="ra-share-email-to" placeholder="empfaenger@example.com" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+      </div>
+      <button class="btn btn-primary" id="ra-share-email-send">Senden</button>
+    </div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn btn-secondary" id="ra-share-cancel">Abbrechen</button>
+  </div>
+</dialog>
+
+<!-- Status change dialog -->
+<dialog id="status-dialog">
+  <div class="dialog-header">Status &auml;ndern</div>
+  <form id="status-form" method="dialog">
+    <div class="dialog-body">
+      <div class="form-group">
+        <label for="status-form-select">Neuer Status</label>
+        <select id="status-form-select">
+          <option value="DRAFT">Entwurf</option>
+          <option value="IN_REVIEW">In Pr&uuml;fung</option>
+          <option value="APPROVED">Genehmigt</option>
+          <option value="IMPLEMENTED">Umgesetzt</option>
+          <option value="CLOSED">Abgeschlossen</option>
+          <option value="REJECTED">Abgelehnt</option>
+        </select>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="status-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary">Speichern</button>
+    </div>
+  </form>
+</dialog>

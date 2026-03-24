@@ -3,8 +3,6 @@
 (function () {
   let companies = [];
   let selectedId = null;
-  let logoBase64 = null;
-  let removeLogo = false;
 
   // Drill-down path: [{type, id, name}, ...]
   // Empty = show departments for selected company
@@ -47,10 +45,6 @@
   const breadcrumbEl = document.getElementById('breadcrumb');
   const headerEl = document.getElementById('pane-content-header');
   const contentEl = document.getElementById('pane-content-list');
-  const dialog = document.getElementById('company-dialog');
-  const deleteDialog = document.getElementById('delete-dialog');
-  const deptDialog = document.getElementById('dept-dialog');
-  const deptDeleteDialog = document.getElementById('dept-delete-dialog');
   const planDialog = document.getElementById('plan-dialog');
   const planDeleteDialog = document.getElementById('plan-delete-dialog');
   const lineDeleteDialog = document.getElementById('line-delete-dialog');
@@ -84,20 +78,11 @@
     companies.forEach(c => {
       const active = c.id === selectedId ? ' tab-active' : '';
       html += `<button class="tab${active}" data-id="${c.id}">${escapeHtml(c.name)}</button>`;
-      if (c.id === selectedId) {
-        html += `<div class="tab-menu-wrap"><button class="tab-menu-btn" data-menu-for="${c.id}">\u22ee</button>`
-              + `<div class="tab-menu" data-menu-id="${c.id}">`
-              + `<button class="tab-menu-item" data-action="edit" data-id="${c.id}">&#9998; Bearbeiten</button>`
-              + `<button class="tab-menu-item tab-menu-danger" data-action="delete" data-id="${c.id}">&#128465; L\u00f6schen</button>`
-              + `</div></div>`;
-      }
     });
     companyTabsEl.innerHTML = html;
-
     companyTabsEl.querySelectorAll('.tab').forEach(btn => {
       btn.addEventListener('click', () => selectCompany(btn.dataset.id));
     });
-    bindTabMenus(companyTabsEl, 'company');
   }
 
   function renderDeptTabs() {
@@ -106,58 +91,12 @@
     departments.forEach(d => {
       const active = d.id === activeDeptId ? ' tab-active' : '';
       html += `<button class="tab tab-secondary${active}" data-id="${d.id}">${escapeHtml(d.name)}</button>`;
-      if (d.id === activeDeptId) {
-        html += `<div class="tab-menu-wrap"><button class="tab-menu-btn" data-menu-for="${d.id}">\u22ee</button>`
-              + `<div class="tab-menu" data-menu-id="${d.id}">`
-              + `<button class="tab-menu-item" data-action="edit" data-id="${d.id}">&#9998; Bearbeiten</button>`
-              + `<button class="tab-menu-item tab-menu-danger" data-action="delete" data-id="${d.id}">&#128465; L\u00f6schen</button>`
-              + `</div></div>`;
-      }
     });
     deptTabsEl.innerHTML = html;
-
     deptTabsEl.querySelectorAll('.tab').forEach(btn => {
       btn.addEventListener('click', () => selectDepartment(btn.dataset.id));
     });
-    bindTabMenus(deptTabsEl, 'department');
   }
-
-  function bindTabMenus(container, type) {
-    container.querySelectorAll('.tab-menu-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const menu = btn.nextElementSibling;
-        const wasOpen = menu.classList.contains('open');
-        closeAllTabMenus();
-        if (!wasOpen) {
-          const rect = btn.getBoundingClientRect();
-          menu.style.top = rect.bottom + 4 + 'px';
-          menu.style.left = rect.left + 'px';
-          menu.classList.add('open');
-        }
-      });
-    });
-    container.querySelectorAll('.tab-menu-item').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeAllTabMenus();
-        const id = btn.dataset.id;
-        if (btn.dataset.action === 'edit') {
-          if (type === 'company') { const c = companies.find(x => x.id === id); if (c) openDialog(c); }
-          else { const d = departments.find(x => x.id === id); if (d) openDeptDialog(d); }
-        } else if (btn.dataset.action === 'delete') {
-          if (type === 'company') { const c = companies.find(x => x.id === id); if (c) confirmDelete(c); }
-          else { const d = departments.find(x => x.id === id); if (d) confirmDeleteDept(d); }
-        }
-      });
-    });
-  }
-
-  function closeAllTabMenus() {
-    document.querySelectorAll('.tab-menu.open').forEach(m => m.classList.remove('open'));
-  }
-
-  document.addEventListener('click', closeAllTabMenus);
 
   function selectDepartment(id) {
     const dept = departments.find(d => d.id === id);
@@ -280,9 +219,6 @@
   // ── Department Level ──────────────────────────────────────
   let departments = [];
 
-  // Static "+" button for dept tab bar
-  document.getElementById('btn-add-dept').addEventListener('click', () => openDeptDialog(null));
-
   async function loadDepartments() {
     if (!selectedId) return;
     try {
@@ -294,357 +230,12 @@
     renderDeptTabs();
   }
 
-  // ── Helper: save person for a role ────────────────────────
-  // sigState: { base64, remove } or null
-  async function savePerson(companyId, role, deptId, firstName, lastName, email, sigState) {
-    const p = persons.find(pr => pr.role === role && (deptId ? pr.department_id === deptId : !pr.department_id));
-    let personId;
-    if (p) {
-      await fetchJSON(`/api/persons/${p.id}`, { method: 'PUT', body: { first_name: firstName, last_name: lastName, email } });
-      personId = p.id;
-    } else if (firstName || lastName || email) {
-      const created = await fetchJSON(`/api/companies/${companyId}/persons`, {
-        method: 'POST',
-        body: { role, first_name: firstName, last_name: lastName, email, department_id: deptId }
-      });
-      personId = created.id;
-    }
-    if (personId && sigState) {
-      if (sigState.base64) {
-        await fetchJSON(`/api/persons/${personId}/signature`, { method: 'PUT', body: { signature: sigState.base64 } });
-      } else if (sigState.remove) {
-        await fetchJSON(`/api/persons/${personId}/signature`, { method: 'PUT', body: { signature: null } });
-      }
-    }
-  }
-
-  // Signature state per key (e.g. 'acc', 'mm', 'dept-qm', 'dept-al')
-  const sigStates = {};
-
-  function setupSigInput(key) {
-    sigStates[key] = null;
-    const fileInput = document.getElementById(key.startsWith('dept-') ? `dept-form-${key.replace('dept-','')}-sig` : `form-${key}-sig`);
-    const previewRow = document.getElementById(key.startsWith('dept-') ? `dept-form-${key.replace('dept-','')}-sig-preview-row` : `form-${key}-sig-preview-row`);
-    const previewImg = document.getElementById(key.startsWith('dept-') ? `dept-form-${key.replace('dept-','')}-sig-preview` : `form-${key}-sig-preview`);
-
-    fileInput.value = '';
-    fileInput.onchange = () => {
-      const file = fileInput.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        sigStates[key] = { base64: reader.result.split(',')[1] };
-        previewImg.src = reader.result;
-        previewRow.style.display = 'flex';
-      };
-      reader.readAsDataURL(file);
-    };
-
-    return { previewRow, previewImg };
-  }
-
-  // Remove buttons for all signature previews
-  document.querySelectorAll('.remove-logo-btn[data-sig]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = btn.dataset.sig;
-      sigStates[key] = { remove: true };
-      const previewRow = btn.closest('.logo-preview-row');
-      previewRow.style.display = 'none';
-      const fileInput = document.getElementById(key.startsWith('dept-') ? `dept-form-${key.replace('dept-','')}-sig` : `form-${key}-sig`);
-      fileInput.value = '';
-    });
-  });
-
   async function loadPersons() {
     if (!selectedId) return;
     try {
       persons = await fetchJSON(`/api/companies/${selectedId}/persons`);
     } catch { persons = []; }
   }
-
-  // ── Company Dialog (Add / Edit) ───────────────────────────
-  async function openDialog(company) {
-    const isEdit = !!company;
-    document.getElementById('dialog-title').textContent = isEdit ? 'Firma bearbeiten' : 'Firma hinzuf\u00fcgen';
-    document.getElementById('form-id').value = isEdit ? company.id : '';
-    document.getElementById('form-name').value = isEdit ? company.name : '';
-    document.getElementById('form-street').value = isEdit ? (company.street || '') : '';
-    document.getElementById('form-postal').value = isEdit ? (company.postal_code || '') : '';
-    document.getElementById('form-city').value = isEdit ? (company.city || '') : '';
-    document.getElementById('form-logo').value = '';
-    logoBase64 = null;
-    removeLogo = false;
-
-    const previewRow = document.getElementById('logo-preview-row');
-    if (isEdit && company.has_logo) {
-      document.getElementById('logo-preview').src = `/api/companies/${company.id}/logo?t=${Date.now()}`;
-      previewRow.style.display = 'flex';
-    } else {
-      previewRow.style.display = 'none';
-    }
-
-    // Person fields
-    const personsSection = document.getElementById('company-persons-section');
-    if (isEdit) {
-      await loadPersons();
-      const acc = persons.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
-      document.getElementById('form-acc-firstname').value = acc ? acc.first_name : '';
-      document.getElementById('form-acc-lastname').value = acc ? acc.last_name : '';
-      document.getElementById('form-acc-email').value = acc ? (acc.email || '') : '';
-
-      // Signatures
-      for (const { key, person } of [{ key: 'acc', person: acc }]) {
-        const { previewRow, previewImg } = setupSigInput(key);
-        if (person && person.has_signature) {
-          previewImg.src = `/api/persons/${person.id}/signature?t=${Date.now()}`;
-          previewRow.style.display = 'flex';
-        } else {
-          previewRow.style.display = 'none';
-        }
-      }
-    } else {
-      document.getElementById('form-acc-firstname').value = '';
-      document.getElementById('form-acc-lastname').value = '';
-      document.getElementById('form-acc-email').value = '';
-      const { previewRow } = setupSigInput('acc');
-      previewRow.style.display = 'none';
-    }
-    personsSection.style.display = '';
-
-    dialog.showModal();
-    document.getElementById('form-name').focus();
-  }
-
-  document.getElementById('btn-add').addEventListener('click', () => openDialog(null));
-  document.getElementById('btn-cancel').addEventListener('click', () => dialog.close());
-
-  document.getElementById('form-logo').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      logoBase64 = reader.result.split(',')[1];
-      document.getElementById('logo-preview').src = reader.result;
-      document.getElementById('logo-preview-row').style.display = 'flex';
-      removeLogo = false;
-    };
-    reader.readAsDataURL(file);
-  });
-
-  document.getElementById('remove-logo-btn').addEventListener('click', () => {
-    logoBase64 = null;
-    removeLogo = true;
-    document.getElementById('form-logo').value = '';
-    document.getElementById('logo-preview-row').style.display = 'none';
-  });
-
-  document.getElementById('company-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const id = document.getElementById('form-id').value;
-    const data = {
-      name: document.getElementById('form-name').value.trim(),
-      street: document.getElementById('form-street').value.trim(),
-      postal_code: document.getElementById('form-postal').value.trim(),
-      city: document.getElementById('form-city').value.trim(),
-    };
-
-    if (!data.name) { toast('Name ist erforderlich', 'error'); return; }
-
-    try {
-      if (id) {
-        await fetchJSON(`/api/companies/${id}`, { method: 'PUT', body: data });
-        if (logoBase64) {
-          await fetchJSON(`/api/companies/${id}/logo`, { method: 'PUT', body: { logo: logoBase64 } });
-        } else if (removeLogo) {
-          await fetchJSON(`/api/companies/${id}/logo`, { method: 'PUT', body: { logo: null } });
-        }
-        // Save company-level persons
-        await savePerson(id, 'ACCOUNTABLE', null,
-          document.getElementById('form-acc-firstname').value.trim(),
-          document.getElementById('form-acc-lastname').value.trim(),
-          document.getElementById('form-acc-email').value.trim(),
-          sigStates.acc);
-        toast('Firma aktualisiert');
-      } else {
-        if (logoBase64) data.logo = logoBase64;
-        const created = await fetchJSON('/api/companies', { method: 'POST', body: data });
-        selectedId = created.id;
-        // Save company-level persons
-        await savePerson(created.id, 'ACCOUNTABLE', null,
-          document.getElementById('form-acc-firstname').value.trim(),
-          document.getElementById('form-acc-lastname').value.trim(),
-          document.getElementById('form-acc-email').value.trim(),
-          sigStates.acc);
-        toast('Firma erstellt');
-      }
-      dialog.close();
-      await loadCompanies();
-      if (selectedId) await selectCompany(selectedId);
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  });
-
-  // ── Company Delete ────────────────────────────────────────
-  let deleteTarget = null;
-
-  function confirmDelete(company) {
-    deleteTarget = company;
-    document.getElementById('delete-name').textContent = company.name;
-    deleteDialog.showModal();
-  }
-
-  document.getElementById('delete-cancel').addEventListener('click', () => deleteDialog.close());
-  document.getElementById('delete-confirm').addEventListener('click', async () => {
-    if (!deleteTarget) return;
-    try {
-      await fetchJSON(`/api/companies/${deleteTarget.id}`, { method: 'DELETE' });
-      toast('Firma gel\u00f6scht');
-      deleteDialog.close();
-      showEmpty();
-      await loadCompanies();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  });
-
-  // ── Department Dialog (Add / Edit) ────────────────────────
-  async function openDeptDialog(dept) {
-    const isEdit = !!dept;
-    document.getElementById('dept-dialog-title').textContent = isEdit ? 'Abteilung bearbeiten' : 'Abteilung hinzuf\u00fcgen';
-    document.getElementById('dept-form-id').value = isEdit ? dept.id : '';
-    document.getElementById('dept-form-name').value = isEdit ? dept.name : '';
-    document.getElementById('dept-form-easa').value = isEdit ? (dept.easa_permission_number || '') : '';
-    document.getElementById('dept-form-regulation').value = isEdit ? (dept.regulation || '') : '';
-    document.getElementById('dept-form-authority-salutation').value = isEdit ? (dept.authority_salutation || '') : '';
-    document.getElementById('dept-form-authority-name').value = isEdit ? (dept.authority_name || '') : '';
-    document.getElementById('dept-form-authority-email').value = isEdit ? (dept.authority_email || '') : '';
-
-    // Person fields
-    const personsSection = document.getElementById('dept-persons-section');
-    if (isEdit) {
-      await loadPersons();
-      const qm = persons.find(p => p.role === 'QM' && p.department_id === dept.id);
-      const al = persons.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
-      document.getElementById('dept-form-qm-firstname').value = qm ? qm.first_name : '';
-      document.getElementById('dept-form-qm-lastname').value = qm ? qm.last_name : '';
-      document.getElementById('dept-form-qm-email').value = qm ? (qm.email || '') : '';
-      document.getElementById('dept-form-al-firstname').value = al ? al.first_name : '';
-      document.getElementById('dept-form-al-lastname').value = al ? al.last_name : '';
-      document.getElementById('dept-form-al-email').value = al ? (al.email || '') : '';
-
-      // Signatures
-      for (const { key, person } of [{ key: 'dept-qm', person: qm }, { key: 'dept-al', person: al }]) {
-        const { previewRow, previewImg } = setupSigInput(key);
-        if (person && person.has_signature) {
-          previewImg.src = `/api/persons/${person.id}/signature?t=${Date.now()}`;
-          previewRow.style.display = 'flex';
-        } else {
-          previewRow.style.display = 'none';
-        }
-      }
-    } else {
-      document.getElementById('dept-form-qm-firstname').value = '';
-      document.getElementById('dept-form-qm-lastname').value = '';
-      document.getElementById('dept-form-qm-email').value = '';
-      document.getElementById('dept-form-al-firstname').value = '';
-      document.getElementById('dept-form-al-lastname').value = '';
-      document.getElementById('dept-form-al-email').value = '';
-      for (const key of ['dept-qm', 'dept-al']) {
-        const { previewRow } = setupSigInput(key);
-        previewRow.style.display = 'none';
-      }
-    }
-
-    // Dynamic label for Abteilungsleiter based on regulation
-    const deptText = isEdit ? `${dept.name} ${dept.regulation || ''}`.toLowerCase() : '';
-    let alLabel = 'Abteilungsleiter';
-    if (deptText.includes('145')) alLabel = 'Maintenance Manager';
-    else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
-    else if (deptText.includes('ato') || deptText.includes('flugschule') || deptText.includes('training')) alLabel = 'Head of Training';
-    else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
-    document.getElementById('dept-form-al-label').textContent = alLabel;
-
-    personsSection.style.display = '';
-
-    deptDialog.showModal();
-    document.getElementById('dept-form-name').focus();
-  }
-
-  document.getElementById('dept-btn-cancel').addEventListener('click', () => deptDialog.close());
-
-  document.getElementById('dept-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const id = document.getElementById('dept-form-id').value;
-    const data = {
-      name: document.getElementById('dept-form-name').value.trim(),
-      easa_permission_number: document.getElementById('dept-form-easa').value.trim(),
-      regulation: document.getElementById('dept-form-regulation').value.trim(),
-      authority_salutation: document.getElementById('dept-form-authority-salutation').value,
-      authority_name: document.getElementById('dept-form-authority-name').value.trim(),
-      authority_email: document.getElementById('dept-form-authority-email').value.trim(),
-    };
-
-    if (!data.name) { toast('Name ist erforderlich', 'error'); return; }
-
-    try {
-      if (id) {
-        await fetchJSON(`/api/departments/${id}`, { method: 'PUT', body: data });
-        // Save department-level persons
-        await savePerson(selectedId, 'QM', id,
-          document.getElementById('dept-form-qm-firstname').value.trim(),
-          document.getElementById('dept-form-qm-lastname').value.trim(),
-          document.getElementById('dept-form-qm-email').value.trim(),
-          sigStates['dept-qm']);
-        await savePerson(selectedId, 'ABTEILUNGSLEITER', id,
-          document.getElementById('dept-form-al-firstname').value.trim(),
-          document.getElementById('dept-form-al-lastname').value.trim(),
-          document.getElementById('dept-form-al-email').value.trim(),
-          sigStates['dept-al']);
-        toast('Abteilung aktualisiert');
-      } else {
-        const newDept = await fetchJSON(`/api/companies/${selectedId}/departments`, { method: 'POST', body: data });
-        // Save persons for the new department
-        await savePerson(selectedId, 'QM', newDept.id,
-          document.getElementById('dept-form-qm-firstname').value.trim(),
-          document.getElementById('dept-form-qm-lastname').value.trim(),
-          document.getElementById('dept-form-qm-email').value.trim(),
-          sigStates['dept-qm']);
-        await savePerson(selectedId, 'ABTEILUNGSLEITER', newDept.id,
-          document.getElementById('dept-form-al-firstname').value.trim(),
-          document.getElementById('dept-form-al-lastname').value.trim(),
-          document.getElementById('dept-form-al-email').value.trim(),
-          sigStates['dept-al']);
-        toast('Abteilung erstellt');
-      }
-      deptDialog.close();
-      await loadDepartments();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  });
-
-  // ── Department Delete ─────────────────────────────────────
-  let deptDeleteTarget = null;
-
-  function confirmDeleteDept(dept) {
-    deptDeleteTarget = dept;
-    document.getElementById('dept-delete-name').textContent = dept.name;
-    deptDeleteDialog.showModal();
-  }
-
-  document.getElementById('dept-delete-cancel').addEventListener('click', () => deptDeleteDialog.close());
-  document.getElementById('dept-delete-confirm').addEventListener('click', async () => {
-    if (!deptDeleteTarget) return;
-    try {
-      await fetchJSON(`/api/departments/${deptDeleteTarget.id}`, { method: 'DELETE' });
-      toast('Abteilung gel\u00f6scht');
-      deptDeleteDialog.close();
-      await loadDepartments();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  });
 
   // ── Audit Plan Level ───────────────────────────────────────
   let auditPlans = [];
@@ -1087,7 +678,7 @@
           if (t.key === 'evidence') label += ` (${line.evidence_count})`;
           tagsHtml += `<span class="audit-tag ${t.css}">${label}</span>`;
         }
-        html += `<tr data-id="${line.id}" data-tags="${tagKeys}" class="line-row-clickable">
+        html += `<tr data-id="${line.id}" data-tags="${tagKeys}" class="line-row-clickable${line.audit_end_date ? ' task-done' : ''}">
           <td>${escapeHtml(line.audit_no || '')}</td>
           <td>${escapeHtml(line.subject)}<div class="audit-tags">${tagsHtml}</div></td>
           <td class="regulations-cell">${escapeHtml(line.regulations || '').replace(/\n/g, '<br>')}</td>
@@ -1127,7 +718,7 @@
           tagsHtml += `<span class="audit-tag ${t.css}">${label}</span>`;
         }
 
-        html += `<tr data-id="${line.id}" data-tags="${tagKeys}" class="line-row-clickable">
+        html += `<tr data-id="${line.id}" data-tags="${tagKeys}" class="line-row-clickable${line.audit_end_date ? ' task-done' : ''}">
           <td>${escapeHtml(line.audit_no || '')}</td>
           <td>${escapeHtml(line.subject)}<div class="audit-tags">${tagsHtml}</div></td>
           <td class="regulations-cell">${escapeHtml(line.regulations || '').replace(/\n/g, '<br>')}</td>

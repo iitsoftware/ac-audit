@@ -14,6 +14,12 @@ db.pragma('foreign_keys = ON');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+// Migration: add phone/fax to company
+try { db.prepare('SELECT phone FROM company LIMIT 1').get(); }
+catch { try { db.exec("ALTER TABLE company ADD COLUMN phone TEXT DEFAULT ''"); } catch {} }
+try { db.prepare('SELECT fax FROM company LIMIT 1').get(); }
+catch { try { db.exec("ALTER TABLE company ADD COLUMN fax TEXT DEFAULT ''"); } catch {} }
+
 // Migrations: rename description → easa_permission_number if needed
 try {
   db.prepare('SELECT easa_permission_number FROM department LIMIT 1').get();
@@ -100,6 +106,23 @@ try {
   try { db.exec("ALTER TABLE cap_item ADD COLUMN source_ref_id TEXT"); } catch {}
 }
 
+// Migration: add department_id to cap_item (shared CAP support)
+try {
+  db.prepare('SELECT department_id FROM cap_item LIMIT 1').get();
+} catch {
+  try { db.exec("ALTER TABLE cap_item ADD COLUMN department_id TEXT"); } catch {}
+}
+
+// Backfill department_id from audit chain for existing audit CAPs
+try {
+  db.exec(`UPDATE cap_item SET department_id = (
+    SELECT ap.department_id FROM audit_checklist_item ci
+    JOIN audit_plan_line apl ON ci.audit_plan_line_id = apl.id
+    JOIN audit_plan ap ON apl.audit_plan_id = ap.id
+    WHERE ci.id = cap_item.checklist_item_id
+  ) WHERE department_id IS NULL AND checklist_item_id IS NOT NULL`);
+} catch {}
+
 // Migration: add company_name and department_name to audit_log
 try {
   db.prepare('SELECT company_name FROM audit_log LIMIT 1').get();
@@ -107,6 +130,23 @@ try {
   try { db.exec("ALTER TABLE audit_log ADD COLUMN company_name TEXT DEFAULT ''"); } catch {}
   try { db.exec("ALTER TABLE audit_log ADD COLUMN department_name TEXT DEFAULT ''"); } catch {}
 }
+
+// Migration: add change_request new columns
+const changeRequestMigrations = [
+  { name: 'change_type', sql: "ALTER TABLE change_request ADD COLUMN change_type TEXT DEFAULT ''" },
+  { name: 'revision', sql: "ALTER TABLE change_request ADD COLUMN revision INTEGER DEFAULT 0" },
+  { name: 'signed_by', sql: "ALTER TABLE change_request ADD COLUMN signed_by TEXT DEFAULT ''" },
+  { name: 'signed_at', sql: "ALTER TABLE change_request ADD COLUMN signed_at TEXT" },
+  { name: 'form2_data', sql: "ALTER TABLE change_request ADD COLUMN form2_data TEXT DEFAULT ''" },
+];
+for (const col of changeRequestMigrations) {
+  try { db.prepare(`SELECT ${col.name} FROM change_request LIMIT 1`).get(); }
+  catch { try { db.exec(col.sql); } catch {} }
+}
+
+// Migration: add initial_approval_email to department
+try { db.prepare('SELECT initial_approval_email FROM department LIMIT 1').get(); }
+catch { try { db.exec("ALTER TABLE department ADD COLUMN initial_approval_email TEXT DEFAULT ''"); } catch {} }
 
 // Migration: rename statuses DRAFT → ENTWURF, ACTIVE → AKTIV
 try {
@@ -178,19 +218,19 @@ const LINE_FIELDS = `id, audit_plan_id, sort_order, subject, regulations, locati
 
 const stmts = {
   getAllCompanies: db.prepare(
-    'SELECT id, name, street, postal_code, city, created_at, updated_at FROM company ORDER BY name'
+    'SELECT id, name, street, postal_code, city, phone, fax, created_at, updated_at FROM company ORDER BY name'
   ),
   getCompany: db.prepare(
-    'SELECT id, name, street, postal_code, city, created_at, updated_at FROM company WHERE id = ?'
+    'SELECT id, name, street, postal_code, city, phone, fax, created_at, updated_at FROM company WHERE id = ?'
   ),
   getCompanyLogo: db.prepare(
     'SELECT logo FROM company WHERE id = ?'
   ),
   createCompany: db.prepare(
-    'INSERT INTO company (id, name, street, postal_code, city, logo) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT INTO company (id, name, street, postal_code, city, phone, fax, logo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ),
   updateCompany: db.prepare(
-    `UPDATE company SET name = ?, street = ?, postal_code = ?, city = ?, updated_at = datetime('now') WHERE id = ?`
+    `UPDATE company SET name = ?, street = ?, postal_code = ?, city = ?, phone = ?, fax = ?, updated_at = datetime('now') WHERE id = ?`
   ),
   updateCompanyLogo: db.prepare(
     `UPDATE company SET logo = ?, updated_at = datetime('now') WHERE id = ?`
@@ -204,19 +244,19 @@ const stmts = {
 
   // Department
   getDepartmentsByCompany: db.prepare(
-    'SELECT id, company_id, name, easa_permission_number, regulation, sort_order, authority_salutation, authority_name, authority_email, created_at, updated_at FROM department WHERE company_id = ? ORDER BY sort_order, name'
+    'SELECT id, company_id, name, easa_permission_number, regulation, sort_order, authority_salutation, authority_name, authority_email, initial_approval_email, created_at, updated_at FROM department WHERE company_id = ? ORDER BY sort_order, name'
   ),
   getDepartment: db.prepare(
-    'SELECT id, company_id, name, easa_permission_number, regulation, sort_order, authority_salutation, authority_name, authority_email, created_at, updated_at FROM department WHERE id = ?'
+    'SELECT id, company_id, name, easa_permission_number, regulation, sort_order, authority_salutation, authority_name, authority_email, initial_approval_email, created_at, updated_at FROM department WHERE id = ?'
   ),
   updateDepartmentSortOrder: db.prepare(
     `UPDATE department SET sort_order = ?, updated_at = datetime('now') WHERE id = ?`
   ),
   createDepartment: db.prepare(
-    'INSERT INTO department (id, company_id, name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO department (id, company_id, name, easa_permission_number, regulation, authority_salutation, authority_name, authority_email, initial_approval_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ),
   updateDepartment: db.prepare(
-    `UPDATE department SET name = ?, easa_permission_number = ?, regulation = ?, authority_salutation = ?, authority_name = ?, authority_email = ?, updated_at = datetime('now') WHERE id = ?`
+    `UPDATE department SET name = ?, easa_permission_number = ?, regulation = ?, authority_salutation = ?, authority_name = ?, authority_email = ?, initial_approval_email = ?, updated_at = datetime('now') WHERE id = ?`
   ),
   deleteDepartment: db.prepare(
     'DELETE FROM department WHERE id = ?'
@@ -378,8 +418,8 @@ const stmts = {
     'SELECT * FROM cap_item WHERE checklist_item_id = ?'
   ),
   createCapItem: db.prepare(
-    `INSERT INTO cap_item (id, checklist_item_id, deadline, responsible_person, root_cause, corrective_action, preventive_action, status, completion_date, evidence)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO cap_item (id, checklist_item_id, deadline, responsible_person, root_cause, corrective_action, preventive_action, status, completion_date, evidence, department_id, source, source_ref_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   updateCapItem: db.prepare(
     `UPDATE cap_item SET deadline = ?, responsible_person = ?, root_cause = ?, corrective_action = ?,
@@ -482,6 +522,18 @@ const stmts = {
      WHERE pl.audit_plan_id = ?`
   ),
 
+  // CAP items by department (all sources)
+  getCapItemsByDepartment: db.prepare(
+    `SELECT c.id, c.checklist_item_id, c.deadline, c.responsible_person, c.root_cause,
+            c.corrective_action, c.preventive_action, c.status, c.completion_date, c.evidence,
+            c.source, c.source_ref_id, c.department_id, c.created_at, c.updated_at
+     FROM cap_item c WHERE c.department_id = ?
+     ORDER BY c.deadline ASC`
+  ),
+
+  // Generic CAP creation (for non-audit modules)
+  createCapItemGeneric: null, // set below after stmts definition
+
   // CAP items due/overdue (not yet notified)
   getCapItemsDue: db.prepare(
     `SELECT c.id, c.deadline, c.responsible_person,
@@ -538,6 +590,125 @@ const stmts = {
   ),
   deleteOldLogs: db.prepare(
     "DELETE FROM audit_log WHERE created_at < datetime('now', '-1 month')"
+  ),
+
+  // ── Change Module ─────────────────────────────────────────
+  getChangeRequestsByDept: db.prepare(
+    `SELECT cr.id, cr.company_id, cr.department_id, cr.change_no, cr.title, cr.description, cr.category, cr.status, cr.priority,
+            cr.requested_by, cr.requested_date, cr.target_date, cr.implemented_date, cr.closed_date,
+            cr.change_type, cr.revision, cr.signed_by, cr.signed_at, cr.created_at, cr.updated_at,
+            (SELECT COUNT(*) FROM change_task ct WHERE ct.change_request_id = cr.id) AS task_total,
+            (SELECT COUNT(*) FROM change_task ct WHERE ct.change_request_id = cr.id AND ct.completion_date IS NOT NULL AND ct.completion_date != '') AS task_done
+     FROM change_request cr WHERE cr.department_id = ? ORDER BY cr.created_at DESC`
+  ),
+  getChangeRequest: db.prepare(
+    `SELECT * FROM change_request WHERE id = ?`
+  ),
+  getMaxChangeNo: db.prepare(
+    `SELECT COALESCE(MAX(CAST(REPLACE(change_no, 'MOC-', '') AS INTEGER)), 0) AS max_no FROM change_request WHERE department_id = ?`
+  ),
+  createChangeRequest: db.prepare(
+    `INSERT INTO change_request (id, company_id, department_id, change_no, title, description, category, status, priority, requested_by, requested_date, target_date, change_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?)`
+  ),
+  updateChangeRequest: db.prepare(
+    `UPDATE change_request SET title = ?, description = ?, category = ?, priority = ?, requested_by = ?, requested_date = ?, target_date = ?, change_type = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  updateChangeRequestStatus: db.prepare(
+    `UPDATE change_request SET status = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteChangeRequest: db.prepare(
+    'DELETE FROM change_request WHERE id = ?'
+  ),
+
+  // Change stats for home
+  getOpenChangeRequests: db.prepare(
+    `SELECT COUNT(*) AS cnt FROM change_request WHERE status NOT IN ('CLOSED', 'REJECTED')`
+  ),
+  getTotalChangeRequests: db.prepare(
+    `SELECT COUNT(*) AS cnt FROM change_request`
+  ),
+
+  // Change Tasks
+  getChangeTasksByRequest: db.prepare(
+    `SELECT id, change_request_id, sort_order, process, area, safety_note, measures,
+            responsible_person, target_date, completion_date, section_header, created_at, updated_at
+     FROM change_task WHERE change_request_id = ? ORDER BY sort_order, created_at`
+  ),
+  createChangeTask: db.prepare(
+    `INSERT INTO change_task (id, change_request_id, sort_order, process, area, safety_note, measures, responsible_person, target_date, completion_date, section_header)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateChangeTask: db.prepare(
+    `UPDATE change_task SET sort_order = ?, process = ?, area = ?, safety_note = ?, measures = ?,
+            responsible_person = ?, target_date = ?, completion_date = ?, section_header = ?,
+            updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteChangeTask: db.prepare(
+    'DELETE FROM change_task WHERE id = ?'
+  ),
+  getChangeTask: db.prepare(
+    'SELECT * FROM change_task WHERE id = ?'
+  ),
+  getChangeTaskProgress: db.prepare(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN completion_date IS NOT NULL AND completion_date != '' THEN 1 ELSE 0 END) AS done
+     FROM change_task WHERE change_request_id = ?`
+  ),
+  getMaxChangeTaskOrder: db.prepare(
+    'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM change_task WHERE change_request_id = ?'
+  ),
+
+  // Risk Analysis
+  getRiskAnalysisByRequest: db.prepare(
+    `SELECT * FROM risk_analysis WHERE change_request_id = ?`
+  ),
+  createRiskAnalysis: db.prepare(
+    `INSERT INTO risk_analysis (id, change_request_id, title, version, version_date, author, safety_manager, overall_initial, overall_residual)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateRiskAnalysis: db.prepare(
+    `UPDATE risk_analysis SET title = ?, version = ?, version_date = ?, author = ?, safety_manager = ?,
+            signed_at = ?, overall_initial = ?, overall_residual = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  getRiskAnalysis: db.prepare(
+    'SELECT * FROM risk_analysis WHERE id = ?'
+  ),
+
+  // Risk Analysis History
+  getRiskAnalysisHistory: db.prepare(
+    'SELECT * FROM risk_analysis_history WHERE risk_analysis_id = ? ORDER BY version'
+  ),
+  createRiskAnalysisHistory: db.prepare(
+    'INSERT INTO risk_analysis_history (id, risk_analysis_id, version, version_date, author, reason) VALUES (?, ?, ?, ?, ?, ?)'
+  ),
+
+  // Risk Items
+  getRiskItemsByAnalysis: db.prepare(
+    `SELECT * FROM risk_item WHERE risk_analysis_id = ? ORDER BY sort_order, created_at`
+  ),
+  createRiskItem: db.prepare(
+    `INSERT INTO risk_item (id, risk_analysis_id, sort_order, risk_type, description, consequence,
+            initial_probability, initial_severity, initial_score, initial_level,
+            responsible_person, mitigation_topic, treatment, implementation_date,
+            residual_probability, residual_severity, residual_score, residual_level, next_step)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateRiskItem: db.prepare(
+    `UPDATE risk_item SET sort_order = ?, risk_type = ?, description = ?, consequence = ?,
+            initial_probability = ?, initial_severity = ?, initial_score = ?, initial_level = ?,
+            responsible_person = ?, mitigation_topic = ?, treatment = ?, implementation_date = ?,
+            residual_probability = ?, residual_severity = ?, residual_score = ?, residual_level = ?,
+            next_step = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteRiskItem: db.prepare(
+    'DELETE FROM risk_item WHERE id = ?'
+  ),
+  getRiskItem: db.prepare(
+    'SELECT * FROM risk_item WHERE id = ?'
+  ),
+  getRiskItemCount: db.prepare(
+    'SELECT COUNT(*) AS cnt FROM risk_item WHERE risk_analysis_id = ?'
   ),
 
   // Trash
