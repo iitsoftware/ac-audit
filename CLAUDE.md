@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ac-audit is an EASA Audit Management System with audit tracking, compliance management, corrective action plans (CAP), 5-Why analysis, PDF export, and checklist import from .docx/.xlsx files.
+AC Suite is an EASA-compliant Aviation Compliance Management System with three modules: AC-Audit (audit tracking, compliance management, CAP, 5-Why), AC-Change (Management of Change, task lists, risk analysis, EASA Form 2), and Organization (company/department/personnel management).
 
 ## Tech Stack
 
@@ -15,13 +15,14 @@ ac-audit is an EASA Audit Management System with audit tracking, compliance mana
 - **CSS**: Custom CSS with auto dark/light mode (blue theme)
 - **Single process**: `npm start` runs everything
 
-## Dependencies (8 total)
+## Dependencies (9 total)
 
 - `express` — HTTP server + routing
 - `better-sqlite3` — synchronous SQLite
 - `ejs` — HTML templates
 - `uuid` — UUID generation
 - `pdfkit` — PDF generation
+- `pdf-lib` — PDF template filling (EASA Form 2)
 - `xlsx` — Excel file parsing (.xlsx import)
 - `adm-zip` — .docx/.zip extraction
 - `nodemailer` — SMTP email sending

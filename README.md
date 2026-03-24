@@ -1,6 +1,6 @@
-# AC Audit
+# AC Suite
 
-EASA Audit Management System for tracking audit plans, checklists, findings, and corrective actions.
+EASA-compliant Aviation Compliance Management System covering Audit Management, Change Management, and Risk Analysis.
 
 ## Quick Start
 
@@ -11,38 +11,56 @@ npm start
 
 Open http://localhost:8090. No build step, no external database.
 
-## Features
+## Modules
 
-- **Company & Department Management** — Organize by company with logo, address, and EASA permission numbers
-- **Persons & Roles** — Accountable Manager (company level), Compliance Monitoring Manager and Abteilungsleiter (department level) with name, email, and signature upload. Abteilungsleiter label auto-derived from department type (Part-145 → Maintenance Manager, CAMO → Leiter CAMO, Flugbetrieb → Flugbetriebsleiter)
-- **Audit Plans** — Yearly plans with revision tracking, status workflow (Entwurf / Aktiv / Archiv), and approval/submission dates
-- **Audit Plan Lines** — Subject areas with planned/performed dates, auditor team, auditee, and document references
-- **Audit Checklists** — Per-line checklists with Theoretical, Practical, and Procedure sections; evaluations (C, NA, O, L1, L2, L3)
-- **Corrective Action Plan (CAP)** — Auto-generated for findings/observations, inline detail with deadline, root cause, corrective/preventive actions, and status tracking
-- **PDF Export** — Planned audits PDF and completed audits PDF with findings summary (O/L1/L2/L3), signature table, and page numbers
-- **Email Sending** — Send audit plan PDFs via email; formal authority letters with salutation, CMM signature, and BCC to QM; regular emails with company mention
-- **Evidence Upload** — Attach images to CAP items as proof of corrective actions
-- **Import** — Import audit plans from .docx, bulk-import audit checklists from .xlsx
-- **Copy & Revision** — Create new plan revisions or copy plans as templates (subjects only, unfilled) across departments
-- **Filter & Tags** — Filter audit lines by status (open/planned/in progress/done), findings, observations, and checklist presence
-- **Tab Navigation** — Companies and departments as horizontal tab bars with three-dot menu for edit/delete; breadcrumb for deeper levels
-- **Persistent Navigation** — Tab selection, breadcrumb path, and filter settings survive page reloads via localStorage
-- **Settings Page** — Configurable SMTP email, backup schedule, CAP deadline defaults, and notification settings
-- **Automated Backup** — Scheduled SQLite backups with configurable path, weekdays, time, and rolling max count
-- **CAP Deadline Defaults** — Configurable days per evaluation level (O=180, L1=5, L2=60, L3=90), auto-calculated from audit performed date
-- **Notifications** — Email alerts to department QMs for upcoming/overdue CAP deadlines, with optional daily repeat until resolved
-- **Audit Log** — All actions logged with company/department context, viewable on dedicated log page with toggle nav button
-- **Trash (Papierkorb)** — Deleted audit plans, plan lines, and CAP items are moved to trash with full JSON snapshots (incl. BLOBs). Restore or permanently delete from the trash page. Auto-cleanup after configurable retention days (default 30)
-- **Responsive Design** — Tablet (768px) and mobile (480px) breakpoints
+### AC-Audit
+- Audit plan management (yearly plans with revision tracking, status workflow)
+- Audit checklists with evaluation (C, NA, O, L1, L2, L3)
+- Corrective Action Plans (CAP) with deadline management and notifications
+- 5-Why root cause analysis for L1/L2 findings
+- PDF export for audit plans, checklists, and CAP items
+- Authority email (formal letter to LBA Betriebsprüfer)
+- Import audit plans from .docx, checklists from .xlsx
+- Evidence upload for CAP items and checklists
+
+### AC-Change
+- Management of Change (MoC) tracking with status workflow
+- Task list (Aufgabenliste) with progress tracking and filter tags
+- Import Change Management Tracker from .xlsx (CAMO + Flugbetrieb layouts)
+- Risk analysis with ICAO 5x5 risk matrix (3-zone: red/amber/green)
+- Risk item detail view with inline editing and dual risk matrices
+- Import Risikoanalyse from .xlsx (Details + Historie sheets)
+- Automatic risk history tracking (add/delete events, QM as author)
+- EASA Form 2 PDF using official LBA templates (Part-CAMO + Part-145/CAO)
+- Risk analysis PDF export (landscape, full-width table, matrix legend, signature block)
+- Share dialog for risk analysis (download PDF, send to authority, email)
+
+### Organization
+- Company management (name, address, phone, fax, logo)
+- Department management with EASA permission numbers and regulations
+- Personnel management (Accountable Manager, QM, Abteilungsleiter)
+- Digital signature support
+- Authority contact details and initial approval email per department
+
+### Common Features
+- **Home Dashboard** — Open CAPs, overdue items, change task metrics
+- **Persistent Navigation** — Tab selection, breadcrumb path, filters survive page reloads
+- **Settings** — SMTP email, backup schedule, CAP deadline defaults, notifications
+- **Automated Backup** — Scheduled SQLite backups with configurable retention
+- **Audit Log** — All actions logged with company/department context
+- **Trash (Papierkorb)** — Soft delete with JSON snapshots, restore or permanent delete
+- **Responsive Design** — Tablet and mobile breakpoints
+- **Dark/Light Mode** — Auto via `prefers-color-scheme`
 
 ## Tech Stack
 
 - **Backend**: Node.js + Express
 - **Database**: SQLite (embedded, single file via `better-sqlite3`)
 - **Frontend**: Server-rendered EJS templates + vanilla JavaScript
+- **PDF**: PDFKit (generation) + pdf-lib (LBA template filling)
 - **CSS**: Custom CSS with auto dark/light mode (blue theme)
 
-8 dependencies. Single process. No build step.
+9 dependencies. Single process. No build step.
 
 ## Docker
 
@@ -64,50 +82,73 @@ Data is stored in `./data/` (DB + backups). To migrate an existing database, cop
 | `DATA_DIR`       | `./data`            | Database and backup directory            |
 | `BACKUP_PATH`    | `$DATA_DIR/backups` | Override backup location                 |
 
-```bash
-PORT=3000 npm start
-```
-
 ## Data Model
 
 ```
-Company
-  ├── Person (Accountable Manager — company level)
-  └── Department
-       ├── Person (Compliance Monitoring Manager, Abteilungsleiter — department level)
-       └── Audit Plan (year, revision, status)
-            └── Audit Plan Line (subject area, audit metadata)
-                 └── Audit Checklist Item (regulation ref, evaluation)
-                      └── CAP Item (corrective action, status)
-                           └── CAP Evidence File (image BLOB)
+Company (name, address, phone, fax, logo)
+  ├── Person (role: ACCOUNTABLE, QM, ABTEILUNGSLEITER)
+  └── Department (EASA permission number, regulation, authority contacts)
+       ├── AuditPlan → AuditPlanLine → ChecklistItem → CapItem → FiveWhy
+       │                             → ChecklistEvidenceFile
+       │                                              → CapEvidenceFile
+       └── ChangeRequest → ChangeTask
+                         → RiskAnalysis → RiskItem
+                                        → RiskAnalysisHistory
 ```
+
+## Risk Matrix (ICAO 5x5)
+
+| | 1 Geringfügig | 2 Gering | 3 Bedeutend | 4 Gefährlich | 5 Katastrophal |
+|---|---|---|---|---|---|
+| **5 Häufig** | 5 | 10 | 15 | 20 | 25 |
+| **4 Gelegentlich** | 4 | 8 | 12 | 16 | 20 |
+| **3 Gering** | 3 | 6 | 9 | 12 | 15 |
+| **2 Unwahrscheinlich** | 2 | 4 | 6 | 8 | 10 |
+| **1 Extrem unwahrsch.** | 1 | 2 | 3 | 4 | 5 |
+
+- **1-3** Gering oder kein Risiko (green)
+- **4-10** Akzeptabel (amber)
+- **12-25** Nicht akzeptabel (red)
+
+## EASA Form 2 Templates
+
+Official LBA PDF templates filled via `pdf-lib`:
+- `public/templates/EASA_Form_2_CAMO.pdf` — Part-CAMO (Rev. 11)
+- `public/templates/EASA_Form_2_Part145.pdf` — Part-145 / Part-CAO
+
+Form fields, checkboxes, and radio buttons are filled programmatically. Template selection based on department type.
 
 ## Project Structure
 
 ```
 ac-audit/
-├── server.js         # Express app, all routes and API endpoints
-├── db.js             # SQLite setup, migrations, prepared statements
-├── schema.sql        # Database schema (13 tables)
+├── server.js              # Express app, all routes, PDF rendering, import parsing
+├── db.js                  # SQLite setup, migrations, prepared statements
+├── schema.sql             # Database schema
 ├── package.json
-├── Dockerfile        # Docker image (node:20-alpine)
+├── Dockerfile
 ├── docker-compose.yml
-├── public/           # Static files
-│   ├── style.css     # Custom CSS (blue theme, dark/light auto)
-│   ├── app.js        # Shared utilities (fetchJSON, escapeHtml, toast, nav toggles, trash badge)
-│   ├── companies.js  # Main page logic (navigation, CRUD, filters)
-│   ├── home.js       # Home dashboard logic
-│   ├── settings.js   # Settings page logic (SMTP, backup, deadlines, notifications)
-│   ├── trash.js      # Trash page logic (restore, delete, empty)
-│   └── logs.js       # Audit log page logic (pagination)
-├── views/            # EJS templates
-│   ├── layout.ejs    # Base HTML shell (nav, CSS, scripts)
-│   ├── companies.ejs # Companies page (tab bars + drill-down detail)
-│   ├── home.ejs      # Home dashboard
-│   ├── settings.ejs  # Settings page (tile grid)
-│   ├── trash.ejs     # Trash page (restore/delete table)
-│   └── logs.ejs      # Audit log page
-└── data/             # SQLite database file (auto-created, gitignored)
-    ├── acaudit.db
-    └── backups/      # Automatic backups
+├── public/
+│   ├── style.css          # Custom CSS (blue theme, dark/light auto)
+│   ├── app.js             # Shared utilities (fetchJSON, escapeHtml, toast, nav)
+│   ├── companies.js       # AC-Audit frontend logic
+│   ├── change.js          # AC-Change frontend logic
+│   ├── organization.js    # Organization management frontend
+│   ├── risk-matrix.js     # Interactive 5x5 risk matrix widget
+│   ├── home.js            # Home dashboard
+│   ├── settings.js        # Settings page
+│   ├── trash.js           # Trash page
+│   ├── logs.js            # Audit log page
+│   └── templates/         # LBA PDF templates (EASA Form 2)
+├── views/
+│   ├── layout.ejs         # Base HTML shell
+│   ├── companies.ejs      # AC-Audit page
+│   ├── change.ejs         # AC-Change page
+│   ├── organization.ejs   # Organization page
+│   ├── home.ejs           # Home dashboard
+│   ├── settings.ejs       # Settings page
+│   ├── trash.ejs          # Trash page
+│   ├── logs.ejs           # Audit log page
+│   └── login.ejs          # Login form
+└── data/                  # SQLite DB + backups (gitignored)
 ```
