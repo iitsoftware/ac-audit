@@ -1,7 +1,7 @@
 services:
-  ac-audit:
-    image: ac-audit
-    container_name: ac-audit
+  ac-suite:
+    image: ac-suite
+    container_name: ac-suite
     restart: unless-stopped
     ports:
       - "8090:8090"
