@@ -11,7 +11,7 @@ AC Suite is an EASA-compliant Aviation Compliance Management System with three m
 - **Backend**: Node.js + Express
 - **Database**: SQLite via `better-sqlite3` (embedded, single file)
 - **Frontend**: Server-rendered EJS templates + vanilla JS
-- **PDF**: PDFKit for PDF generation
+- **PDF**: PDFKit for PDF generation, pdf-lib for LBA template filling
 - **CSS**: Custom CSS with auto dark/light mode (blue theme)
 - **Single process**: `npm start` runs everything
 
@@ -238,4 +238,18 @@ Company (id, name, street, postal_code, city, logo BLOB)
 
 ## Database Tables
 
-company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log, trash_item
+company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log, trash_item, change_request, change_task, risk_analysis, risk_analysis_history, risk_item
+
+## Email Routing
+
+- AC-Audit emails use `smtp_*` settings (from: ac-audit@...), title: "Compliance Monitoring Manager"
+- AC-Change emails use `change_smtp_*` settings (from: ac-change@...), title: "Safety Manager"
+- All outgoing emails set `replyTo` to the QM email of the department
+- Settings split into tabs: Global (backup), AC-Audit (CAP, notifications, SMTP), AC-Change (SMTP)
+
+## EASA Form 2 Templates
+
+- `public/templates/EASA_Form_2_CAMO.pdf` — LBA Part-CAMO template, filled via pdf-lib form fields
+- `public/templates/EASA_Form_2_Part145.pdf` — LBA Part-145/CAO template, filled via pdf-lib form fields
+- Template selection based on department name/regulation (CAMO vs 145/CAO)
+- Form data persisted in `change_request.form2_data` (JSON)

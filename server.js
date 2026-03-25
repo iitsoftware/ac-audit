@@ -98,6 +98,34 @@ function logAction(action, entityType, entityId, entityName, details = '', compa
   try { stmts.insertLog.run(action, entityType, entityId || '', entityName || '', companyName, departmentName, details); } catch {}
 }
 
+// ── Email helper: create transporter per module ─────────────
+function getSmtpConfig(module) {
+  const rows = stmts.getAllSettings.all();
+  const s = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+  const prefix = module === 'change' ? 'change_' : '';
+  const host = s[prefix + 'smtp_host'];
+  const port = parseInt(s[prefix + 'smtp_port']) || 587;
+  const user = s[prefix + 'smtp_user'];
+  const pass = s[prefix + 'smtp_pass'];
+  const auth = s[prefix + 'smtp_auth'] !== 'false';
+  if (!host || !user) return null;
+  return { host, port, user, pass, auth };
+}
+
+function createTransporter(smtpConfig) {
+  const nodemailer = require('nodemailer');
+  return nodemailer.createTransport({
+    host: smtpConfig.host, port: smtpConfig.port, secure: smtpConfig.port === 465,
+    auth: smtpConfig.auth ? { user: smtpConfig.user, pass: smtpConfig.pass } : undefined,
+  });
+}
+
+function getQmReplyTo(personsAll, deptId) {
+  const qm = personsAll.find(p => p.role === 'QM' && p.department_id === deptId);
+  return qm && qm.email ? qm.email : undefined;
+}
+
 // Clean old log entries
 stmts.deleteOldLogs.run();
 setInterval(() => { try { stmts.deleteOldLogs.run(); } catch {} }, 24 * 60 * 60 * 1000);
@@ -372,37 +400,19 @@ app.put('/api/settings', (req, res) => {
 });
 
 app.post('/api/settings/test-email', (req, res) => {
-  const { to } = req.body;
+  const { to, module } = req.body;
   if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
-
-  const nodemailer = require('nodemailer');
-  const rows = stmts.getAllSettings.all();
-  const s = {};
-  rows.forEach(r => { s[r.key] = r.value; });
-
-  const host = s.smtp_host;
-  const port = parseInt(s.smtp_port) || 587;
-  const user = s.smtp_user;
-  const pass = s.smtp_pass;
-  const auth = s.smtp_auth !== 'false';
-
-  if (!host || !user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: auth ? { user, pass } : undefined,
-  });
-
+  const smtp = getSmtpConfig(module || 'audit');
+  if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+  const transporter = createTransporter(smtp);
+  const label = module === 'change' ? 'AC-Change' : 'AC-Audit';
   transporter.sendMail({
-    from: user,
-    to,
-    subject: 'AC Audit – Test E-Mail',
-    text: 'Diese E-Mail wurde als Test aus AC Audit gesendet.',
+    from: smtp.user, to,
+    subject: `${label} – Test E-Mail`,
+    text: `Diese E-Mail wurde als Test aus ${label} gesendet.`,
   }, (err) => {
     if (err) return res.status(500).json({ error: err.message });
-    logAction('Test-E-Mail gesendet', 'settings', '', '', to);
+    logAction('Test-E-Mail gesendet', 'settings', '', '', `${to} (${label})`);
     res.json({ ok: true });
   });
 });
@@ -412,10 +422,8 @@ app.post('/api/settings/notify-test', async (req, res) => {
     const { to } = req.body;
     if (!to) return res.status(400).json({ error: 'Test E-Mail-Adresse erforderlich' });
 
-    const rows2 = stmts.getAllSettings.all();
-    const s2 = {};
-    rows2.forEach(r => { s2[r.key] = r.value; });
-    if (!s2.smtp_host || !s2.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+    const smtpCheck = getSmtpConfig('audit');
+    if (!smtpCheck) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Audit) unvollständig' });
 
     const cfg = getNotifySettings();
     // For test: include ALL due items (also already notified)
@@ -439,23 +447,16 @@ app.post('/api/settings/notify-test', async (req, res) => {
     ).all(cfg.daysBefore);
     if (items.length === 0) return res.status(400).json({ error: 'Keine fälligen oder überfälligen CAPs gefunden' });
 
-    const nodemailer = require('nodemailer');
-    const host = s2.smtp_host;
-    const port = parseInt(s2.smtp_port) || 587;
-    const auth = s2.smtp_auth !== 'false';
-    const transporter = nodemailer.createTransport({
-      host, port, secure: port === 465,
-      auth: auth ? { user: s2.smtp_user, pass: s2.smtp_pass } : undefined,
-    });
+    const smtp = getSmtpConfig('audit');
+    if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+    const transporter = createTransporter(smtp);
 
     const overdue = items.filter(i => i.deadline < new Date().toISOString().slice(0, 10));
     const upcoming = items.filter(i => i.deadline >= new Date().toISOString().slice(0, 10));
     const subject = `AC Audit [TEST] – ${overdue.length} überfällig, ${upcoming.length} bald fällig`;
 
     await transporter.sendMail({
-      from: s2.smtp_user,
-      to,
-      subject,
+      from: smtp.user, to, subject,
       html: buildNotifyHtml(items),
     });
 
@@ -693,23 +694,9 @@ async function sendNotification() {
     : stmts.getCapItemsDue.all(cfg.daysBefore);
   if (items.length === 0) return;
 
-  const nodemailer = require('nodemailer');
-  const rows = stmts.getAllSettings.all();
-  const s = {};
-  rows.forEach(r => { s[r.key] = r.value; });
-
-  const host = s.smtp_host;
-  const port = parseInt(s.smtp_port) || 587;
-  const user = s.smtp_user;
-  const pass = s.smtp_pass;
-  const auth = s.smtp_auth !== 'false';
-
-  if (!host || !user) return;
-
-  const transporter = nodemailer.createTransport({
-    host, port, secure: port === 465,
-    auth: auth ? { user, pass } : undefined,
-  });
+  const smtp = getSmtpConfig('audit');
+  if (!smtp) return;
+  const transporter = createTransporter(smtp);
 
   // Group items by department and send to each QM
   const byDept = {};
@@ -731,9 +718,7 @@ async function sendNotification() {
     const subject = `AC Audit – ${overdue.length} überfällig, ${upcoming.length} bald fällig (${deptItems[0].department_name})`;
 
     await transporter.sendMail({
-      from: user,
-      to: qm.email,
-      subject,
+      from: smtp.user, to: qm.email, replyTo: qm.email, subject,
       html: buildNotifyHtml(deptItems),
     });
 
@@ -1765,42 +1750,29 @@ app.post('/api/cap-items/send-email', async (req, res) => {
   try {
     const { buffer, dept, company } = await generateCapItemsPdfBuffer(ids);
 
-    const nodemailer = require('nodemailer');
-    const rows = stmts.getAllSettings.all();
-    const s = {};
-    rows.forEach(r => { s[r.key] = r.value; });
-    if (!s.smtp_host || !s.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
-
-    const port = parseInt(s.smtp_port) || 587;
-    const auth = s.smtp_auth !== 'false';
-    const transporter = nodemailer.createTransport({
-      host: s.smtp_host, port, secure: port === 465,
-      auth: auth ? { user: s.smtp_user, pass: s.smtp_pass } : undefined,
-    });
+    const smtp = getSmtpConfig('audit');
+    if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Audit) unvollständig' });
+    const transporter = createTransporter(smtp);
 
     const filename = `Corrective_Actions.pdf`;
     const personsAll = stmts.getPersonsByCompany.all(company.id);
     const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+    const replyTo = qm && qm.email ? qm.email : undefined;
 
+    const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     let subject, text, bcc;
     if (authority) {
       const salutation = dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
-      const qmName = qm ? `${qm.first_name} ${qm.last_name}` : '';
-      const qmTitle = qm ? 'Compliance Monitoring Manager' : '';
 
       subject = `Corrective Action Plan – ${company.name} (${dept.name})`;
-      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Corrective Action Plan der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}${qmTitle ? '\n' + qmTitle : ''}\n${company.name}\n\n`;
+      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Corrective Action Plan der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
       if (qm && qm.email) bcc = qm.email;
     } else {
       subject = `Corrective Action Plan (${dept.name})`;
-      text = `Hallo,\n\nanbei der Corrective Action Plan für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${company.name}\n\n`;
+      text = `Hallo,\n\nanbei der Corrective Action Plan für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
     }
 
-    const mailOpts = {
-      from: s.smtp_user,
-      to, subject, text,
-      attachments: [{ filename, content: buffer, contentType: 'application/pdf' }],
-    };
+    const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
     if (bcc) mailOpts.bcc = bcc;
     await transporter.sendMail(mailOpts);
 
@@ -2017,18 +1989,9 @@ app.post('/api/audit-plans/:id/send-email', async (req, res) => {
     const filter = type === 'open' ? 'planned' : undefined;
     const { buffer, plan, dept, company } = await generateAuditPlanPdfBuffer(req.params.id, type, filter);
 
-    const nodemailer = require('nodemailer');
-    const rows = stmts.getAllSettings.all();
-    const s = {};
-    rows.forEach(r => { s[r.key] = r.value; });
-    if (!s.smtp_host || !s.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
-
-    const port = parseInt(s.smtp_port) || 587;
-    const auth = s.smtp_auth !== 'false';
-    const transporter = nodemailer.createTransport({
-      host: s.smtp_host, port, secure: port === 465,
-      auth: auth ? { user: s.smtp_user, pass: s.smtp_pass } : undefined,
-    });
+    const smtp = getSmtpConfig('audit');
+    if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Audit) unvollständig' });
+    const transporter = createTransporter(smtp);
 
     const isClosed = type === 'closed';
     const suffix = isClosed ? 'Durchgeführte' : 'Geplante';
@@ -2036,29 +1999,21 @@ app.post('/api/audit-plans/:id/send-email', async (req, res) => {
 
     const personsAll = stmts.getPersonsByCompany.all(company.id);
     const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+    const replyTo = qm && qm.email ? qm.email : undefined;
 
+    const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     let subject, text, bcc;
     if (authority) {
-      // Formal letter to authority
       const salutation = dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
-      const qmName = qm ? `${qm.first_name} ${qm.last_name}` : '';
-      const qmTitle = qm ? 'Compliance Monitoring Manager' : '';
-
       subject = `Auditplan ${plan.year} – ${suffix} Audits – ${company.name} (${dept.name})`;
-      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Auditplan ${plan.year} – ${suffix} Audits der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}${qmTitle ? '\n' + qmTitle : ''}\n${company.name}\n\n`;
-      // BCC the QM
+      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Auditplan ${plan.year} – ${suffix} Audits der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
       if (qm && qm.email) bcc = qm.email;
     } else {
-      // Regular email
       subject = `Auditplan ${plan.year} – ${suffix} Audits (${dept.name})`;
-      text = `Hallo,\n\nanbei der Auditplan ${plan.year} – ${suffix} Audits für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${company.name}\n\n`;
+      text = `Hallo,\n\nanbei der Auditplan ${plan.year} – ${suffix} Audits für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
     }
 
-    const mailOpts = {
-      from: s.smtp_user,
-      to, subject, text,
-      attachments: [{ filename, content: buffer, contentType: 'application/pdf' }],
-    };
+    const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
     if (bcc) mailOpts.bcc = bcc;
     await transporter.sendMail(mailOpts);
 
@@ -3902,30 +3857,24 @@ app.post('/api/risk-analysis/:id/send-email', async (req, res) => {
     });
 
     const filename = `Risikoanalyse_${cr ? cr.change_no : 'RA'}.pdf`;
-    const nodemailer = require('nodemailer');
-    const rows = stmts.getAllSettings.all();
-    const s = {}; rows.forEach(r => { s[r.key] = r.value; });
-    if (!s.smtp_host || !s.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
-
-    const port = parseInt(s.smtp_port) || 587;
-    const transporter = nodemailer.createTransport({
-      host: s.smtp_host, port, secure: port === 465,
-      auth: s.smtp_auth !== 'false' ? { user: s.smtp_user, pass: s.smtp_pass } : undefined,
-    });
+    const smtp = getSmtpConfig('change');
+    if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Change) unvollständig' });
+    const transporter = createTransporter(smtp);
+    const replyTo = qm && qm.email ? qm.email : undefined;
 
     const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     let subject, text, bcc;
     if (authority) {
       const sal = dept && dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
       subject = `Risikoanalyse – ${cr ? cr.change_no : ''} – ${company ? company.name : ''} (${dept ? dept.name : ''})`;
-      text = `${sal.trim()},\n\nanbei übersenden wir Ihnen die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}${qm ? '\nCompliance Monitoring Manager' : ''}\n${company ? company.name : ''}\n\n`;
+      text = `${sal.trim()},\n\nanbei übersenden wir Ihnen die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nSafety Manager\n${company ? company.name : ''}\n\n`;
       if (qm && qm.email) bcc = qm.email;
     } else {
       subject = `Risikoanalyse – ${cr ? cr.change_no : ''} (${dept ? dept.name : ''})`;
-      text = `Hallo,\n\nanbei die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${company ? company.name : ''}\n\n`;
+      text = `Hallo,\n\nanbei die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nSafety Manager\n${company ? company.name : ''}\n\n`;
     }
 
-    const mailOpts = { from: s.smtp_user, to, subject, text, attachments: [{ filename, content: pdfBuffer, contentType: 'application/pdf' }] };
+    const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: pdfBuffer, contentType: 'application/pdf' }] };
     if (bcc) mailOpts.bcc = bcc;
     await transporter.sendMail(mailOpts);
 
@@ -4157,27 +4106,16 @@ app.post('/api/change-requests/:id/send-email', async (req, res) => {
       const buffer = await generateEasaForm2Buffer({ cr, dept, company, accountable, qm, formData });
       const filename = `EASA_Form2_${cr.change_no}.pdf`;
 
-      const nodemailer = require('nodemailer');
-      const rows = stmts.getAllSettings.all();
-      const s = {};
-      rows.forEach(r => { s[r.key] = r.value; });
-      if (!s.smtp_host || !s.smtp_user) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
+      const smtp = getSmtpConfig('change');
+      if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Change) unvollständig' });
+      const transporter = createTransporter(smtp);
+      const replyTo = qm && qm.email ? qm.email : undefined;
 
-      const port = parseInt(s.smtp_port) || 587;
-      const auth = s.smtp_auth !== 'false';
-      const transporter = nodemailer.createTransport({
-        host: s.smtp_host, port, secure: port === 465,
-        auth: auth ? { user: s.smtp_user, pass: s.smtp_pass } : undefined,
-      });
-
+      const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
       const subject = `EASA Form 2 – ${cr.change_no} – ${company.name} (${dept.name})`;
-      const text = `Sehr geehrte Damen und Herren,\n\nanbei übersenden wir Ihnen den Antrag EASA Form 2 für ${cr.change_no} – ${cr.title}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${company.name}\n\n`;
+      const text = `Sehr geehrte Damen und Herren,\n\nanbei übersenden wir Ihnen den Antrag EASA Form 2 für ${cr.change_no} – ${cr.title}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nSafety Manager\n${company.name}\n\n`;
 
-      const mailOpts = {
-        from: s.smtp_user,
-        to, subject, text,
-        attachments: [{ filename, content: buffer, contentType: 'application/pdf' }],
-      };
+      const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
       if (qm && qm.email) mailOpts.bcc = qm.email;
       await transporter.sendMail(mailOpts);
 

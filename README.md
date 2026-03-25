@@ -45,7 +45,8 @@ Open http://localhost:8090. No build step, no external database.
 ### Common Features
 - **Home Dashboard** — Open CAPs, overdue items, change task metrics
 - **Persistent Navigation** — Tab selection, breadcrumb path, filters survive page reloads
-- **Settings** — SMTP email, backup schedule, CAP deadline defaults, notifications
+- **Settings** — Tabbed: Global (backup), AC-Audit (CAP deadlines, notifications, SMTP), AC-Change (SMTP)
+- **Email Routing** — AC-Audit sends from ac-audit@..., AC-Change from ac-change@..., replyTo = QM
 - **Automated Backup** — Scheduled SQLite backups with configurable retention
 - **Audit Log** — All actions logged with company/department context
 - **Trash (Papierkorb)** — Soft delete with JSON snapshots, restore or permanent delete

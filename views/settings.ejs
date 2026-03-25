@@ -1,154 +1,227 @@
 <div class="settings-page">
   <h1>Einstellungen</h1>
 
-  <div class="settings-grid">
-    <div class="settings-tile">
-      <h2>CAP Fristen</h2>
-      <div class="settings-form" id="cap-deadline-form">
-        <p style="font-size:13px;color:var(--muted);margin:0 0 12px">Tage ab Durchführungsdatum des Audits</p>
-        <div class="form-group">
-          <label for="cap-deadline-O">Observation (O)</label>
-          <input type="number" id="cap-deadline-O" value="180" min="1" style="width:120px">
-        </div>
-        <div class="form-group">
-          <label for="cap-deadline-L1">Level 1 (L1)</label>
-          <input type="number" id="cap-deadline-L1" value="5" min="1" style="width:120px">
-        </div>
-        <div class="form-group">
-          <label for="cap-deadline-L2">Level 2 (L2)</label>
-          <input type="number" id="cap-deadline-L2" value="60" min="1" style="width:120px">
-        </div>
-        <div class="form-group">
-          <label for="cap-deadline-L3">Level 3 (L3)</label>
-          <input type="number" id="cap-deadline-L3" value="90" min="1" style="width:120px">
-        </div>
-      </div>
-      <div class="settings-test-mail">
-        <button class="btn btn-secondary" id="cap-recalc">Alle anpassen</button>
-      </div>
-    </div>
-    <div class="settings-tile">
-      <h2>Benachrichtigungen</h2>
-      <p style="font-size:13px;color:var(--muted);margin:0 0 12px">E-Mail an den QM der jeweiligen Abteilung</p>
-      <div class="settings-form" id="notify-form">
-        <div class="form-group">
-          <label for="notify-enabled">Aktiviert</label>
-          <select id="notify-enabled">
-            <option value="false">Nein</option>
-            <option value="true">Ja</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="notify-repeat">Wiederholen bis Erledigt</label>
-          <select id="notify-repeat">
-            <option value="false">Nein</option>
-            <option value="true">Ja</option>
-          </select>
-        </div>
-        <div class="form-row">
+  <div class="settings-tabs">
+    <button class="settings-tab active" data-tab="global">Global</button>
+    <button class="settings-tab" data-tab="audit">AC-Audit</button>
+    <button class="settings-tab" data-tab="change">AC-Change</button>
+  </div>
+
+  <!-- Global -->
+  <div class="settings-tab-content active" id="tab-global">
+    <div class="settings-grid">
+      <div class="settings-tile">
+        <h2>Backup</h2>
+        <div class="settings-form" id="backup-form">
           <div class="form-group">
-            <label for="notify-days-before">Tage vor Fälligkeit</label>
-            <input type="number" id="notify-days-before" value="7" min="1" style="width:120px">
+            <label for="backup-path">Backup-Pfad</label>
+            <input type="text" id="backup-path" placeholder="/backups/acaudit">
           </div>
           <div class="form-group">
-            <label for="notify-time">Uhrzeit</label>
-            <input type="time" id="notify-time" value="08:00" style="width:120px">
+            <label>Wochentage</label>
+            <div class="backup-days">
+              <label class="day-check"><input type="checkbox" value="mo" class="backup-day"> Mo</label>
+              <label class="day-check"><input type="checkbox" value="tu" class="backup-day"> Di</label>
+              <label class="day-check"><input type="checkbox" value="we" class="backup-day"> Mi</label>
+              <label class="day-check"><input type="checkbox" value="th" class="backup-day"> Do</label>
+              <label class="day-check"><input type="checkbox" value="fr" class="backup-day"> Fr</label>
+              <label class="day-check"><input type="checkbox" value="sa" class="backup-day"> Sa</label>
+              <label class="day-check"><input type="checkbox" value="su" class="backup-day"> So</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="backup-time">Uhrzeit</label>
+            <input type="time" id="backup-time" value="02:00" style="width:120px">
+          </div>
+          <div class="form-group">
+            <label for="backup-max">Max. Backups</label>
+            <input type="number" id="backup-max" value="10" min="1" style="width:120px">
           </div>
         </div>
-        <div class="form-group">
-          <label>Wochentage</label>
-          <div class="backup-days">
-            <label class="day-check"><input type="checkbox" value="mo" class="notify-day"> Mo</label>
-            <label class="day-check"><input type="checkbox" value="tu" class="notify-day"> Di</label>
-            <label class="day-check"><input type="checkbox" value="we" class="notify-day"> Mi</label>
-            <label class="day-check"><input type="checkbox" value="th" class="notify-day"> Do</label>
-            <label class="day-check"><input type="checkbox" value="fr" class="notify-day"> Fr</label>
-            <label class="day-check"><input type="checkbox" value="sa" class="notify-day"> Sa</label>
-            <label class="day-check"><input type="checkbox" value="su" class="notify-day"> So</label>
-          </div>
+        <div class="settings-test-mail">
+          <button class="btn btn-secondary" id="backup-now">Jetzt sichern</button>
         </div>
-      </div>
-      <div class="settings-test-mail">
-        <div class="form-group">
-          <label for="notify-test-email">Test E-Mail senden an</label>
-          <input type="email" id="notify-test-email" placeholder="empfaenger@example.com">
+        <div id="backup-list-section" style="margin-top:16px;display:none">
+          <h3 style="font-size:14px;margin:0 0 8px">Vorhandene Backups</h3>
+          <div id="backup-list" class="backup-list"></div>
         </div>
-        <button class="btn btn-secondary" id="notify-test" disabled>Test senden</button>
       </div>
     </div>
-    <div class="settings-tile">
-      <h2>E-Mail (SMTP)</h2>
-      <div class="settings-form" id="smtp-form">
-        <div class="form-group">
-          <label for="smtp-user">Benutzername</label>
-          <input type="text" id="smtp-user" placeholder="user@example.com">
-        </div>
-        <div class="form-group">
-          <label for="smtp-pass">Passwort</label>
-          <input type="password" id="smtp-pass" placeholder="Passwort">
-        </div>
-        <div class="form-group">
-          <label for="smtp-host">SMTP-Server</label>
-          <input type="text" id="smtp-host" placeholder="smtp.example.com">
-        </div>
-        <div class="form-group">
-          <label for="smtp-port">Port</label>
-          <input type="number" id="smtp-port" placeholder="587" style="width:120px">
-        </div>
-        <div class="form-group">
-          <label for="smtp-auth">Authentication</label>
-          <select id="smtp-auth">
-            <option value="true">Ja</option>
-            <option value="false">Nein</option>
-          </select>
-        </div>
-        </div>
+  </div>
 
-      <div class="settings-test-mail">
-        <div class="form-group">
-          <label for="test-email-to">Test E-Mail senden an</label>
-          <input type="email" id="test-email-to" placeholder="empfaenger@example.com">
-        </div>
-        <button class="btn btn-secondary" id="test-email-send" disabled>Test senden</button>
-      </div>
-    </div>
-    <div class="settings-tile">
-      <h2>Backup</h2>
-      <div class="settings-form" id="backup-form">
-        <div class="form-group">
-          <label for="backup-path">Backup-Pfad</label>
-          <input type="text" id="backup-path" placeholder="/backups/acaudit">
-        </div>
-        <div class="form-group">
-          <label>Wochentage</label>
-          <div class="backup-days">
-            <label class="day-check"><input type="checkbox" value="mo" class="backup-day"> Mo</label>
-            <label class="day-check"><input type="checkbox" value="tu" class="backup-day"> Di</label>
-            <label class="day-check"><input type="checkbox" value="we" class="backup-day"> Mi</label>
-            <label class="day-check"><input type="checkbox" value="th" class="backup-day"> Do</label>
-            <label class="day-check"><input type="checkbox" value="fr" class="backup-day"> Fr</label>
-            <label class="day-check"><input type="checkbox" value="sa" class="backup-day"> Sa</label>
-            <label class="day-check"><input type="checkbox" value="su" class="backup-day"> So</label>
+  <!-- AC-Audit -->
+  <div class="settings-tab-content" id="tab-audit">
+    <div class="settings-grid">
+      <div class="settings-tile">
+        <h2>CAP Fristen</h2>
+        <div class="settings-form" id="cap-deadline-form">
+          <p style="font-size:13px;color:var(--muted);margin:0 0 12px">Tage ab Durchf&uuml;hrungsdatum des Audits</p>
+          <div class="form-group">
+            <label for="cap-deadline-O">Observation (O)</label>
+            <input type="number" id="cap-deadline-O" value="180" min="1" style="width:120px">
+          </div>
+          <div class="form-group">
+            <label for="cap-deadline-L1">Level 1 (L1)</label>
+            <input type="number" id="cap-deadline-L1" value="5" min="1" style="width:120px">
+          </div>
+          <div class="form-group">
+            <label for="cap-deadline-L2">Level 2 (L2)</label>
+            <input type="number" id="cap-deadline-L2" value="60" min="1" style="width:120px">
+          </div>
+          <div class="form-group">
+            <label for="cap-deadline-L3">Level 3 (L3)</label>
+            <input type="number" id="cap-deadline-L3" value="90" min="1" style="width:120px">
           </div>
         </div>
-        <div class="form-group">
-          <label for="backup-time">Uhrzeit</label>
-          <input type="time" id="backup-time" value="02:00" style="width:120px">
-        </div>
-        <div class="form-group">
-          <label for="backup-max">Max. Backups</label>
-          <input type="number" id="backup-max" value="10" min="1" style="width:120px">
+        <div class="settings-test-mail">
+          <button class="btn btn-secondary" id="cap-recalc">Alle anpassen</button>
         </div>
       </div>
-
-      <div class="settings-test-mail">
-        <button class="btn btn-secondary" id="backup-now">Jetzt sichern</button>
+      <div class="settings-tile">
+        <h2>Benachrichtigungen</h2>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 12px">E-Mail an den QM der jeweiligen Abteilung</p>
+        <div class="settings-form" id="notify-form">
+          <div class="form-group">
+            <label for="notify-enabled">Aktiviert</label>
+            <select id="notify-enabled">
+              <option value="false">Nein</option>
+              <option value="true">Ja</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="notify-repeat">Wiederholen bis Erledigt</label>
+            <select id="notify-repeat">
+              <option value="false">Nein</option>
+              <option value="true">Ja</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="notify-days-before">Tage vor F&auml;lligkeit</label>
+              <input type="number" id="notify-days-before" value="7" min="1" style="width:120px">
+            </div>
+            <div class="form-group">
+              <label for="notify-time">Uhrzeit</label>
+              <input type="time" id="notify-time" value="08:00" style="width:120px">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Wochentage</label>
+            <div class="backup-days">
+              <label class="day-check"><input type="checkbox" value="mo" class="notify-day"> Mo</label>
+              <label class="day-check"><input type="checkbox" value="tu" class="notify-day"> Di</label>
+              <label class="day-check"><input type="checkbox" value="we" class="notify-day"> Mi</label>
+              <label class="day-check"><input type="checkbox" value="th" class="notify-day"> Do</label>
+              <label class="day-check"><input type="checkbox" value="fr" class="notify-day"> Fr</label>
+              <label class="day-check"><input type="checkbox" value="sa" class="notify-day"> Sa</label>
+              <label class="day-check"><input type="checkbox" value="su" class="notify-day"> So</label>
+            </div>
+          </div>
+        </div>
+        <div class="settings-test-mail">
+          <div class="form-group">
+            <label for="notify-test-email">Test E-Mail senden an</label>
+            <input type="email" id="notify-test-email" placeholder="empfaenger@example.com">
+          </div>
+          <button class="btn btn-secondary" id="notify-test" disabled>Test senden</button>
+        </div>
       </div>
+      <div class="settings-tile">
+        <h2>E-Mail (SMTP)</h2>
+        <div class="settings-form" id="smtp-form">
+          <div class="form-group">
+            <label for="smtp-user">Absender / Benutzername</label>
+            <input type="text" id="smtp-user" placeholder="ac-audit@aeroconsult.de">
+          </div>
+          <div class="form-group">
+            <label for="smtp-pass">Passwort</label>
+            <input type="password" id="smtp-pass" placeholder="Passwort">
+          </div>
+          <div class="form-group">
+            <label for="smtp-host">SMTP-Server</label>
+            <input type="text" id="smtp-host" placeholder="smtp.example.com">
+          </div>
+          <div class="form-group">
+            <label for="smtp-port">Port</label>
+            <input type="number" id="smtp-port" placeholder="587" style="width:120px">
+          </div>
+          <div class="form-group">
+            <label for="smtp-auth">Authentication</label>
+            <select id="smtp-auth">
+              <option value="true">Ja</option>
+              <option value="false">Nein</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-test-mail">
+          <div class="form-group">
+            <label for="test-email-to">Test E-Mail senden an</label>
+            <input type="email" id="test-email-to" placeholder="empfaenger@example.com">
+          </div>
+          <button class="btn btn-secondary" id="test-email-send" disabled>Test senden</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-      <div id="backup-list-section" style="margin-top:16px;display:none">
-        <h3 style="font-size:14px;margin:0 0 8px">Vorhandene Backups</h3>
-        <div id="backup-list" class="backup-list"></div>
+  <!-- AC-Change -->
+  <div class="settings-tab-content" id="tab-change">
+    <div class="settings-grid">
+      <div class="settings-tile">
+        <h2>E-Mail (SMTP)</h2>
+        <div class="settings-form" id="change-smtp-form">
+          <div class="form-group">
+            <label for="change-smtp-user">Absender / Benutzername</label>
+            <input type="text" id="change-smtp-user" placeholder="ac-change@aeroconsult.de">
+          </div>
+          <div class="form-group">
+            <label for="change-smtp-pass">Passwort</label>
+            <input type="password" id="change-smtp-pass" placeholder="Passwort">
+          </div>
+          <div class="form-group">
+            <label for="change-smtp-host">SMTP-Server</label>
+            <input type="text" id="change-smtp-host" placeholder="smtp.example.com">
+          </div>
+          <div class="form-group">
+            <label for="change-smtp-port">Port</label>
+            <input type="number" id="change-smtp-port" placeholder="587" style="width:120px">
+          </div>
+          <div class="form-group">
+            <label for="change-smtp-auth">Authentication</label>
+            <select id="change-smtp-auth">
+              <option value="true">Ja</option>
+              <option value="false">Nein</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-test-mail">
+          <div class="form-group">
+            <label for="change-test-email-to">Test E-Mail senden an</label>
+            <input type="email" id="change-test-email-to" placeholder="empfaenger@example.com">
+          </div>
+          <button class="btn btn-secondary" id="change-test-email-send" disabled>Test senden</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+<script>
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      try { localStorage.setItem('settings-tab', tab.dataset.tab); } catch {}
+    });
+  });
+  // Restore last tab
+  try {
+    const saved = localStorage.getItem('settings-tab');
+    if (saved) {
+      const tab = document.querySelector('.settings-tab[data-tab="' + saved + '"]');
+      if (tab) tab.click();
+    }
+  } catch {}
+</script>
