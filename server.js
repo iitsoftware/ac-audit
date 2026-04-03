@@ -1194,7 +1194,17 @@ app.post('/api/departments/:departmentId/import-audit-plan',
 app.get('/api/audit-plans/:auditPlanId/lines', (req, res) => {
   const plan = stmts.getAuditPlan.get(req.params.auditPlanId);
   if (!plan) return res.status(404).json({ error: 'Audit plan not found' });
-  const lines = stmts.getAuditPlanLinesByPlan.all(req.params.auditPlanId);
+  // Check and fix audit_no gaps
+  const rawLines = stmts.getAuditPlanLinesByPlan.all(req.params.auditPlanId);
+  let needsRenumber = false;
+  for (let i = 0; i < rawLines.length; i++) {
+    if (String(rawLines[i].audit_no) !== String(i + 1)) { needsRenumber = true; break; }
+  }
+  if (needsRenumber) {
+    const renumber = db.prepare('UPDATE audit_plan_line SET audit_no = ? WHERE id = ?');
+    db.transaction(() => { rawLines.forEach((l, i) => renumber.run(String(i + 1), l.id)); })();
+  }
+  const lines = needsRenumber ? stmts.getAuditPlanLinesByPlan.all(req.params.auditPlanId) : rawLines;
   const counts = stmts.getChecklistCountsByPlan.all(req.params.auditPlanId);
   const countMap = {};
   for (const c of counts) countMap[c.audit_plan_line_id] = c;
@@ -1317,7 +1327,17 @@ app.delete('/api/audit-plan-lines/:id', (req, res) => {
       stmts.createTrashItem.run(uuidv4(), 'audit_plan_line', req.params.id, existing.subject || existing.audit_no || '', comp ? comp.name : '', dept ? dept.name : '', existing.audit_plan_id, 'audit_plan', JSON.stringify(snapshot));
     }
   } catch (e) { console.error('Trash snapshot failed:', e.message); }
+  const planId = existing.audit_plan_id;
   stmts.deleteAuditPlanLine.run(req.params.id);
+  // Renumber remaining lines (no gaps in audit_no)
+  const remaining = stmts.getAuditPlanLinesByPlan.all(planId);
+  const renumber = db.prepare(`UPDATE audit_plan_line SET audit_no = ? WHERE id = ?`);
+  const renumberTx = db.transaction(() => {
+    remaining.forEach((line, idx) => {
+      renumber.run(String(idx + 1), line.id);
+    });
+  });
+  renumberTx();
   res.status(204).end();
 });
 
@@ -1760,20 +1780,19 @@ app.post('/api/cap-items/send-email', async (req, res) => {
     const replyTo = qm && qm.email ? qm.email : undefined;
 
     const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
-    let subject, text, bcc;
+    let subject, text;
     if (authority) {
       const salutation = dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
 
       subject = `Corrective Action Plan – ${company.name} (${dept.name})`;
       text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Corrective Action Plan der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
-      if (qm && qm.email) bcc = qm.email;
     } else {
       subject = `Corrective Action Plan (${dept.name})`;
       text = `Hallo,\n\nanbei der Corrective Action Plan für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
     }
 
     const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
-    if (bcc) mailOpts.bcc = bcc;
+    if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
     await transporter.sendMail(mailOpts);
 
     logAction('CAP per E-Mail gesendet', 'cap_item', '', `${ids.length} CAP-Einträge`, `An: ${to}${authority ? ' (Behörde)' : ''}`, company.name, dept.name);
@@ -2002,19 +2021,18 @@ app.post('/api/audit-plans/:id/send-email', async (req, res) => {
     const replyTo = qm && qm.email ? qm.email : undefined;
 
     const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
-    let subject, text, bcc;
+    let subject, text;
     if (authority) {
       const salutation = dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
       subject = `Auditplan ${plan.year} – ${suffix} Audits – ${company.name} (${dept.name})`;
       text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Auditplan ${plan.year} – ${suffix} Audits der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
-      if (qm && qm.email) bcc = qm.email;
     } else {
       subject = `Auditplan ${plan.year} – ${suffix} Audits (${dept.name})`;
       text = `Hallo,\n\nanbei der Auditplan ${plan.year} – ${suffix} Audits für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
     }
 
     const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
-    if (bcc) mailOpts.bcc = bcc;
+    if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
     await transporter.sendMail(mailOpts);
 
     logAction('Auditplan per E-Mail gesendet', 'audit_plan', plan.id, `${plan.year} Rev. ${plan.revision || 0}`, `An: ${to}, Typ: ${suffix}${authority ? ' (Behörde)' : ''}`, company.name, dept.name);
@@ -3863,19 +3881,18 @@ app.post('/api/risk-analysis/:id/send-email', async (req, res) => {
     const replyTo = qm && qm.email ? qm.email : undefined;
 
     const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
-    let subject, text, bcc;
+    let subject, text;
     if (authority) {
       const sal = dept && dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
       subject = `Risikoanalyse – ${cr ? cr.change_no : ''} – ${company ? company.name : ''} (${dept ? dept.name : ''})`;
       text = `${sal.trim()},\n\nanbei übersenden wir Ihnen die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nSafety Manager\n${company ? company.name : ''}\n\n`;
-      if (qm && qm.email) bcc = qm.email;
     } else {
       subject = `Risikoanalyse – ${cr ? cr.change_no : ''} (${dept ? dept.name : ''})`;
       text = `Hallo,\n\nanbei die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nSafety Manager\n${company ? company.name : ''}\n\n`;
     }
 
     const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: pdfBuffer, contentType: 'application/pdf' }] };
-    if (bcc) mailOpts.bcc = bcc;
+    if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
     await transporter.sendMail(mailOpts);
 
     logAction('Risikoanalyse gesendet', 'risk_analysis', ra.id, cr ? cr.change_no : '', `An: ${to}${authority ? ' (Behörde)' : ''}`, company ? company.name : '', dept ? dept.name : '');
@@ -4116,7 +4133,7 @@ app.post('/api/change-requests/:id/send-email', async (req, res) => {
       const text = `Sehr geehrte Damen und Herren,\n\nanbei übersenden wir Ihnen den Antrag EASA Form 2 für ${cr.change_no} – ${cr.title}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nSafety Manager\n${company.name}\n\n`;
 
       const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
-      if (qm && qm.email) mailOpts.bcc = qm.email;
+      if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
       await transporter.sendMail(mailOpts);
 
       logAction('EASA Form 2 gesendet', 'change_request', cr.id, cr.change_no, `An: ${to}`, company ? company.name : '', dept ? dept.name : '');
