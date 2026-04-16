@@ -56,7 +56,7 @@ ac-audit/
 ├── docker-compose.prod.yml # Docker Compose config (production, pre-built image)
 ├── public/
 │   ├── style.css          # Custom CSS (blue theme, dark/light auto)
-│   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting, nav toggles, trash badge
+│   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting, parseDateDE, saveNavState/loadNavState, renderCompanyTabs/renderDeptTabs, nav toggles, trash badge
 │   ├── companies.js       # Main frontend logic (2000+ lines)
 │   ├── change.js          # AC-Change frontend (change requests, tasks, risk analysis, Form 2)
 │   ├── organization.js    # Organization management (companies, departments, persons)
@@ -287,18 +287,30 @@ Company + Department (shared)
 - Notifications: email to department QM when CAP deadline approaches, with repeat option
 - Backup: SQLite Online Backup API (async), scheduled with change detection via DB mtime. Path: `BACKUP_PATH` env > DB setting > `$DATA_DIR/backups/`
 - Settings stored in `app_setting` table (key-value)
-- PDF helpers extracted: `renderAuditLinePdf()`, `renderCapItemPdf()`, `addPdfFooter()`
+- PDF helpers extracted: `renderAuditLinePdf()`, `renderCapItemPdf()`, `renderRiskAnalysisPdf()`, `addPdfFooter()`
 - Multi-select PDF: batch routes registered before `:id` routes (Express route ordering)
 - Auth: HMAC-SHA256 session token in HttpOnly cookie, 7-day expiry
 - Evaluations: C (Conform), NA (Not Applicable), O (Observation), L1/L2/L3 (Finding levels)
 - Audit log: `logAction()` records company_name/department_name context for every action
 - Nav toggle buttons: Trash/Log/Config buttons navigate to page on click, back to previous page when active (localStorage breadcrumb)
 - Template copy: copies plan structure (subjects/regulations/location only), clears all audit data
+- Email helpers extracted: `sendDocumentEmail()` (SMTP config, transporter, replyTo, BCC, sendMail, logAction), `getQmForDepartment()` (finds QM person), `buildAuthoritySalutation()` (formal/informal salutation)
 - Authority email: formal letter with salutation, Compliance Monitoring Manager signature, BCC to QM
 - Person fields shown in both add and edit dialogs (company: Accountable Manager; department: QM, Abteilungsleiter)
 - Trash: DELETE handlers snapshot entity tree (incl. BLOBs as base64) to `trash_item` table before CASCADE delete. Restore re-inserts with original UUIDs in a transaction. Auto-cleanup of expired items (configurable `trash_retention_days`, default 30)
 - Docker: `DATA_DIR` env configures DB + backup location (default `/data` in container). Single volume mount for all persistent data
 - Share button blink: `has-selection` class on `.select-header` triggers CSS blink animation when checkboxes are selected
+
+## Accessibility
+
+- Dialogs use `aria-labelledby` pointing to their heading element
+- Tab bars use `role="tablist"` / `role="tab"` / `role="tabpanel"` with `aria-selected` toggled dynamically
+- Visually-hidden labels use `.sr-only` CSS utility class (e.g., login password label)
+- Icon-only nav buttons have `aria-label` for screen readers
+- Global `:focus-visible` outline (2px solid primary); bare `outline: none` replaced with `:focus:not(:focus-visible)` pattern
+- Touch targets: minimum 44×44px on interactive elements (tab buttons, icon buttons, reorder handles)
+- Toast accessibility: container has `aria-live="polite"`, error toasts use `role="alert"` and persist with close button, success toasts use `role="status"`
+- `@media (prefers-reduced-motion: reduce)` disables toast-in animation, share-blink animation, and progress bar transitions
 
 ## Database Tables
 
