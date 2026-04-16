@@ -20,6 +20,10 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function escapeAttr(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // Format ISO date string to dd.mm.yyyy with zero-padding
 function formatDateDE(isoStr) {
   if (!isoStr) return '';

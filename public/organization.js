@@ -42,60 +42,34 @@
   function renderCompanyTabs() {
     let html = '';
     companies.forEach(c => {
-      const active = c.id === selectedId ? ' tab-active' : '';
+      const isActive = c.id === selectedId;
+      const active = isActive ? ' tab-active' : '';
       html += `<button class="tab${active}" data-id="${c.id}">${escapeHtml(c.name)}</button>`;
-      if (c.id === selectedId) {
-        html += `<div class="tab-menu-wrap"><button class="tab-menu-btn" data-menu-for="${c.id}">\u22ee</button>`
-              + `<div class="tab-menu" data-menu-id="${c.id}">`
-              + `<button class="tab-menu-item" data-action="edit" data-id="${c.id}">&#9998; Bearbeiten</button>`
-              + `<button class="tab-menu-item tab-menu-danger" data-action="delete" data-id="${c.id}">&#128465; L\u00f6schen</button>`
-              + `</div></div>`;
+      if (isActive) {
+        html += `<button class="tab-remove-btn" data-id="${c.id}" title="Firma l\u00f6schen" aria-label="Firma l\u00f6schen">\u00d7</button>`;
       }
     });
     companyTabsEl.innerHTML = html;
 
     companyTabsEl.querySelectorAll('.tab').forEach(btn => {
-      btn.addEventListener('click', () => selectCompany(btn.dataset.id));
-    });
-    bindTabMenus(companyTabsEl, 'company');
-  }
-
-  function bindTabMenus(container, type) {
-    container.querySelectorAll('.tab-menu-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const menu = btn.nextElementSibling;
-        const wasOpen = menu.classList.contains('open');
-        closeAllTabMenus();
-        if (!wasOpen) {
-          const rect = btn.getBoundingClientRect();
-          menu.style.top = rect.bottom + 4 + 'px';
-          menu.style.left = rect.left + 'px';
-          menu.classList.add('open');
+      btn.addEventListener('click', () => {
+        if (btn.dataset.id === selectedId) {
+          const c = companies.find(x => x.id === selectedId);
+          if (c) openDialog(c);
+        } else {
+          selectCompany(btn.dataset.id);
         }
       });
     });
-    container.querySelectorAll('.tab-menu-item').forEach(btn => {
+
+    companyTabsEl.querySelectorAll('.tab-remove-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeAllTabMenus();
-        const id = btn.dataset.id;
-        if (btn.dataset.action === 'edit') {
-          if (type === 'company') { const c = companies.find(x => x.id === id); if (c) openDialog(c); }
-          else { const d = departments.find(x => x.id === id); if (d) openDeptDialog(d); }
-        } else if (btn.dataset.action === 'delete') {
-          if (type === 'company') { const c = companies.find(x => x.id === id); if (c) confirmDelete(c); }
-          else { const d = departments.find(x => x.id === id); if (d) confirmDeleteDept(d); }
-        }
+        const c = companies.find(x => x.id === btn.dataset.id);
+        if (c) confirmDelete(c);
       });
     });
   }
-
-  function closeAllTabMenus() {
-    document.querySelectorAll('.tab-menu.open').forEach(m => m.classList.remove('open'));
-  }
-
-  document.addEventListener('click', closeAllTabMenus);
 
   async function selectCompany(id) {
     selectedId = id;
@@ -105,12 +79,7 @@
     emptyEl.style.display = 'none';
     rightPane.style.display = 'block';
     await loadDepartments();
-    renderOrgDetail();
-  }
-
-  function selectDepartment(id) {
-    selectedDeptId = id;
-    saveNav();
+    await loadPersons();
     renderOrgDetail();
   }
 
@@ -172,57 +141,27 @@
     }
     html += '</div>';
 
-    // Department cards
+    // Department tile grid
     html += '<div class="org-dept-section">';
     html += '<div class="pane-content-header"><h3>Abteilungen</h3><button class="btn-icon" id="btn-add-dept-inline" title="Abteilung hinzuf\u00fcgen">+</button></div>';
     if (departments.length === 0) {
       html += '<div class="empty-state-inline">Keine Abteilungen vorhanden</div>';
     } else {
+      html += '<div class="org-dept-tile-grid">';
       departments.forEach(d => {
-        const isActive = d.id === selectedDeptId;
-        html += `<div class="org-dept-card${isActive ? ' org-dept-card--active' : ''}" data-id="${d.id}">`;
-        html += '<div class="org-dept-card-body">';
-        html += `<div class="org-dept-card-name">${escapeHtml(d.name)}</div>`;
+        const missing = getDeptMissing(d);
+        const warnClass = missing.length > 0 ? ' org-dept-tile--warn' : '';
+        html += `<div class="org-dept-tile${warnClass}" data-id="${d.id}">`;
+        html += `<button class="org-dept-tile-remove" data-id="${d.id}" title="Abteilung l\u00f6schen" aria-label="${escapeAttr(d.name)} l\u00f6schen">\u00d7</button>`;
+        html += `<div class="org-dept-tile-name">${escapeHtml(d.name)}</div>`;
         const meta = [d.easa_permission_number, d.regulation].filter(Boolean).join(' \u2022 ');
-        if (meta) html += `<div class="org-dept-card-meta">${escapeHtml(meta)}</div>`;
-
-        // Authority info
-        if (d.authority_name) {
-          html += `<div class="org-dept-card-authority">${escapeHtml([d.authority_salutation, d.authority_name].filter(Boolean).join(' '))}`;
-          if (d.authority_email) html += ` &middot; ${escapeHtml(d.authority_email)}`;
-          html += '</div>';
+        if (meta) html += `<div class="org-dept-tile-meta">${escapeHtml(meta)}</div>`;
+        if (missing.length > 0) {
+          html += `<div class="org-dept-tile-warn" title="${escapeAttr('Fehlend: ' + missing.join(', '))}">&#9888;</div>`;
         }
-
-        // Department persons
-        if (isActive) {
-          const qm = persons.find(p => p.role === 'QM' && p.department_id === d.id);
-          const al = persons.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === d.id);
-          if ((qm && (qm.first_name || qm.last_name)) || (al && (al.first_name || al.last_name))) {
-            html += '<div class="org-dept-persons">';
-            if (qm && (qm.first_name || qm.last_name)) {
-              html += `<div class="org-person-row"><span class="org-person-role">CMM</span><span class="org-person-name">${escapeHtml((qm.first_name + ' ' + qm.last_name).trim())}</span>`;
-              if (qm.email) html += `<span class="org-person-email">${escapeHtml(qm.email)}</span>`;
-              if (!qm.has_signature) html += '<span class="org-sig-missing" title="Signatur fehlt">&#9888; Signatur fehlt</span>';
-              html += '</div>';
-            }
-            if (al && (al.first_name || al.last_name)) {
-              const alLabel = getDeptLeaderLabel(d);
-              html += `<div class="org-person-row"><span class="org-person-role">${escapeHtml(alLabel)}</span><span class="org-person-name">${escapeHtml((al.first_name + ' ' + al.last_name).trim())}</span>`;
-              if (al.email) html += `<span class="org-person-email">${escapeHtml(al.email)}</span>`;
-              if (!al.has_signature) html += '<span class="org-sig-missing" title="Signatur fehlt">&#9888; Signatur fehlt</span>';
-              html += '</div>';
-            }
-            html += '</div>';
-          }
-        }
-
-        html += '</div>';
-        html += `<div class="org-dept-card-actions">
-          <button class="pane-action-btn" data-action="edit-dept" data-id="${d.id}" title="Bearbeiten">&#9998;</button>
-          <button class="pane-action-btn danger" data-action="delete-dept" data-id="${d.id}" title="L\u00f6schen">&#128465;</button>
-        </div>`;
         html += '</div>';
       });
+      html += '</div>';
     }
     html += '</div>';
 
@@ -232,49 +171,36 @@
     const addDeptBtn = document.getElementById('btn-add-dept-inline');
     if (addDeptBtn) addDeptBtn.addEventListener('click', () => openDeptDialog(null));
 
-    // Click handlers on dept cards
-    orgDetail.querySelectorAll('.org-dept-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.pane-action-btn')) return;
-        selectDepartment(card.dataset.id);
+    // Click tile → open edit dialog
+    orgDetail.querySelectorAll('.org-dept-tile').forEach(tile => {
+      tile.addEventListener('click', (e) => {
+        if (e.target.closest('.org-dept-tile-remove')) return;
+        const d = departments.find(x => x.id === tile.dataset.id);
+        if (d) openDeptDialog(d);
       });
     });
 
-    orgDetail.querySelectorAll('.pane-action-btn').forEach(btn => {
+    // × remove button → confirm delete
+    orgDetail.querySelectorAll('.org-dept-tile-remove').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = btn.dataset.id;
-        if (btn.dataset.action === 'edit-dept') {
-          const d = departments.find(x => x.id === id);
-          if (d) openDeptDialog(d);
-        } else if (btn.dataset.action === 'delete-dept') {
-          const d = departments.find(x => x.id === id);
-          if (d) confirmDeleteDept(d);
-        }
+        const d = departments.find(x => x.id === btn.dataset.id);
+        if (d) confirmDeleteDept(d);
       });
     });
+  }
 
-    // Dept reorder
-    orgDetail.querySelectorAll('.reorder-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const id = btn.dataset.id;
-        const dir = btn.dataset.dir;
-        const idx = departments.findIndex(d => d.id === id);
-        if (idx < 0) return;
-        const swap = dir === 'up' ? idx - 1 : idx + 1;
-        if (swap < 0 || swap >= departments.length) return;
-        const order = departments.map(d => d.id);
-        [order[idx], order[swap]] = [order[swap], order[idx]];
-        try {
-          await fetchJSON(`/api/companies/${selectedId}/departments/reorder`, {
-            method: 'PATCH', body: { order }
-          });
-          await loadDepartments();
-          renderOrgDetail();
-        } catch (err) { toast(err.message, 'error'); }
-      });
-    });
+  function getDeptMissing(dept) {
+    const missing = [];
+    const qm = persons.find(p => p.role === 'QM' && p.department_id === dept.id);
+    const al = persons.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
+    if (!qm || (!qm.first_name && !qm.last_name)) missing.push('CMM Person');
+    if (!qm || !qm.has_signature) missing.push('CMM Signatur');
+    const alLabel = getDeptLeaderLabel(dept);
+    if (!al || (!al.first_name && !al.last_name)) missing.push(alLabel + ' Person');
+    if (!al || !al.has_signature) missing.push(alLabel + ' Signatur');
+    if (!dept.authority_name && !dept.authority_email) missing.push('Beh\u00f6rdenkontakt');
+    return missing;
   }
 
   function getDeptLeaderLabel(dept) {

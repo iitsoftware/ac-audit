@@ -193,6 +193,34 @@ body {
   color: var(--primary);
 }
 
+/* ── Tab × Remove Button ────────────────────────────────── */
+.tab-remove-btn {
+  min-width: 28px;
+  min-height: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  margin-left: 2px;
+  margin-right: 4px;
+  flex-shrink: 0;
+  transition: background var(--transition), color var(--transition);
+}
+
+.tab-remove-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+}
+
 /* ── Tab ⋮ Menu ──────────────────────────────────────────── */
 .tab-menu-wrap {
   position: relative;
@@ -2407,68 +2435,86 @@ dialog.dialog-wide {
   margin-bottom: 12px;
 }
 
-.org-dept-card {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: box-shadow var(--transition), border-color var(--transition);
+.org-dept-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
 }
 
-.org-dept-card:hover {
-  box-shadow: var(--shadow-lg);
-}
-
-.org-dept-card--active {
-  border-color: var(--primary);
-  border-width: 2px;
-}
-
-.org-dept-card-body {
+.org-dept-tile {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  flex: 1;
-  gap: 4px;
+  align-items: center;
+  padding: 20px 16px 14px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: box-shadow var(--transition), border-color var(--transition);
+  position: relative;
+  text-align: center;
 }
 
-.org-dept-card-name {
+.org-dept-tile:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.org-dept-tile--warn {
+  border-color: #f59e0b;
+}
+
+.org-dept-tile--warn:hover {
+  border-color: #d97706;
+}
+
+.org-dept-tile-name {
   font-size: 15px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
-.org-dept-card-meta {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.org-dept-card-authority {
+.org-dept-tile-meta {
   font-size: 12px;
   color: var(--text-muted);
+  margin-top: 4px;
 }
 
-.org-dept-persons {
+.org-dept-tile-warn {
+  font-size: 16px;
+  color: #f59e0b;
   margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
+  cursor: help;
 }
 
-.org-dept-card-actions {
+.org-dept-tile-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
   opacity: 0;
-  transition: opacity var(--transition);
-  flex-shrink: 0;
-  margin-left: 12px;
+  transition: opacity var(--transition), background var(--transition), color var(--transition);
 }
 
-.org-dept-card:hover .org-dept-card-actions { opacity: 1; }
+.org-dept-tile:hover .org-dept-tile-remove { opacity: 1; }
+
+.org-dept-tile-remove:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+}
 
 .org-sig-missing {
   font-size: 11px;
