@@ -424,12 +424,12 @@
 
   async function loadTasks() {
     try { currentTasks = await fetchJSON(`/api/change-requests/${currentCR.id}/tasks`); }
-    catch { currentTasks = []; }
+    catch (e) { currentTasks = []; toast('Aufgaben konnten nicht geladen werden', 'error'); }
   }
 
   async function loadRiskAnalysisSummary() {
     try { currentRiskAnalysis = await fetchJSON(`/api/change-requests/${currentCR.id}/risk-analysis`); }
-    catch { currentRiskAnalysis = null; }
+    catch (e) { currentRiskAnalysis = null; toast('Risikoanalyse konnte nicht geladen werden', 'error'); }
   }
 
   function renderDetailContent() {
@@ -761,6 +761,8 @@
     const fileInput = document.getElementById('import-tasks-file');
     if (!fileInput.files.length) { toast('Datei auswählen', 'error'); return; }
     const file = fileInput.files[0];
+    const btn = document.getElementById('import-tasks-confirm');
+    btn.disabled = true;
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const base64 = ev.target.result.split(',')[1];
@@ -772,7 +774,7 @@
         document.getElementById('import-tasks-dialog').close();
         await loadTasks();
         renderDetailContent();
-      } catch (err) { toast(err.message, 'error'); }
+      } catch (err) { toast(err.message, 'error'); } finally { btn.disabled = false; }
     };
     reader.readAsDataURL(file);
   });
@@ -896,7 +898,7 @@
     try {
       await fetchJSON(`/api/change-requests/${currentCR.id}/form2-data`, { method: 'PUT', body: params });
       currentCR.form2_data = JSON.stringify(params);
-    } catch {}
+    } catch (e) { toast('Form 2 konnte nicht gespeichert werden', 'error'); }
   }
 
   document.getElementById('easa-form2-btn-download').addEventListener('click', () => {

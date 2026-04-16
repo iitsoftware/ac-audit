@@ -93,7 +93,7 @@ async function updateTrashBadge() {
         badge.style.display = 'none';
       }
     }
-  } catch {}
+  } catch (e) { console.warn('Trash badge update failed:', e); }
 }
 updateTrashBadge();
 
@@ -155,6 +155,7 @@ function renderDeptTabs(departments, activeDeptId, container, onSelect) {
     if (!container) {
       container = document.createElement('div');
       container.className = 'toast-container';
+      container.setAttribute('aria-live', 'polite');
       document.body.appendChild(container);
     }
     return container;
@@ -163,8 +164,22 @@ function renderDeptTabs(departments, activeDeptId, container, onSelect) {
   window.toast = function (message, type = 'success') {
     const el = document.createElement('div');
     el.className = `toast ${type}`;
-    el.textContent = message;
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    const msgSpan = document.createElement('span');
+    msgSpan.textContent = message;
+    el.appendChild(msgSpan);
+
+    if (type === 'error') {
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'toast-close';
+      closeBtn.setAttribute('aria-label', 'Schließen');
+      closeBtn.textContent = '\u00D7';
+      closeBtn.addEventListener('click', () => el.remove());
+      el.appendChild(closeBtn);
+    } else {
+      setTimeout(() => { el.remove(); }, 3000);
+    }
+
     getContainer().appendChild(el);
-    setTimeout(() => { el.remove(); }, 3000);
   };
 })();

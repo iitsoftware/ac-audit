@@ -13,6 +13,8 @@
   };
 
   async function loadItems() {
+    loadMoreBtn.disabled = true;
+    try {
     const items = await fetchJSON(`/api/trash?limit=${limit}&offset=${offset}`);
     for (const item of items) {
       const tr = document.createElement('tr');
@@ -33,6 +35,9 @@
     offset += items.length;
     loadMoreBtn.style.display = items.length < limit ? 'none' : '';
     updateEmpty();
+    } finally {
+      loadMoreBtn.disabled = false;
+    }
   }
 
   function updateEmpty() {
@@ -46,6 +51,8 @@
     const deleteId = e.target.closest('[data-delete]')?.dataset.delete;
 
     if (restoreId) {
+      const btn = e.target.closest('[data-restore]');
+      btn.disabled = true;
       try {
         await fetchJSON(`/api/trash/${restoreId}/restore`, { method: 'POST' });
         e.target.closest('tr').remove();
@@ -54,11 +61,14 @@
         updateTrashBadge();
       } catch (err) {
         toast(err.message, 'error');
+        btn.disabled = false;
       }
     }
 
     if (deleteId) {
       if (!confirm('Endgültig löschen? Dies kann nicht rückgängig gemacht werden.')) return;
+      const btn = e.target.closest('[data-delete]');
+      btn.disabled = true;
       try {
         await fetchJSON(`/api/trash/${deleteId}`, { method: 'DELETE' });
         e.target.closest('tr').remove();
@@ -67,12 +77,14 @@
         updateTrashBadge();
       } catch (err) {
         toast(err.message, 'error');
+        btn.disabled = false;
       }
     }
   });
 
   emptyBtn.addEventListener('click', async () => {
     if (!confirm('Gesamten Papierkorb leeren? Alle Einträge werden endgültig gelöscht.')) return;
+    emptyBtn.disabled = true;
     try {
       await fetchJSON('/api/trash/empty', { method: 'POST' });
       tbody.innerHTML = '';
@@ -81,6 +93,8 @@
       updateTrashBadge();
     } catch (err) {
       toast(err.message, 'error');
+    } finally {
+      emptyBtn.disabled = false;
     }
   });
 

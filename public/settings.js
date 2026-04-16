@@ -121,7 +121,7 @@
         const dateStr = date.toLocaleDateString('de-DE') + ' ' + date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
         return `<div class="backup-item"><span class="backup-name">${f.filename}</span><span class="backup-meta">${size} MB &middot; ${dateStr}</span></div>`;
       }).join('');
-    } catch { /* ignore */ }
+    } catch (e) { toast('Backup-Liste konnte nicht geladen werden', 'error'); }
   }
   loadBackupList();
 

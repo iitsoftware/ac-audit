@@ -19,7 +19,7 @@
 </main>
 
 <!-- Audit Plan Add / Edit dialog -->
-<dialog id="plan-dialog">
+<dialog id="plan-dialog" aria-labelledby="plan-dialog-title">
   <div class="dialog-header" id="plan-dialog-title">Auditplan hinzuf&uuml;gen</div>
   <form id="plan-form" method="dialog">
     <div class="dialog-body">
@@ -37,8 +37,8 @@
 </dialog>
 
 <!-- New Audit Plan options dialog -->
-<dialog id="new-plan-dialog">
-  <div class="dialog-header">Neuer Auditplan</div>
+<dialog id="new-plan-dialog" aria-labelledby="new-plan-dialog-title">
+  <div class="dialog-header" id="new-plan-dialog-title">Neuer Auditplan</div>
   <div class="dialog-body">
     <div class="new-plan-options">
       <button class="btn btn-primary new-plan-option" id="new-plan-revision">Neue Revision</button>
@@ -52,8 +52,8 @@
 </dialog>
 
 <!-- Revision select dialog -->
-<dialog id="revision-select-dialog">
-  <div class="dialog-header">Plan f&uuml;r neue Revision w&auml;hlen</div>
+<dialog id="revision-select-dialog" aria-labelledby="revision-select-dialog-title">
+  <div class="dialog-header" id="revision-select-dialog-title">Plan f&uuml;r neue Revision w&auml;hlen</div>
   <div class="dialog-body dialog-body-scroll">
     <div class="template-list" id="revision-select-list"></div>
   </div>
@@ -63,8 +63,8 @@
 </dialog>
 
 <!-- Template select dialog -->
-<dialog id="template-select-dialog">
-  <div class="dialog-header">Vorlage w&auml;hlen</div>
+<dialog id="template-select-dialog" aria-labelledby="template-select-dialog-title">
+  <div class="dialog-header" id="template-select-dialog-title">Vorlage w&auml;hlen</div>
   <div class="dialog-body dialog-body-scroll">
     <div class="template-list" id="template-select-list"></div>
   </div>
@@ -74,8 +74,8 @@
 </dialog>
 
 <!-- Audit Plan Delete confirmation dialog -->
-<dialog id="plan-delete-dialog">
-  <div class="dialog-header">Auditplan l&ouml;schen</div>
+<dialog id="plan-delete-dialog" aria-labelledby="plan-delete-dialog-title">
+  <div class="dialog-header" id="plan-delete-dialog-title">Auditplan l&ouml;schen</div>
   <div class="dialog-body">
     <p>Soll <strong id="plan-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
   </div>
@@ -86,8 +86,8 @@
 </dialog>
 
 <!-- Themenbereich Delete confirmation dialog -->
-<dialog id="line-delete-dialog">
-  <div class="dialog-header">Themenbereich l&ouml;schen</div>
+<dialog id="line-delete-dialog" aria-labelledby="line-delete-dialog-title">
+  <div class="dialog-header" id="line-delete-dialog-title">Themenbereich l&ouml;schen</div>
   <div class="dialog-body">
     <p>Soll dieser Themenbereich wirklich gel&ouml;scht werden?</p>
   </div>
@@ -98,7 +98,7 @@
 </dialog>
 
 <!-- Checklist Item Add / Edit dialog -->
-<dialog id="checklist-item-dialog">
+<dialog id="checklist-item-dialog" aria-labelledby="checklist-item-dialog-title">
   <div class="dialog-header" id="checklist-item-dialog-title">Checklist-Eintrag hinzuf&uuml;gen</div>
   <form id="checklist-item-form" method="dialog">
     <div class="dialog-body">
@@ -163,8 +163,8 @@
 </dialog>
 
 <!-- PDF Export dialog -->
-<dialog id="pdf-export-dialog">
-  <div class="dialog-header">Auditplan exportieren</div>
+<dialog id="pdf-export-dialog" aria-labelledby="pdf-export-dialog-title">
+  <div class="dialog-header" id="pdf-export-dialog-title">Auditplan exportieren</div>
   <div class="dialog-body">
     <div class="export-section">
       <h3 class="export-section-title">Geplante Audits</h3>
@@ -196,8 +196,8 @@
 </dialog>
 
 <!-- Plan Type selection dialog -->
-<dialog id="plan-type-dialog">
-  <div class="dialog-header">Neuen Plan erstellen</div>
+<dialog id="plan-type-dialog" aria-labelledby="plan-type-dialog-title">
+  <div class="dialog-header" id="plan-type-dialog-title">Neuen Plan erstellen</div>
   <div class="dialog-body">
     <div class="new-plan-options">
       <button class="btn btn-primary new-plan-option" id="plan-type-audit">Auditplan</button>
@@ -210,8 +210,8 @@
 </dialog>
 
 <!-- CAP Export dialog -->
-<dialog id="cap-export-dialog">
-  <div class="dialog-header">CAP exportieren</div>
+<dialog id="cap-export-dialog" aria-labelledby="cap-export-dialog-title">
+  <div class="dialog-header" id="cap-export-dialog-title">CAP exportieren</div>
   <div class="dialog-body">
     <div class="export-actions">
       <button class="btn btn-secondary" id="cap-export-download">Download PDF</button>
@@ -238,7 +238,7 @@
 <input type="file" id="import-audits-input" accept=".xlsx" multiple style="display:none">
 
 <!-- Import Results dialog -->
-<dialog id="import-results-dialog" class="dialog-wide">
+<dialog id="import-results-dialog" class="dialog-wide" aria-labelledby="import-results-header">
   <div class="dialog-header" id="import-results-header">Import-Ergebnis</div>
   <div class="dialog-body dialog-body-scroll" id="import-results-body"></div>
   <div class="dialog-footer" id="import-mapping-footer" style="display:none">
@@ -251,8 +251,8 @@
 </dialog>
 
 <!-- Checklist Item Delete confirmation dialog -->
-<dialog id="checklist-item-delete-dialog">
-  <div class="dialog-header">Checklist-Eintrag l&ouml;schen</div>
+<dialog id="checklist-item-delete-dialog" aria-labelledby="ci-delete-dialog-title">
+  <div class="dialog-header" id="ci-delete-dialog-title">Checklist-Eintrag l&ouml;schen</div>
   <div class="dialog-body">
     <p>Soll dieser Eintrag wirklich gel&ouml;scht werden?</p>
   </div>

@@ -1336,6 +1336,8 @@
       if (lineId) mappings[filename] = lineId;
     });
 
+    const btn = document.getElementById('import-mapping-confirm');
+    btn.disabled = true;
     try {
       const result = await fetchJSON(`/api/audit-plans/${currentPlan.id}/import-audits`, {
         method: 'POST',
@@ -1374,6 +1376,8 @@
       document.getElementById('import-results-footer').style.display = '';
     } catch (err) {
       toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
     }
   });
 
@@ -1733,7 +1737,7 @@
             document.getElementById('fw-root-cause').value = fw.root_cause || '';
             document.getElementById('cap-f-root-cause').value = fw.root_cause || '';
           }
-        } catch { /* no 5W yet */ }
+        } catch (e) { toast('5-Why konnte nicht geladen werden', 'error'); }
       })();
 
       async function saveFiveWhy() {
@@ -1806,7 +1810,7 @@
     try {
       const files = await fetchJSON(`/api/cap-items/${capItemId}/evidence-files`);
       files.forEach(f => addEvidenceThumb(container, f, '/api/evidence-files'));
-    } catch { /* ignore */ }
+    } catch (e) { toast('Laden fehlgeschlagen', 'error'); }
   }
 
   function addEvidenceThumb(container, file, apiPrefix) {
@@ -1855,7 +1859,7 @@
     try {
       const files = await fetchJSON(`/api/checklist-items/${checklistItemId}/evidence-files`);
       files.forEach(f => addEvidenceThumb(container, f, '/api/checklist-evidence-files'));
-    } catch { /* ignore */ }
+    } catch (e) { toast('Laden fehlgeschlagen', 'error'); }
   }
 
   document.getElementById('ci-evidence-upload').addEventListener('change', async (e) => {

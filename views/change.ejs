@@ -19,7 +19,7 @@
 </main>
 
 <!-- Change Request Add / Edit dialog -->
-<dialog id="change-dialog">
+<dialog id="change-dialog" aria-labelledby="change-dialog-title">
   <div class="dialog-header" id="change-dialog-title">Change Request hinzuf&uuml;gen</div>
   <form id="change-form" method="dialog">
     <div class="dialog-body">
@@ -80,8 +80,8 @@
 </dialog>
 
 <!-- Change Delete confirmation -->
-<dialog id="change-delete-dialog">
-  <div class="dialog-header">Change Request l&ouml;schen</div>
+<dialog id="change-delete-dialog" aria-labelledby="change-delete-dialog-title">
+  <div class="dialog-header" id="change-delete-dialog-title">Change Request l&ouml;schen</div>
   <div class="dialog-body">
     <p>Soll <strong id="change-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
   </div>
@@ -92,7 +92,7 @@
 </dialog>
 
 <!-- Task Add / Edit dialog -->
-<dialog id="task-dialog">
+<dialog id="task-dialog" aria-labelledby="task-dialog-title">
   <div class="dialog-header" id="task-dialog-title">Aufgabe hinzuf&uuml;gen</div>
   <form id="task-form" method="dialog">
     <div class="dialog-body">
@@ -142,8 +142,8 @@
 </dialog>
 
 <!-- Task Delete confirmation -->
-<dialog id="task-delete-dialog">
-  <div class="dialog-header">Aufgabe l&ouml;schen</div>
+<dialog id="task-delete-dialog" aria-labelledby="task-delete-dialog-title">
+  <div class="dialog-header" id="task-delete-dialog-title">Aufgabe l&ouml;schen</div>
   <div class="dialog-body">
     <p>Soll diese Aufgabe wirklich gel&ouml;scht werden?</p>
   </div>
@@ -154,7 +154,7 @@
 </dialog>
 
 <!-- Risk Item Add / Edit dialog -->
-<dialog id="risk-item-dialog" style="max-width:800px">
+<dialog id="risk-item-dialog" style="max-width:800px" aria-labelledby="risk-item-dialog-title">
   <div class="dialog-header" id="risk-item-dialog-title">Risiko hinzuf&uuml;gen</div>
   <form id="risk-item-form" method="dialog">
     <div class="dialog-body">
@@ -214,8 +214,8 @@
 </dialog>
 
 <!-- Risk Item Delete confirmation -->
-<dialog id="risk-item-delete-dialog">
-  <div class="dialog-header">Risiko l&ouml;schen</div>
+<dialog id="risk-item-delete-dialog" aria-labelledby="risk-item-delete-dialog-title">
+  <div class="dialog-header" id="risk-item-delete-dialog-title">Risiko l&ouml;schen</div>
   <div class="dialog-body">
     <p>Soll dieses Risiko wirklich gel&ouml;scht werden?</p>
   </div>
@@ -226,8 +226,8 @@
 </dialog>
 
 <!-- Risk Analysis metadata dialog -->
-<dialog id="risk-meta-dialog">
-  <div class="dialog-header">Risikoanalyse bearbeiten</div>
+<dialog id="risk-meta-dialog" aria-labelledby="risk-meta-dialog-title">
+  <div class="dialog-header" id="risk-meta-dialog-title">Risikoanalyse bearbeiten</div>
   <form id="risk-meta-form" method="dialog">
     <div class="dialog-body">
       <div class="form-group">
@@ -270,8 +270,8 @@
 </dialog>
 
 <!-- Risk History entry dialog -->
-<dialog id="risk-history-dialog">
-  <div class="dialog-header">Versions-Eintrag hinzuf&uuml;gen</div>
+<dialog id="risk-history-dialog" aria-labelledby="risk-history-dialog-title">
+  <div class="dialog-header" id="risk-history-dialog-title">Versions-Eintrag hinzuf&uuml;gen</div>
   <form id="risk-history-form" method="dialog">
     <div class="dialog-body">
       <div class="form-row">
@@ -301,8 +301,8 @@
 </dialog>
 
 <!-- Import Tasks dialog -->
-<dialog id="import-tasks-dialog">
-  <div class="dialog-header">Aufgabenliste importieren (.xlsx)</div>
+<dialog id="import-tasks-dialog" aria-labelledby="import-tasks-dialog-title">
+  <div class="dialog-header" id="import-tasks-dialog-title">Aufgabenliste importieren (.xlsx)</div>
   <div class="dialog-body">
     <p>Change Management Tracker als .xlsx-Datei hochladen. Vorhandene Aufgaben werden ersetzt.</p>
     <div class="form-group">
@@ -316,8 +316,8 @@
 </dialog>
 
 <!-- Import Risk Analysis dialog -->
-<dialog id="import-risk-dialog">
-  <div class="dialog-header">Risikoanalyse importieren (.xlsx)</div>
+<dialog id="import-risk-dialog" aria-labelledby="import-risk-dialog-title">
+  <div class="dialog-header" id="import-risk-dialog-title">Risikoanalyse importieren (.xlsx)</div>
   <div class="dialog-body">
     <p>Risikoanalyse als .xlsx-Datei hochladen. Vorhandene Analyse wird ersetzt.</p>
     <div class="form-group">
@@ -331,7 +331,7 @@
 </dialog>
 
 <!-- EASA Form 2 dialog -->
-<dialog id="easa-form2-dialog" style="max-width:600px">
+<dialog id="easa-form2-dialog" style="max-width:600px" aria-labelledby="easa-form2-dialog-title">
   <div class="dialog-header" id="easa-form2-dialog-title">EASA Form 2</div>
   <form id="easa-form2-form" method="dialog">
     <div class="dialog-body">
@@ -410,8 +410,8 @@
 </dialog>
 
 <!-- Email send dialog for Form 2 -->
-<dialog id="change-email-dialog">
-  <div class="dialog-header">EASA Form 2 senden</div>
+<dialog id="change-email-dialog" aria-labelledby="change-email-dialog-title">
+  <div class="dialog-header" id="change-email-dialog-title">EASA Form 2 senden</div>
   <form id="change-email-form" method="dialog">
     <div class="dialog-body">
       <div class="form-group">
@@ -427,8 +427,8 @@
 </dialog>
 
 <!-- Risk Analysis Share dialog -->
-<dialog id="ra-share-dialog">
-  <div class="dialog-header">Risikoanalyse exportieren</div>
+<dialog id="ra-share-dialog" aria-labelledby="ra-share-dialog-title">
+  <div class="dialog-header" id="ra-share-dialog-title">Risikoanalyse exportieren</div>
   <div class="dialog-body">
     <div class="export-actions" style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-secondary" id="ra-share-download">Download PDF</button>
@@ -449,8 +449,8 @@
 </dialog>
 
 <!-- Status change dialog -->
-<dialog id="status-dialog">
-  <div class="dialog-header">Status &auml;ndern</div>
+<dialog id="status-dialog" aria-labelledby="status-dialog-title">
+  <div class="dialog-header" id="status-dialog-title">Status &auml;ndern</div>
   <form id="status-form" method="dialog">
     <div class="dialog-body">
       <div class="form-group">
