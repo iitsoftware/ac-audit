@@ -36,8 +36,9 @@ PORT=3000 npm start  # Custom port
 ```
 
 ```bash
-docker compose up -d          # Docker start
-docker compose up -d --build  # Docker rebuild
+docker compose up -d          # Docker start (local dev)
+docker compose up -d --build  # Docker rebuild (local dev)
+docker compose -f docker-compose.prod.yml up -d  # Production deploy (pre-built image)
 ```
 
 No build step. No external database server.
@@ -51,11 +52,15 @@ ac-audit/
 ├── db.js                  # SQLite setup, migrations, prepared statements
 ├── schema.sql             # All tables (CREATE IF NOT EXISTS)
 ├── Dockerfile             # Docker image (node:20-alpine)
-├── docker-compose.yml     # Docker Compose config
+├── docker-compose.yml     # Docker Compose config (local dev)
+├── docker-compose.prod.yml # Docker Compose config (production, pre-built image)
 ├── public/
 │   ├── style.css          # Custom CSS (blue theme, dark/light auto)
 │   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting, nav toggles, trash badge
 │   ├── companies.js       # Main frontend logic (2000+ lines)
+│   ├── change.js          # AC-Change frontend (change requests, tasks, risk analysis, Form 2)
+│   ├── organization.js    # Organization management (companies, departments, persons)
+│   ├── risk-matrix.js     # Risk probability/severity matrix widget
 │   ├── home.js            # Home dashboard logic
 │   ├── settings.js        # Settings page logic
 │   ├── trash.js           # Trash page logic (restore, delete, empty)
@@ -63,6 +68,8 @@ ac-audit/
 ├── views/
 │   ├── layout.ejs         # Base HTML shell (nav with toggle buttons, CSS, scripts)
 │   ├── companies.ejs      # Main page template (dialogs, file inputs)
+│   ├── change.ejs         # AC-Change page (change requests, tasks, risk, Form 2)
+│   ├── organization.ejs   # Organization management page (companies, departments, persons)
 │   ├── home.ejs           # Home dashboard
 │   ├── settings.ejs       # Settings page (SMTP, backup, CAP deadlines, notifications)
 │   ├── trash.ejs          # Trash page (restore/delete table)
@@ -87,6 +94,13 @@ Company (id, name, street, postal_code, city, logo BLOB)
                       └── CapItem (id, checklist_item_id, deadline, responsible_person, root_cause, corrective/preventive_action, completion_date, notified_at)
                            ├── FiveWhy (id, cap_item_id, why1-why5, root_cause) — only for L1/L2
                            └── CapEvidenceFile (id, cap_item_id, filename, mime_type, data BLOB)
+
+Company + Department (shared)
+  └── ChangeRequest (id, company_id, department_id, change_no, title, description, category, status, priority, requested_by/date, target_date, implemented_date, closed_date, change_type, form2_data JSON)
+       ├── ChangeTask (id, change_request_id, sort_order, process, area, safety_note, measures, responsible_person, target_date, completion_date, section_header)
+       └── RiskAnalysis (id, change_request_id, title, version, version_date, author, safety_manager, signed_at, overall_initial/residual)
+            ├── RiskAnalysisHistory (id, risk_analysis_id, version, version_date, author, reason)
+            └── RiskItem (id, risk_analysis_id, sort_order, risk_type, description, consequence, initial_probability/severity/score/level, responsible_person, mitigation_topic, treatment, implementation_date, residual_probability/severity/score/level)
 ```
 
 ## API Endpoints
@@ -112,12 +126,19 @@ Company (id, name, street, postal_code, city, logo BLOB)
 - `DELETE /api/departments/:id` — Delete
 - `PATCH /api/companies/:companyId/departments/reorder` — Reorder
 
+### Home
+- `GET /api/home/stats` — Dashboard statistics (open CAPs, upcoming audits, etc.)
+
 ### Audit Plans
+- `GET /api/audit-plans/all` — List ALL plans across all departments (unfiltered)
 - `GET /api/departments/:departmentId/audit-plans` — List (sorted year DESC)
 - `POST /api/departments/:departmentId/audit-plans` — Create
 - `GET /api/audit-plans/:id` — Single plan
 - `PUT /api/audit-plans/:id` — Update year
+- `PATCH /api/audit-plans/:id/status` — Update plan status (ENTWURF, AKTIV, ARCHIV)
 - `PATCH /api/audit-plans/:id/dates` — Update dates (approved_at, submitted_planned_at, submitted_at)
+- `PATCH /api/audit-plans/:id/approved-date` — Update approved_at only (overlaps with /dates)
+- `PATCH /api/audit-plans/:id/submission` — Update submitted_to + submitted_at (overlaps with /dates)
 - `POST /api/audit-plans/:id/copy` — Copy to new year (increments revision)
 - `DELETE /api/audit-plans/:id` — Delete
 
@@ -126,6 +147,7 @@ Company (id, name, street, postal_code, city, logo BLOB)
 - `POST /api/audit-plans/:auditPlanId/lines` — Create
 - `GET /api/audit-plan-lines/:id` — Single line
 - `PUT /api/audit-plan-lines/:id` — Update all fields
+- `PATCH /api/audit-plan-lines/:id/performed` — Update performed_date
 - `DELETE /api/audit-plan-lines/:id` — Delete
 
 ### Checklist Items
@@ -142,9 +164,12 @@ Company (id, name, street, postal_code, city, logo BLOB)
 
 ### CAP Items (Corrective Actions)
 - `GET /api/audit-plans/:id/cap-items` — List for plan (with summary counts)
+- `GET /api/departments/:departmentId/cap-items` — List for department
+- `POST /api/departments/:departmentId/cap-items` — Create manually (standalone CAP)
 - `GET /api/cap-items/:id` — Single CAP with audit context
 - `PUT /api/cap-items/:id` — Update (status auto-derived from completion_date)
 - `DELETE /api/cap-items/:id` — Delete
+- `POST /api/cap-items/send-email` — Send CAP PDF(s) via email (body: ids[], to, authority?)
 
 ### CAP Evidence
 - `GET /api/cap-items/:id/evidence-files` — List
@@ -202,6 +227,45 @@ Company (id, name, street, postal_code, city, logo BLOB)
 - `POST /api/trash/:id/restore` — Restore (checks parent existence, atomic transaction)
 - `DELETE /api/trash/:id` — Permanently delete
 - `POST /api/trash/empty` — Empty entire trash
+
+### AC-Change: Change Requests
+- `GET /api/departments/:departmentId/change-requests` — List for department
+- `POST /api/departments/:departmentId/change-requests` — Create
+- `GET /api/change-requests/:id` — Single change request
+- `PUT /api/change-requests/:id` — Update
+- `DELETE /api/change-requests/:id` — Delete
+- `PATCH /api/change-requests/:id/status` — Update status
+
+### AC-Change: Change Tasks
+- `GET /api/change-requests/:id/tasks` — List tasks in change request
+- `POST /api/change-requests/:id/tasks` — Create task
+- `PUT /api/change-tasks/:id` — Update task
+- `DELETE /api/change-tasks/:id` — Delete task
+
+### AC-Change: EASA Form 2
+- `PUT /api/change-requests/:id/form2-data` — Store form field data (JSON)
+- `GET /api/change-requests/:id/easa-form2/pdf` — Generate EASA Form 2 PDF
+
+### AC-Change: Risk Analysis
+- `GET /api/change-requests/:id/risk-analysis` — Get risk analysis for change request
+- `POST /api/change-requests/:id/risk-analysis` — Create risk analysis
+- `GET /api/risk-analysis/:id` — Single risk analysis
+- `PUT /api/risk-analysis/:id` — Update risk analysis
+- `GET /api/risk-analysis/:id/history` — List version history
+- `POST /api/risk-analysis/:id/history` — Record history entry
+- `GET /api/risk-analysis/:id/items` — List risk items
+- `POST /api/risk-analysis/:id/items` — Create risk item
+- `PUT /api/risk-items/:id` — Update risk item
+- `DELETE /api/risk-items/:id` — Delete risk item
+
+### AC-Change: Import
+- `POST /api/change-requests/:id/import-tasks` — Bulk import tasks from .xlsx/.docx
+- `POST /api/change-requests/:id/import-risk-analysis` — Bulk import risk analysis from file
+
+### AC-Change: PDF & Email
+- `GET /api/risk-analysis/:id/pdf` — Generate risk analysis PDF
+- `POST /api/risk-analysis/:id/send-email` — Send risk analysis PDF via email
+- `POST /api/change-requests/:id/send-email` — Send change request PDF via email
 
 ### Other
 - `GET /health` — Health check
