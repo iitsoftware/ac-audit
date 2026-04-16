@@ -98,6 +98,14 @@ function logAction(action, entityType, entityId, entityName, details = '', compa
   try { stmts.insertLog.run(action, entityType, entityId || '', entityName || '', companyName, departmentName, details); } catch {}
 }
 
+// ── Date formatting helper ─────────────────────────────────
+function formatDateDE(isoStr) {
+  if (!isoStr) return '';
+  const d = isoStr.substring(0, 10).split('-');
+  if (d.length !== 3) return isoStr;
+  return `${d[2]}.${d[1]}.${d[0]}`;
+}
+
 // ── Email helper: create transporter per module ─────────────
 function getSmtpConfig(module) {
   const rows = stmts.getAllSettings.all();
@@ -121,9 +129,31 @@ function createTransporter(smtpConfig) {
   });
 }
 
-function getQmReplyTo(personsAll, deptId) {
-  const qm = personsAll.find(p => p.role === 'QM' && p.department_id === deptId);
-  return qm && qm.email ? qm.email : undefined;
+// ── Email helper: find QM for department ────────────────────
+function getQmForDepartment(companyId, deptId) {
+  const personsAll = stmts.getPersonsByCompany.all(companyId);
+  return personsAll.find(p => p.role === 'QM' && p.department_id === deptId) || null;
+}
+
+// ── Email helper: build authority salutation ────────────────
+function buildAuthoritySalutation(dept) {
+  if (dept && dept.authority_salutation) {
+    return `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}`;
+  }
+  return 'Sehr geehrte Damen und Herren';
+}
+
+// ── Email helper: send document PDF via email ───────────────
+async function sendDocumentEmail({ module, to, subject, text, filename, buffer, qm, logParams }) {
+  const label = module === 'change' ? 'AC-Change' : 'AC-Audit';
+  const smtp = getSmtpConfig(module);
+  if (!smtp) throw Object.assign(new Error(`SMTP-Einstellungen (${label}) unvollständig`), { statusCode: 400 });
+  const transporter = createTransporter(smtp);
+  const replyTo = qm && qm.email ? qm.email : undefined;
+  const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
+  if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
+  await transporter.sendMail(mailOpts);
+  logAction(...logParams);
 }
 
 // Clean old log entries
@@ -399,22 +429,24 @@ app.put('/api/settings', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/settings/test-email', (req, res) => {
+app.post('/api/settings/test-email', async (req, res) => {
   const { to, module } = req.body;
   if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
   const smtp = getSmtpConfig(module || 'audit');
   if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen unvollständig' });
   const transporter = createTransporter(smtp);
   const label = module === 'change' ? 'AC-Change' : 'AC-Audit';
-  transporter.sendMail({
-    from: smtp.user, to,
-    subject: `${label} – Test E-Mail`,
-    text: `Diese E-Mail wurde als Test aus ${label} gesendet.`,
-  }, (err) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    await transporter.sendMail({
+      from: smtp.user, to,
+      subject: `${label} – Test E-Mail`,
+      text: `Diese E-Mail wurde als Test aus ${label} gesendet.`,
+    });
     logAction('Test-E-Mail gesendet', 'settings', '', '', `${to} (${label})`);
     res.json({ ok: true });
-  });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/settings/notify-test', async (req, res) => {
@@ -1769,37 +1801,22 @@ app.post('/api/cap-items/send-email', async (req, res) => {
 
   try {
     const { buffer, dept, company } = await generateCapItemsPdfBuffer(ids);
-
-    const smtp = getSmtpConfig('audit');
-    if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Audit) unvollständig' });
-    const transporter = createTransporter(smtp);
-
-    const filename = `Corrective_Actions.pdf`;
-    const personsAll = stmts.getPersonsByCompany.all(company.id);
-    const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
-    const replyTo = qm && qm.email ? qm.email : undefined;
-
+    const qm = getQmForDepartment(company.id, dept.id);
     const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     let subject, text;
     if (authority) {
-      const salutation = dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
-
       subject = `Corrective Action Plan – ${company.name} (${dept.name})`;
-      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Corrective Action Plan der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
+      text = `${buildAuthoritySalutation(dept).trim()},\n\nanbei übersenden wir Ihnen den Corrective Action Plan der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
     } else {
       subject = `Corrective Action Plan (${dept.name})`;
       text = `Hallo,\n\nanbei der Corrective Action Plan für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
     }
-
-    const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
-    if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
-    await transporter.sendMail(mailOpts);
-
-    logAction('CAP per E-Mail gesendet', 'cap_item', '', `${ids.length} CAP-Einträge`, `An: ${to}${authority ? ' (Behörde)' : ''}`, company.name, dept.name);
+    await sendDocumentEmail({ module: 'audit', to, subject, text, filename: 'Corrective_Actions.pdf', buffer, qm,
+      logParams: ['CAP per E-Mail gesendet', 'cap_item', '', `${ids.length} CAP-Einträge`, `An: ${to}${authority ? ' (Behörde)' : ''}`, company.name, dept.name] });
     res.json({ ok: true });
   } catch (e) {
     console.error('CAP send-email error:', e);
-    res.status(500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({ error: e.message });
   }
 });
 
@@ -2007,50 +2024,29 @@ app.post('/api/audit-plans/:id/send-email', async (req, res) => {
   try {
     const filter = type === 'open' ? 'planned' : undefined;
     const { buffer, plan, dept, company } = await generateAuditPlanPdfBuffer(req.params.id, type, filter);
-
-    const smtp = getSmtpConfig('audit');
-    if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Audit) unvollständig' });
-    const transporter = createTransporter(smtp);
-
+    const qm = getQmForDepartment(company.id, dept.id);
+    const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     const isClosed = type === 'closed';
     const suffix = isClosed ? 'Durchgeführte' : 'Geplante';
     const filename = `Auditplan_${plan.year}_${suffix.replace(/ü/g, 'ue')}_Audits.pdf`;
-
-    const personsAll = stmts.getPersonsByCompany.all(company.id);
-    const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
-    const replyTo = qm && qm.email ? qm.email : undefined;
-
-    const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     let subject, text;
     if (authority) {
-      const salutation = dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
       subject = `Auditplan ${plan.year} – ${suffix} Audits – ${company.name} (${dept.name})`;
-      text = `${salutation.trim()},\n\nanbei übersenden wir Ihnen den Auditplan ${plan.year} – ${suffix} Audits der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
+      text = `${buildAuthoritySalutation(dept).trim()},\n\nanbei übersenden wir Ihnen den Auditplan ${plan.year} – ${suffix} Audits der Abteilung ${dept.name} der ${company.name}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
     } else {
       subject = `Auditplan ${plan.year} – ${suffix} Audits (${dept.name})`;
       text = `Hallo,\n\nanbei der Auditplan ${plan.year} – ${suffix} Audits für die Abteilung ${dept.name} der ${company.name}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nCompliance Monitoring Manager\n${company.name}\n\n`;
     }
-
-    const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
-    if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
-    await transporter.sendMail(mailOpts);
-
-    logAction('Auditplan per E-Mail gesendet', 'audit_plan', plan.id, `${plan.year} Rev. ${plan.revision || 0}`, `An: ${to}, Typ: ${suffix}${authority ? ' (Behörde)' : ''}`, company.name, dept.name);
+    await sendDocumentEmail({ module: 'audit', to, subject, text, filename, buffer, qm,
+      logParams: ['Auditplan per E-Mail gesendet', 'audit_plan', plan.id, `${plan.year} Rev. ${plan.revision || 0}`, `An: ${to}, Typ: ${suffix}${authority ? ' (Behörde)' : ''}`, company.name, dept.name] });
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({ error: e.message });
   }
 });
 
 // ── Internal: render audit plan PDF content ─────────────────
 function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed }) {
-  function formatDateDE(isoStr) {
-    if (!isoStr) return '';
-    const d = isoStr.substring(0, 10).split('-');
-    if (d.length !== 3) return isoStr;
-    return `${d[2]}.${d[1]}.${d[0]}`;
-  }
-
   // ── Header: Logo then text below ──
   let headerY = 50;
   if (logoRow && logoRow.logo) {
@@ -2303,13 +2299,6 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
 function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY }) {
   const pageW = 595.28;
   const tableRight = pageW - 50;
-
-  function formatDateDE(isoStr) {
-    if (!isoStr) return '';
-    const d = isoStr.substring(0, 10).split('-');
-    if (d.length !== 3) return isoStr;
-    return `${d[2]}.${d[1]}.${d[0]}`;
-  }
 
   let y = startY || 50;
 
@@ -2594,13 +2583,6 @@ function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWh
   const pageW = 595.28;
   const tableRight = pageW - 50;
   const contentW = tableRight - 50;
-
-  function formatDateDE(isoStr) {
-    if (!isoStr) return '';
-    const d = isoStr.substring(0, 10).split('-');
-    if (d.length !== 3) return isoStr;
-    return `${d[2]}.${d[1]}.${d[0]}`;
-  }
 
   const evalColors = {
     'C': '#d4edda', 'NA': '#e2e3e5', 'O': '#fff3cd',
@@ -2954,7 +2936,10 @@ app.post('/api/departments/:departmentId/cap-items', (req, res) => {
   if (!dept) return res.status(404).json({ error: 'Department not found' });
   const { source, source_ref_id, deadline, responsible_person } = req.body;
   const id = uuidv4();
-  stmts.createCapItemGeneric.run(id, req.params.departmentId, source || 'manual', source_ref_id || null, deadline || null, responsible_person || '');
+  db.prepare(
+    `INSERT INTO cap_item (id, department_id, source, source_ref_id, deadline, responsible_person, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'OPEN')`
+  ).run(id, req.params.departmentId, source || 'manual', source_ref_id || null, deadline || null, responsible_person || '');
   res.status(201).json({ id });
 });
 
@@ -3560,11 +3545,6 @@ app.post('/api/change-requests/:id/import-risk-analysis', (req, res) => {
 
 // ── API: Risk Analysis PDF ────────────────────────────────────
 function renderRiskAnalysisPdf(doc, { ra, cr, dept, company, logoRow, items, qm }) {
-  function fmtDE(isoStr) {
-    if (!isoStr) return '';
-    const d = isoStr.substring(0, 10).split('-');
-    return d.length === 3 ? `${d[2]}.${d[1]}.${d[0]}` : isoStr;
-  }
   function riskColor(score) {
     if (score >= 12) return '#ef4444';
     if (score >= 4) return '#eab308';
@@ -3719,7 +3699,7 @@ function renderRiskAnalysisPdf(doc, { ra, cr, dept, company, logoRow, items, qm 
 
   // Ort, Datum above signature
   doc.fontSize(9).font('Helvetica');
-  doc.text(`${company ? company.city || '' : ''}, ${fmtDE(new Date().toISOString().slice(0, 10))}`, marginL, y);
+  doc.text(`${company ? company.city || '' : ''}, ${formatDateDE(new Date().toISOString().slice(0, 10))}`, marginL, y);
   y += 20;
 
   // Signature image
@@ -3854,12 +3834,10 @@ app.post('/api/risk-analysis/:id/send-email', async (req, res) => {
   if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
 
   try {
-    // Generate PDF as buffer
     const cr = stmts.getChangeRequest.get(ra.change_request_id);
     const dept = cr ? stmts.getDepartment.get(cr.department_id) : null;
     const company = dept ? stmts.getCompany.get(dept.company_id) : null;
-    const personsAll = company ? stmts.getPersonsByCompany.all(company.id) : [];
-    const qm = personsAll.find(p => p.role === 'QM' && dept && p.department_id === dept.id);
+    const qm = company && dept ? getQmForDepartment(company.id, dept.id) : null;
 
     const items = stmts.getRiskItemsByAnalysis.all(ra.id);
     const logoRow = company ? stmts.getCompanyLogo.get(company.id) : null;
@@ -3874,31 +3852,20 @@ app.post('/api/risk-analysis/:id/send-email', async (req, res) => {
       doc.end();
     });
 
-    const filename = `Risikoanalyse_${cr ? cr.change_no : 'RA'}.pdf`;
-    const smtp = getSmtpConfig('change');
-    if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Change) unvollständig' });
-    const transporter = createTransporter(smtp);
-    const replyTo = qm && qm.email ? qm.email : undefined;
-
     const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     let subject, text;
     if (authority) {
-      const sal = dept && dept.authority_salutation ? `Sehr geehrte${dept.authority_salutation === 'Herr' ? 'r' : ''} ${dept.authority_salutation} ${dept.authority_name || ''}` : 'Sehr geehrte Damen und Herren';
       subject = `Risikoanalyse – ${cr ? cr.change_no : ''} – ${company ? company.name : ''} (${dept ? dept.name : ''})`;
-      text = `${sal.trim()},\n\nanbei übersenden wir Ihnen die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nSafety Manager\n${company ? company.name : ''}\n\n`;
+      text = `${buildAuthoritySalutation(dept).trim()},\n\nanbei übersenden wir Ihnen die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nSafety Manager\n${company ? company.name : ''}\n\n`;
     } else {
       subject = `Risikoanalyse – ${cr ? cr.change_no : ''} (${dept ? dept.name : ''})`;
       text = `Hallo,\n\nanbei die Risikoanalyse für ${cr ? cr.change_no + ' – ' : ''}${ra.title || ''}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nSafety Manager\n${company ? company.name : ''}\n\n`;
     }
-
-    const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: pdfBuffer, contentType: 'application/pdf' }] };
-    if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
-    await transporter.sendMail(mailOpts);
-
-    logAction('Risikoanalyse gesendet', 'risk_analysis', ra.id, cr ? cr.change_no : '', `An: ${to}${authority ? ' (Behörde)' : ''}`, company ? company.name : '', dept ? dept.name : '');
+    await sendDocumentEmail({ module: 'change', to, subject, text, filename: `Risikoanalyse_${cr ? cr.change_no : 'RA'}.pdf`, buffer: pdfBuffer, qm,
+      logParams: ['Risikoanalyse gesendet', 'risk_analysis', ra.id, cr ? cr.change_no : '', `An: ${to}${authority ? ' (Behörde)' : ''}`, company ? company.name : '', dept ? dept.name : ''] });
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({ error: e.message });
   }
 });
 
@@ -4108,12 +4075,10 @@ app.post('/api/change-requests/:id/send-email', async (req, res) => {
     const dept = stmts.getDepartment.get(cr.department_id);
     const company = dept ? stmts.getCompany.get(dept.company_id) : null;
     const personsAll = company ? stmts.getPersonsByCompany.all(company.id) : [];
-    const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
+    const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id) || null;
 
     if (type === 'form2') {
-      // Generate EASA Form 2 PDF from template
       const formData = req.body.formData || {};
-      // Ensure checkbox booleans
       formData.check_5a = formData.check_5a === true || formData.check_5a === 'true';
       formData.check_5b = formData.check_5b === true || formData.check_5b === 'true';
       formData.check_5c = formData.check_5c === true || formData.check_5c === 'true';
@@ -4121,28 +4086,18 @@ app.post('/api/change-requests/:id/send-email', async (req, res) => {
       const accountable = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
 
       const buffer = await generateEasaForm2Buffer({ cr, dept, company, accountable, qm, formData });
-      const filename = `EASA_Form2_${cr.change_no}.pdf`;
-
-      const smtp = getSmtpConfig('change');
-      if (!smtp) return res.status(400).json({ error: 'SMTP-Einstellungen (AC-Change) unvollständig' });
-      const transporter = createTransporter(smtp);
-      const replyTo = qm && qm.email ? qm.email : undefined;
-
       const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
       const subject = `EASA Form 2 – ${cr.change_no} – ${company.name} (${dept.name})`;
       const text = `Sehr geehrte Damen und Herren,\n\nanbei übersenden wir Ihnen den Antrag EASA Form 2 für ${cr.change_no} – ${cr.title}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nSafety Manager\n${company.name}\n\n`;
 
-      const mailOpts = { from: smtp.user, to, replyTo, subject, text, attachments: [{ filename, content: buffer, contentType: 'application/pdf' }] };
-      if (qm && qm.email && qm.email !== to) mailOpts.bcc = qm.email;
-      await transporter.sendMail(mailOpts);
-
-      logAction('EASA Form 2 gesendet', 'change_request', cr.id, cr.change_no, `An: ${to}`, company ? company.name : '', dept ? dept.name : '');
+      await sendDocumentEmail({ module: 'change', to, subject, text, filename: `EASA_Form2_${cr.change_no}.pdf`, buffer, qm,
+        logParams: ['EASA Form 2 gesendet', 'change_request', cr.id, cr.change_no, `An: ${to}`, company ? company.name : '', dept ? dept.name : ''] });
       res.json({ ok: true });
     } else {
       return res.status(400).json({ error: 'Unbekannter E-Mail-Typ' });
     }
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({ error: e.message });
   }
 });
 

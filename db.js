@@ -531,9 +531,6 @@ const stmts = {
      ORDER BY c.deadline ASC`
   ),
 
-  // Generic CAP creation (for non-audit modules)
-  createCapItemGeneric: null, // set below after stmts definition
-
   // CAP items due/overdue (not yet notified)
   getCapItemsDue: db.prepare(
     `SELECT c.id, c.deadline, c.responsible_person,

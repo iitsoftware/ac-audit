@@ -16,9 +16,12 @@ CREATE TABLE IF NOT EXISTS department (
   company_id TEXT NOT NULL REFERENCES company(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   easa_permission_number TEXT DEFAULT '',
+  regulation TEXT DEFAULT '',
+  sort_order INTEGER DEFAULT 0,
   authority_salutation TEXT DEFAULT '',
   authority_name TEXT DEFAULT '',
   authority_email TEXT DEFAULT '',
+  initial_approval_email TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -28,10 +31,16 @@ CREATE TABLE IF NOT EXISTS audit_plan (
   department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
   name TEXT DEFAULT '',
   year INTEGER NOT NULL,
-  status TEXT DEFAULT 'DRAFT',
+  scope TEXT DEFAULT '',
+  regulation TEXT DEFAULT '',
+  audit_area TEXT DEFAULT '',
+  status TEXT DEFAULT 'ENTWURF',
+  version INTEGER DEFAULT 1,
   revision INTEGER DEFAULT 0,
+  owner TEXT DEFAULT '',
   approved_by TEXT DEFAULT '',
   approved_at TEXT,
+  comment TEXT DEFAULT '',
   submitted_to TEXT DEFAULT '',
   submitted_planned_at TEXT,
   submitted_at TEXT,
@@ -95,6 +104,7 @@ CREATE TABLE IF NOT EXISTS cap_item (
   notified_at TEXT,
   source TEXT DEFAULT 'audit',
   source_ref_id TEXT,
+  department_id TEXT REFERENCES department(id),
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
