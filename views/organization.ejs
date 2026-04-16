@@ -16,7 +16,7 @@
 </main>
 
 <!-- Company Add / Edit dialog -->
-<dialog id="company-dialog">
+<dialog id="company-dialog" aria-labelledby="dialog-title">
   <div class="dialog-header" id="dialog-title">Firma hinzuf&uuml;gen</div>
   <form id="company-form" method="dialog">
     <div class="dialog-body">
@@ -51,7 +51,7 @@
         <label for="form-logo">Logo</label>
         <input type="file" id="form-logo" accept="image/*">
         <div class="logo-preview-row" id="logo-preview-row" style="display:none">
-          <img id="logo-preview" class="logo-preview">
+          <img id="logo-preview" class="logo-preview" alt="Firmenlogo Vorschau">
           <button type="button" class="remove-logo-btn" id="remove-logo-btn">Entfernen</button>
         </div>
       </div>
@@ -60,14 +60,14 @@
         <div class="form-group">
           <label>Accountable Manager</label>
           <div class="form-row">
-            <input type="text" id="form-acc-firstname" placeholder="Vorname" class="form-group">
-            <input type="text" id="form-acc-lastname" placeholder="Nachname" class="form-group">
+            <input type="text" id="form-acc-firstname" placeholder="Vorname" aria-label="Accountable Manager Vorname" class="form-group">
+            <input type="text" id="form-acc-lastname" placeholder="Nachname" aria-label="Accountable Manager Nachname" class="form-group">
           </div>
           <input type="email" id="form-acc-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
           <div class="sig-upload-row">
             <input type="file" id="form-acc-sig" accept="image/*" class="sig-file-input">
             <div class="logo-preview-row" id="form-acc-sig-preview-row" style="display:none">
-              <img id="form-acc-sig-preview" class="sig-preview">
+              <img id="form-acc-sig-preview" class="sig-preview" alt="Accountable Manager Unterschrift">
               <button type="button" class="remove-logo-btn" data-sig="acc">Entfernen</button>
             </div>
           </div>
@@ -82,8 +82,8 @@
 </dialog>
 
 <!-- Company Delete confirmation dialog -->
-<dialog id="delete-dialog">
-  <div class="dialog-header">Firma l&ouml;schen</div>
+<dialog id="delete-dialog" aria-labelledby="delete-dialog-title">
+  <div class="dialog-header" id="delete-dialog-title">Firma l&ouml;schen</div>
   <div class="dialog-body">
     <p>Soll <strong id="delete-name"></strong> wirklich gel&ouml;scht werden?</p>
   </div>
@@ -94,7 +94,7 @@
 </dialog>
 
 <!-- Department Add / Edit dialog -->
-<dialog id="dept-dialog">
+<dialog id="dept-dialog" aria-labelledby="dept-dialog-title">
   <div class="dialog-header" id="dept-dialog-title">Abteilung hinzuf&uuml;gen</div>
   <form id="dept-form" method="dialog">
     <div class="dialog-body">
@@ -130,14 +130,14 @@
         <div class="form-group">
           <label>Compliance Monitoring Manager</label>
           <div class="form-row">
-            <input type="text" id="dept-form-qm-firstname" placeholder="Vorname" class="form-group">
-            <input type="text" id="dept-form-qm-lastname" placeholder="Nachname" class="form-group">
+            <input type="text" id="dept-form-qm-firstname" placeholder="Vorname" aria-label="Compliance Monitoring Manager Vorname" class="form-group">
+            <input type="text" id="dept-form-qm-lastname" placeholder="Nachname" aria-label="Compliance Monitoring Manager Nachname" class="form-group">
           </div>
           <input type="email" id="dept-form-qm-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
           <div class="sig-upload-row">
             <input type="file" id="dept-form-qm-sig" accept="image/*" class="sig-file-input">
             <div class="logo-preview-row" id="dept-form-qm-sig-preview-row" style="display:none">
-              <img id="dept-form-qm-sig-preview" class="sig-preview">
+              <img id="dept-form-qm-sig-preview" class="sig-preview" alt="Compliance Monitoring Manager Unterschrift">
               <button type="button" class="remove-logo-btn" data-sig="dept-qm">Entfernen</button>
             </div>
           </div>
@@ -145,14 +145,14 @@
         <div class="form-group">
           <label id="dept-form-al-label">Abteilungsleiter</label>
           <div class="form-row">
-            <input type="text" id="dept-form-al-firstname" placeholder="Vorname" class="form-group">
-            <input type="text" id="dept-form-al-lastname" placeholder="Nachname" class="form-group">
+            <input type="text" id="dept-form-al-firstname" placeholder="Vorname" aria-label="Abteilungsleiter Vorname" class="form-group">
+            <input type="text" id="dept-form-al-lastname" placeholder="Nachname" aria-label="Abteilungsleiter Nachname" class="form-group">
           </div>
           <input type="email" id="dept-form-al-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
           <div class="sig-upload-row">
             <input type="file" id="dept-form-al-sig" accept="image/*" class="sig-file-input">
             <div class="logo-preview-row" id="dept-form-al-sig-preview-row" style="display:none">
-              <img id="dept-form-al-sig-preview" class="sig-preview">
+              <img id="dept-form-al-sig-preview" class="sig-preview" alt="Abteilungsleiter Unterschrift">
               <button type="button" class="remove-logo-btn" data-sig="dept-al">Entfernen</button>
             </div>
           </div>
@@ -167,8 +167,8 @@
 </dialog>
 
 <!-- Department Delete confirmation dialog -->
-<dialog id="dept-delete-dialog">
-  <div class="dialog-header">Abteilung l&ouml;schen</div>
+<dialog id="dept-delete-dialog" aria-labelledby="dept-delete-dialog-title">
+  <div class="dialog-header" id="dept-delete-dialog-title">Abteilung l&ouml;schen</div>
   <div class="dialog-body">
     <p>Soll <strong id="dept-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
   </div>

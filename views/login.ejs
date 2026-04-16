@@ -15,7 +15,8 @@
         <div class="login-error"><%= error %></div>
       <% } %>
       <form method="POST" action="/login">
-        <input type="password" name="password" class="login-input" placeholder="Passwort" autofocus required>
+        <label for="login-password" class="sr-only">Passwort</label>
+        <input type="password" name="password" id="login-password" class="login-input" placeholder="Passwort" autofocus required>
         <button type="submit" class="login-btn">Anmelden</button>
       </form>
     </div>
