@@ -14,18 +14,12 @@
   const ICON_IMPORT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 15 12 3"/><polyline points="8 11 12 15 16 11"/></svg>';
   const ICON_SHARE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 3 12 15"/><polyline points="8 7 12 3 16 7"/></svg>';
 
-  function saveNavState() {
-    try {
-      localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ selectedId, navPath, statusFilter, categoryFilter }));
-    } catch {}
+  function saveNav() {
+    saveNavState(NAV_STORAGE_KEY, { selectedId, navPath, statusFilter, categoryFilter });
   }
 
-  function loadNavState() {
-    try {
-      const raw = localStorage.getItem(NAV_STORAGE_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch { return null; }
+  function loadNav() {
+    return loadNavState(NAV_STORAGE_KEY);
   }
 
   const companyTabsEl = document.getElementById('company-tabs');
@@ -42,13 +36,6 @@
   let currentDeptId = null;
 
   // ── Helpers ───────────────────────────────────────────────
-  function parseDateDE(val) {
-    if (!val || !val.trim()) return null;
-    const m = val.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-    if (!m) return undefined;
-    return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-  }
-
   const STATUS_LABELS = { DRAFT: 'Entwurf', IN_REVIEW: 'In Prüfung', APPROVED: 'Genehmigt', IMPLEMENTED: 'Umgesetzt', CLOSED: 'Abgeschlossen', REJECTED: 'Abgelehnt' };
   const CATEGORY_LABELS = { OFFEN: 'Offen', PRIOR: 'Prior', NON_PRIOR: 'Non-Prior' };
   const PRIORITY_LABELS = { LOW: 'Niedrig', MEDIUM: 'Mittel', HIGH: 'Hoch', CRITICAL: 'Kritisch' };
@@ -94,32 +81,16 @@
   async function loadCompanies() {
     try { companies = await fetchJSON('/api/companies'); }
     catch (e) { toast(e.message, 'error'); companies = []; }
-    renderCompanyTabs();
+    renderCompanyTabsLocal();
   }
 
-  function renderCompanyTabs() {
-    let html = '';
-    companies.forEach(c => {
-      const active = c.id === selectedId ? ' tab-active' : '';
-      html += `<button class="tab${active}" data-id="${c.id}">${escapeHtml(c.name)}</button>`;
-    });
-    companyTabsEl.innerHTML = html;
-    companyTabsEl.querySelectorAll('.tab').forEach(btn => {
-      btn.addEventListener('click', () => selectCompany(btn.dataset.id));
-    });
+  function renderCompanyTabsLocal() {
+    renderCompanyTabs(companies, selectedId, companyTabsEl, selectCompany);
   }
 
-  function renderDeptTabs() {
+  function renderDeptTabsLocal() {
     const activeDeptId = navPath.length > 0 && navPath[0].type === 'department' ? navPath[0].id : null;
-    let html = '';
-    departments.forEach(d => {
-      const active = d.id === activeDeptId ? ' tab-active' : '';
-      html += `<button class="tab tab-secondary${active}" data-id="${d.id}">${escapeHtml(d.name)}</button>`;
-    });
-    deptTabsEl.innerHTML = html;
-    deptTabsEl.querySelectorAll('.tab').forEach(btn => {
-      btn.addEventListener('click', () => selectDepartment(btn.dataset.id));
-    });
+    renderDeptTabs(departments, activeDeptId, deptTabsEl, selectDepartment);
   }
 
   async function loadDepartments() {
@@ -133,14 +104,14 @@
     navPath = [];
     statusFilter = null;
     categoryFilter = null;
-    saveNavState();
-    renderCompanyTabs();
+    saveNav();
+    renderCompanyTabsLocal();
     emptyEl.style.display = 'none';
     rightPane.style.display = 'block';
     await loadDepartments();
     await loadPersons();
     deptTabBar.style.display = 'flex';
-    renderDeptTabs();
+    renderDeptTabsLocal();
     await renderCurrentLevel();
   }
 
@@ -148,27 +119,27 @@
     const dept = departments.find(d => d.id === id);
     if (!dept) return;
     navPath = [{ type: 'department', id: dept.id, name: dept.name }];
-    saveNavState();
-    renderDeptTabs();
+    saveNav();
+    renderDeptTabsLocal();
     renderCurrentLevel();
   }
 
   // ── Navigation ──────────────────────────────────────────
   function navigateTo(segment) {
     navPath.push(segment);
-    saveNavState();
+    saveNav();
     renderCurrentLevel();
   }
 
   function navigateBack() {
     navPath.pop();
-    saveNavState();
-    renderDeptTabs();
+    saveNav();
+    renderDeptTabsLocal();
     renderCurrentLevel();
   }
 
   async function renderCurrentLevel() {
-    saveNavState();
+    saveNav();
     renderBreadcrumb();
     const lastSegment = navPath.length > 0 ? navPath[navPath.length - 1] : null;
     if (!lastSegment) {
@@ -201,8 +172,8 @@
         e.preventDefault();
         const idx = parseInt(link.dataset.navIdx);
         navPath = navPath.slice(0, idx + 1);
-        saveNavState();
-        renderDeptTabs();
+        saveNav();
+        renderDeptTabsLocal();
         renderCurrentLevel();
       });
     });
@@ -281,14 +252,14 @@
     contentEl.querySelectorAll('[data-status-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
         statusFilter = btn.dataset.statusFilter === 'ALL' ? null : btn.dataset.statusFilter;
-        saveNavState();
+        saveNav();
         renderChangeList();
       });
     });
     contentEl.querySelectorAll('[data-cat-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
         categoryFilter = btn.dataset.catFilter === 'ALL' ? null : btn.dataset.catFilter;
-        saveNavState();
+        saveNav();
         renderChangeList();
       });
     });
@@ -687,7 +658,7 @@
       const lastSeg = navPath[navPath.length - 1];
       if (lastSeg && lastSeg.type === 'change-detail') {
         lastSeg.name = currentCR.change_no || currentCR.title;
-        saveNavState();
+        saveNav();
         renderBreadcrumb();
       }
       // Refresh header badges
@@ -1432,19 +1403,19 @@
   // ── Init ──────────────────────────────────────────────────
   async function init() {
     await loadCompanies();
-    const saved = loadNavState();
+    const saved = loadNav();
     if (saved && saved.selectedId && companies.find(c => c.id === saved.selectedId)) {
       selectedId = saved.selectedId;
       navPath = Array.isArray(saved.navPath) ? saved.navPath : [];
       statusFilter = saved.statusFilter || null;
       categoryFilter = saved.categoryFilter || null;
-      renderCompanyTabs();
+      renderCompanyTabsLocal();
       emptyEl.style.display = 'none';
       rightPane.style.display = 'block';
       await loadDepartments();
       await loadPersons();
       deptTabBar.style.display = 'flex';
-      renderDeptTabs();
+      renderDeptTabsLocal();
       await renderCurrentLevel();
     }
   }

@@ -11,18 +11,12 @@
 
   const NAV_STORAGE_KEY = 'ac-org-nav-state';
 
-  function saveNavState() {
-    try {
-      localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ selectedId, selectedDeptId }));
-    } catch { /* quota exceeded or private mode */ }
+  function saveNav() {
+    saveNavState(NAV_STORAGE_KEY, { selectedId, selectedDeptId });
   }
 
-  function loadNavState() {
-    try {
-      const raw = localStorage.getItem(NAV_STORAGE_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch { return null; }
+  function loadNav() {
+    return loadNavState(NAV_STORAGE_KEY);
   }
 
   const companyTabsEl = document.getElementById('company-tabs');
@@ -106,7 +100,7 @@
   async function selectCompany(id) {
     selectedId = id;
     selectedDeptId = null;
-    saveNavState();
+    saveNav();
     renderCompanyTabs();
     emptyEl.style.display = 'none';
     rightPane.style.display = 'block';
@@ -116,14 +110,14 @@
 
   function selectDepartment(id) {
     selectedDeptId = id;
-    saveNavState();
+    saveNav();
     renderOrgDetail();
   }
 
   function showEmpty() {
     selectedId = null;
     selectedDeptId = null;
-    saveNavState();
+    saveNav();
     emptyEl.style.display = 'flex';
     rightPane.style.display = 'none';
     orgDetail.innerHTML = '';
@@ -634,7 +628,7 @@
   async function init() {
     await loadCompanies();
 
-    const saved = loadNavState();
+    const saved = loadNav();
     if (saved && saved.selectedId && companies.find(c => c.id === saved.selectedId)) {
       selectedId = saved.selectedId;
       selectedDeptId = saved.selectedDeptId || null;

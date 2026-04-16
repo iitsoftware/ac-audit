@@ -97,6 +97,57 @@ async function updateTrashBadge() {
 }
 updateTrashBadge();
 
+// Parse German date string (dd.mm.yyyy) to ISO (yyyy-mm-dd)
+// Returns null for empty, undefined for invalid, ISO string for valid
+function parseDateDE(val) {
+  if (!val || !val.trim()) return null;
+  const m = val.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (!m) return undefined;
+  return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+
+// Generic nav state persistence (localStorage)
+function saveNavState(key, data) {
+  try { localStorage.setItem(key, JSON.stringify(data)); }
+  catch { /* quota exceeded or private mode */ }
+}
+
+function loadNavState(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+// Render company tabs into a container element
+// companies: array, selectedId: string, container: element, onSelect: callback(id)
+function renderCompanyTabs(companies, selectedId, container, onSelect) {
+  let html = '';
+  companies.forEach(c => {
+    const active = c.id === selectedId ? ' tab-active' : '';
+    html += `<button class="tab${active}" data-id="${c.id}">${escapeHtml(c.name)}</button>`;
+  });
+  container.innerHTML = html;
+  container.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => onSelect(btn.dataset.id));
+  });
+}
+
+// Render department tabs into a container element
+// departments: array, activeDeptId: string|null, container: element, onSelect: callback(id)
+function renderDeptTabs(departments, activeDeptId, container, onSelect) {
+  let html = '';
+  departments.forEach(d => {
+    const active = d.id === activeDeptId ? ' tab-active' : '';
+    html += `<button class="tab tab-secondary${active}" data-id="${d.id}">${escapeHtml(d.name)}</button>`;
+  });
+  container.innerHTML = html;
+  container.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => onSelect(btn.dataset.id));
+  });
+}
+
 // Toast notifications
 (function () {
   let container;

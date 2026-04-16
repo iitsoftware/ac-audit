@@ -17,23 +17,17 @@
   // ── LocalStorage Persistence ────────────────────────────────
   const NAV_STORAGE_KEY = 'ac-audit-nav-state';
 
-  function saveNavState() {
-    try {
-      localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({
-        selectedId,
-        navPath,
-        capFilter,
-        auditLineFilters: [...auditLineFilters],
-      }));
-    } catch { /* quota exceeded or private mode */ }
+  function saveNav() {
+    saveNavState(NAV_STORAGE_KEY, {
+      selectedId,
+      navPath,
+      capFilter,
+      auditLineFilters: [...auditLineFilters],
+    });
   }
 
-  function loadNavState() {
-    try {
-      const raw = localStorage.getItem(NAV_STORAGE_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch { return null; }
+  function loadNav() {
+    return loadNavState(NAV_STORAGE_KEY);
   }
 
   const companyTabsEl = document.getElementById('company-tabs');
@@ -70,40 +64,24 @@
       toast(e.message, 'error');
       companies = [];
     }
-    renderCompanyTabs();
+    renderCompanyTabsLocal();
   }
 
-  function renderCompanyTabs() {
-    let html = '';
-    companies.forEach(c => {
-      const active = c.id === selectedId ? ' tab-active' : '';
-      html += `<button class="tab${active}" data-id="${c.id}">${escapeHtml(c.name)}</button>`;
-    });
-    companyTabsEl.innerHTML = html;
-    companyTabsEl.querySelectorAll('.tab').forEach(btn => {
-      btn.addEventListener('click', () => selectCompany(btn.dataset.id));
-    });
+  function renderCompanyTabsLocal() {
+    renderCompanyTabs(companies, selectedId, companyTabsEl, selectCompany);
   }
 
-  function renderDeptTabs() {
+  function renderDeptTabsLocal() {
     const activeDeptId = navPath.length > 0 && navPath[0].type === 'department' ? navPath[0].id : null;
-    let html = '';
-    departments.forEach(d => {
-      const active = d.id === activeDeptId ? ' tab-active' : '';
-      html += `<button class="tab tab-secondary${active}" data-id="${d.id}">${escapeHtml(d.name)}</button>`;
-    });
-    deptTabsEl.innerHTML = html;
-    deptTabsEl.querySelectorAll('.tab').forEach(btn => {
-      btn.addEventListener('click', () => selectDepartment(btn.dataset.id));
-    });
+    renderDeptTabs(departments, activeDeptId, deptTabsEl, selectDepartment);
   }
 
   function selectDepartment(id) {
     const dept = departments.find(d => d.id === id);
     if (!dept) return;
     navPath = [{ type: 'department', id: dept.id, name: dept.name }];
-    saveNavState();
-    renderDeptTabs();
+    saveNav();
+    renderDeptTabsLocal();
     renderCurrentLevel();
   }
 
@@ -117,13 +95,13 @@
     navPath = [];
     auditLineFilters = new Set();
     capFilter = null;
-    saveNavState();
-    renderCompanyTabs();
+    saveNav();
+    renderCompanyTabsLocal();
     emptyEl.style.display = 'none';
     rightPane.style.display = 'block';
     await loadDepartments();
     deptTabBar.style.display = 'flex';
-    renderDeptTabs();
+    renderDeptTabsLocal();
     await renderCurrentLevel();
   }
 
@@ -132,12 +110,12 @@
     navPath = [];
     auditLineFilters = new Set();
     capFilter = null;
-    saveNavState();
+    saveNav();
     emptyEl.style.display = 'flex';
     rightPane.style.display = 'none';
     deptTabBar.style.display = 'none';
     contentEl.innerHTML = '';
-    renderCompanyTabs();
+    renderCompanyTabsLocal();
   }
 
   async function navigateTo(index) {
@@ -146,8 +124,8 @@
     } else {
       navPath = navPath.slice(0, index + 1);
     }
-    saveNavState();
-    renderDeptTabs();
+    saveNav();
+    renderDeptTabsLocal();
     await renderCurrentLevel();
   }
 
@@ -196,7 +174,7 @@
   }
 
   async function renderCurrentLevel() {
-    saveNavState();
+    saveNav();
     renderBreadcrumb();
 
     const lastSegment = navPath.length > 0 ? navPath[navPath.length - 1] : null;
@@ -227,7 +205,7 @@
       toast(e.message, 'error');
       departments = [];
     }
-    renderDeptTabs();
+    renderDeptTabsLocal();
   }
 
   async function loadPersons() {
@@ -557,7 +535,7 @@
       const seg = navPath.find(s => s.type === 'audit-plan' && s.id === planId);
       if (seg) {
         seg.name = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? `Beh\u00f6rdenaudits ${currentPlan.year}` : `Auditplan ${currentPlan.year} Rev. ${currentPlan.revision || 0}`;
-        saveNavState();
+        saveNav();
       }
     } catch (e) {
       toast(e.message, 'error');
@@ -774,7 +752,7 @@
           auditLineFilters.add(key);
           btn.classList.add('active');
         }
-        saveNavState();
+        saveNav();
         // Apply AND filter to table rows
         document.querySelectorAll('.lines-table tr[data-tags]').forEach(row => {
           const rowTags = row.dataset.tags.split(' ');
@@ -1050,13 +1028,6 @@
       initDateAutoFormat(document.getElementById(id));
     });
 
-    function parseDateDE(val) {
-      if (!val || !val.trim()) return null;
-      const m = val.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-      if (!m) return undefined; // invalid
-      return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-    }
-
     async function saveLineFields() {
       const startIso = parseDateDE(document.getElementById('ld-audit-start-date').value);
       const endIso = parseDateDE(document.getElementById('ld-audit-end-date').value);
@@ -1086,7 +1057,7 @@
         const lastSeg = navPath[navPath.length - 1];
         if (lastSeg && lastSeg.type === 'audit-plan-line') {
           lastSeg.name = data.subject || 'Themenbereich';
-          saveNavState();
+          saveNav();
           renderBreadcrumb();
         }
         // Update header
@@ -1559,7 +1530,7 @@
       btn.addEventListener('click', () => {
         const val = btn.dataset.capFilter;
         capFilter = val === 'ALL' ? null : val;
-        saveNavState();
+        saveNav();
         renderCapSection();
       });
     });
@@ -1806,13 +1777,6 @@
     });
   }
 
-  function parseDateDE(val) {
-    if (!val || !val.trim()) return null;
-    const m = val.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-    if (!m) return undefined; // invalid
-    return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  }
-
   async function saveCapFields(capId) {
     const deadlineIso = parseDateDE(document.getElementById('cap-f-deadline').value);
     const completionIso = parseDateDE(document.getElementById('cap-f-completion-date').value);
@@ -1924,19 +1888,19 @@
   async function init() {
     await loadCompanies();
 
-    const saved = loadNavState();
+    const saved = loadNav();
     if (saved && saved.selectedId && companies.find(c => c.id === saved.selectedId)) {
       selectedId = saved.selectedId;
       navPath = Array.isArray(saved.navPath) ? saved.navPath : [];
       capFilter = saved.capFilter || null;
       auditLineFilters = new Set(Array.isArray(saved.auditLineFilters) ? saved.auditLineFilters : []);
 
-      renderCompanyTabs();
+      renderCompanyTabsLocal();
       emptyEl.style.display = 'none';
       rightPane.style.display = 'block';
       await loadDepartments();
       deptTabBar.style.display = 'flex';
-      renderDeptTabs();
+      renderDeptTabsLocal();
       await renderCurrentLevel();
     }
   }
