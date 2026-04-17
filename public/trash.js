@@ -60,7 +60,7 @@
         updateEmpty();
         updateTrashBadge();
       } catch (err) {
-        toast(err.message, 'error');
+        toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
         btn.disabled = false;
       }
     }
@@ -76,7 +76,7 @@
         updateEmpty();
         updateTrashBadge();
       } catch (err) {
-        toast(err.message, 'error');
+        toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
         btn.disabled = false;
       }
     }
@@ -92,7 +92,7 @@
       updateEmpty();
       updateTrashBadge();
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     } finally {
       emptyBtn.disabled = false;
     }

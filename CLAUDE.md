@@ -310,7 +310,13 @@ Company + Department (shared)
 - Global `:focus-visible` outline (2px solid primary); bare `outline: none` replaced with `:focus:not(:focus-visible)` pattern
 - Touch targets: minimum 44×44px on interactive elements (tab buttons, icon buttons, reorder handles)
 - Toast accessibility: container has `aria-live="polite"`, error toasts use `role="alert"` and persist with close button, success toasts use `role="status"`
-- `@media (prefers-reduced-motion: reduce)` disables toast-in animation, share-blink animation, and progress bar transitions
+- `@media (prefers-reduced-motion: reduce)` disables toast-in animation, share-blink animation, progress bar transitions, and the inline `.spinner` rotation
+- Clickable table rows: use `makeRowClickable(row, handler)` from `app.js` — sets `role="button"`, `tabindex="0"`, and a keydown handler that fires the click on Enter/Space (used by audit lines, change rows, home CAP rows)
+- Icon-only buttons: wrap bare clickable `<svg>` in `<button type="button" class="icon-btn" aria-label="…">` (44×44 min touch target). The PDF-share buttons in audit/CAP table headers use `.select-share-btn` on top of `.icon-btn`
+- Skip link: `<a href="#main" class="skip-link">` is the first child of `<body>`; off-screen by default, slides into view on `:focus`. The page wraps `<%- body %>` in `<main id="main">`
+- Color contrast: `.eval-O` uses `#78350f` on `#fde68a` (≥4.5:1 ratio) — earlier `#713f12` was too low
+- Inline progress feedback: long-running ops (backup, deadline recalc, email send, imports) swap the button label for `<span class="spinner" aria-hidden="true"></span>…` while disabled
+- Native date hints: text-based `TT.MM.JJJJ` inputs in `views/change.ejs` carry `pattern="\d{2}\.\d{2}\.\d{4}"`, `inputmode="numeric"`, `title="TT.MM.JJJJ"` so the browser surfaces format errors immediately
 
 ## Database Tables
 

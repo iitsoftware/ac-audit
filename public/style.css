@@ -20,6 +20,19 @@
   outline-offset: 2px;
 }
 
+/* Ensure form inputs always show keyboard focus, in spite of the
+   :focus:not(:focus-visible){outline:none} overrides further down. */
+.form-group input:focus-visible,
+.form-group select:focus-visible,
+.form-group textarea:focus-visible,
+.inline-input:focus-visible,
+.performed-date-input:focus-visible,
+.plan-date-input:focus-visible,
+.login-input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 :root {
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
@@ -396,8 +409,10 @@ body {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 16px;
+  min-height: 44px;
   border: none;
   border-radius: var(--radius);
   font-size: 14px;
@@ -478,7 +493,7 @@ dialog::backdrop {
   font-weight: 700;
 }
 
-.dialog-body { padding: 16px 24px; }
+.dialog-body { padding: 20px 24px; }
 
 .dialog-body-scroll {
   max-height: 60vh;
@@ -490,7 +505,7 @@ dialog.dialog-wide {
 }
 
 .dialog-footer {
-  padding: 12px 24px 20px;
+  padding: 20px 24px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -831,7 +846,8 @@ dialog.dialog-wide {
   font-size: 13px;
   background: var(--bg);
   color: var(--text);
-  width: 110px;
+  max-width: 110px;
+  width: 100%;
   text-align: center;
 }
 
@@ -934,7 +950,7 @@ dialog.dialog-wide {
 
 .eval-C { background: #d1fae5; color: #065f46; }
 .eval-NA { background: #e2e8f0; color: #334155; }
-.eval-O { background: #fde68a; color: #713f12; }
+.eval-O { background: #fde68a; color: #78350f; }
 .eval-L1 { background: #fee2e2; color: #991b1b; }
 .eval-L2 { background: #fee2e2; color: #991b1b; }
 .eval-L3 { background: #fee2e2; color: #991b1b; }
@@ -1910,7 +1926,7 @@ dialog.dialog-wide {
   gap: 20px;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 768px) {
   .settings-grid { grid-template-columns: 1fr; }
 }
 
@@ -2966,4 +2982,86 @@ dialog.dialog-wide {
   .change-progress-bar {
     transition: none;
   }
+  .spinner {
+    animation: none;
+  }
 }
+
+/* ── Skip link ───────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  background: var(--primary);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: 600;
+  z-index: 10000;
+  transition: top var(--transition);
+}
+.skip-link:focus {
+  top: 8px;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* ── Generic icon-only button ────────────────────────────── */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: background var(--transition), color var(--transition);
+}
+.icon-btn:hover { background: var(--primary-tint); color: var(--primary); }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Inline spinner ──────────────────────────────────────── */
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* ── Dialog size variants ────────────────────────────────── */
+dialog.dialog-xl { max-width: 800px; }
+dialog.dialog-lg { max-width: 600px; }
+
+/* ── Settings numeric input ──────────────────────────────── */
+.settings-num-input { max-width: 120px; }
+
+/* ── Generic badge base ──────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── Status badges: min-width for visual consistency ─────── */
+.cap-status-OPEN,
+.cap-status-CLOSED {
+  min-width: 80px;
+  text-align: center;
+  padding-inline: 8px;
+}
+

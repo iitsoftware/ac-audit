@@ -20,7 +20,7 @@
       smtp_auth: document.getElementById('smtp-auth').value,
     };
     try { await fetchJSON('/api/settings', { method: 'PUT', body: data }); }
-    catch (e) { toast(e.message, 'error'); }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
   document.querySelectorAll('#smtp-form input').forEach(el => el.addEventListener('blur', saveSmtpSettings));
@@ -34,10 +34,14 @@
   testEmailBtn.addEventListener('click', async () => {
     const to = testEmailInput.value.trim();
     if (!to || !testEmailInput.validity.valid) return;
+    testEmailBtn.disabled = true;
+    const origText = testEmailBtn.textContent;
+    testEmailBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Sende...';
     try {
       await fetchJSON('/api/settings/test-email', { method: 'POST', body: { to } });
       toast('Test-E-Mail gesendet');
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e?.message || 'Senden fehlgeschlagen', 'error'); }
+    finally { testEmailBtn.disabled = false; testEmailBtn.textContent = origText; }
   });
 
   // ── AC-Change SMTP ─────────────────────────────────────
@@ -56,7 +60,7 @@
       change_smtp_auth: document.getElementById('change-smtp-auth').value,
     };
     try { await fetchJSON('/api/settings', { method: 'PUT', body: data }); }
-    catch (e) { toast(e.message, 'error'); }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
   document.querySelectorAll('#change-smtp-form input').forEach(el => el.addEventListener('blur', saveChangeSmtpSettings));
@@ -70,10 +74,14 @@
   changeTestBtn.addEventListener('click', async () => {
     const to = changeTestInput.value.trim();
     if (!to || !changeTestInput.validity.valid) return;
+    changeTestBtn.disabled = true;
+    const origText = changeTestBtn.textContent;
+    changeTestBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Sende...';
     try {
       await fetchJSON('/api/settings/test-email', { method: 'POST', body: { to, module: 'change' } });
       toast('Test-E-Mail gesendet');
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e?.message || 'Senden fehlgeschlagen', 'error'); }
+    finally { changeTestBtn.disabled = false; changeTestBtn.textContent = origText; }
   });
 
   // ── Backup Settings ────────────────────────────────────
@@ -93,19 +101,24 @@
       backup_days: days,
     };
     try { await fetchJSON('/api/settings', { method: 'PUT', body: data }); }
-    catch (e) { toast(e.message, 'error'); }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
   document.querySelectorAll('#backup-form input').forEach(el => {
     el.addEventListener(el.type === 'checkbox' ? 'change' : 'blur', saveBackupSettings);
   });
 
-  document.getElementById('backup-now').addEventListener('click', async () => {
+  const backupNowBtn = document.getElementById('backup-now');
+  backupNowBtn.addEventListener('click', async () => {
+    backupNowBtn.disabled = true;
+    const origText = backupNowBtn.textContent;
+    backupNowBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Sichere...';
     try {
       const result = await fetchJSON('/api/backup/now', { method: 'POST' });
       toast(`Backup erstellt: ${result.filename}`);
       loadBackupList();
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e?.message || 'Backup fehlgeschlagen', 'error'); }
+    finally { backupNowBtn.disabled = false; backupNowBtn.textContent = origText; }
   });
 
   async function loadBackupList() {
@@ -139,16 +152,21 @@
       cap_deadline_L3: document.getElementById('cap-deadline-L3').value.trim(),
     };
     try { await fetchJSON('/api/settings', { method: 'PUT', body: data }); }
-    catch (e) { toast(e.message, 'error'); }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
   document.querySelectorAll('#cap-deadline-form input').forEach(el => el.addEventListener('blur', saveCapDeadlineSettings));
 
-  document.getElementById('cap-recalc').addEventListener('click', async () => {
+  const capRecalcBtn = document.getElementById('cap-recalc');
+  capRecalcBtn.addEventListener('click', async () => {
+    capRecalcBtn.disabled = true;
+    const origText = capRecalcBtn.textContent;
+    capRecalcBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Berechne...';
     try {
       const result = await fetchJSON('/api/cap-items/recalc-deadlines', { method: 'POST' });
       toast(`${result.updated} von ${result.total} CAP-Fristen aktualisiert`);
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e?.message || 'Aktualisierung fehlgeschlagen', 'error'); }
+    finally { capRecalcBtn.disabled = false; capRecalcBtn.textContent = origText; }
   });
 
   // ── Notification Settings ──────────────────────────────
@@ -170,7 +188,7 @@
       notify_days: days,
     };
     try { await fetchJSON('/api/settings', { method: 'PUT', body: data }); }
-    catch (e) { toast(e.message, 'error'); }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
   document.querySelectorAll('#notify-form input').forEach(el => {
@@ -186,9 +204,13 @@
   notifyTestBtn.addEventListener('click', async () => {
     const to = notifyTestEmail.value.trim();
     if (!to || !notifyTestEmail.validity.valid) return;
+    notifyTestBtn.disabled = true;
+    const origText = notifyTestBtn.textContent;
+    notifyTestBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Sende...';
     try {
       await fetchJSON('/api/settings/notify-test', { method: 'POST', body: { to } });
       toast('Test-Benachrichtigung gesendet');
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e?.message || 'Senden fehlgeschlagen', 'error'); }
+    finally { notifyTestBtn.disabled = false; notifyTestBtn.textContent = origText; }
   });
 })();

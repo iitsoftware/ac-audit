@@ -80,7 +80,7 @@
   // ── Company / Dept Tabs ──────────────────────────────────
   async function loadCompanies() {
     try { companies = await fetchJSON('/api/companies'); }
-    catch (e) { toast(e.message, 'error'); companies = []; }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); companies = []; }
     renderCompanyTabsLocal();
   }
 
@@ -96,7 +96,7 @@
   async function loadDepartments() {
     if (!selectedId) return;
     try { departments = await fetchJSON(`/api/companies/${selectedId}/departments`); }
-    catch (e) { toast(e.message, 'error'); departments = []; }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); departments = []; }
   }
 
   async function selectCompany(id) {
@@ -193,7 +193,7 @@
   async function loadChangeRequests() {
     if (!currentDeptId) return;
     try { changeRequests = await fetchJSON(`/api/departments/${currentDeptId}/change-requests`); }
-    catch (e) { toast(e.message, 'error'); changeRequests = []; }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); changeRequests = []; }
     renderChangeList();
   }
 
@@ -266,7 +266,7 @@
 
     // Row click → navigate to detail
     contentEl.querySelectorAll('.change-row').forEach(row => {
-      row.addEventListener('click', (e) => {
+      makeRowClickable(row, (e) => {
         if (e.target.closest('.pane-action-btn')) return;
         const cr = changeRequests.find(c => c.id === row.dataset.id);
         if (cr) navigateTo({ type: 'change-detail', id: cr.id, name: cr.change_no || cr.title });
@@ -331,12 +331,13 @@
 
     if (!data.title) { toast('Titel ist erforderlich', 'error'); return; }
 
+    const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       if (id) {
         currentCR = await fetchJSON(`/api/change-requests/${id}`, { method: 'PUT', body: data });
         toast('Change Request aktualisiert');
         changeDialog.close();
-        // If we're in detail view, re-render it
         const lastSeg = navPath[navPath.length - 1];
         if (lastSeg && lastSeg.type === 'change-detail') {
           await renderChangeDetail(currentCR.id);
@@ -350,7 +351,9 @@
         await loadChangeRequests();
       }
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Speichern fehlgeschlagen', 'error');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 
@@ -364,16 +367,18 @@
   }
 
   document.getElementById('change-delete-cancel').addEventListener('click', () => changeDeleteDialog.close());
-  document.getElementById('change-delete-confirm').addEventListener('click', async () => {
+  document.getElementById('change-delete-confirm').addEventListener('click', async (e) => {
     if (!deleteTarget) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       await fetchJSON(`/api/change-requests/${deleteTarget.id}`, { method: 'DELETE' });
       toast('Change Request gel\u00f6scht');
       changeDeleteDialog.close();
       await loadChangeRequests();
     } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; }
   });
 
   // ═════════════════════════════════════════════════════════
@@ -396,7 +401,7 @@
     try {
       currentCR = await fetchJSON(`/api/change-requests/${crId}`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       navigateBack();
       return;
     }
@@ -574,7 +579,7 @@
             const badges = headerEl.querySelectorAll('.audit-tag');
             if (badges[0]) badges[0].outerHTML = statusBadgeHtml(currentCR.status);
           }
-        } catch (err) { toast(err.message, 'error'); }
+        } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
       });
     }
 
@@ -673,7 +678,7 @@
         if (badges[2]) badges[2].outerHTML = priorityBadgeHtml(currentCR.priority);
       }
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   }
 
@@ -722,6 +727,8 @@
       completion_date: completionIso,
     };
 
+    const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       if (id) {
         await fetchJSON(`/api/change-tasks/${id}`, { method: 'PUT', body: data });
@@ -733,7 +740,9 @@
       document.getElementById('task-dialog').close();
       await loadTasks();
       renderDetailContent();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) {
+      toast(err?.message || 'Speichern fehlgeschlagen', 'error');
+    } finally { if (submitBtn) submitBtn.disabled = false; }
   });
 
   // ── Task Delete ──────────────────────────────────────────
@@ -744,15 +753,19 @@
   }
 
   document.getElementById('task-delete-cancel').addEventListener('click', () => document.getElementById('task-delete-dialog').close());
-  document.getElementById('task-delete-confirm').addEventListener('click', async () => {
+  document.getElementById('task-delete-confirm').addEventListener('click', async (e) => {
     if (!deleteTaskId) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       await fetchJSON(`/api/change-tasks/${deleteTaskId}`, { method: 'DELETE' });
       toast('Aufgabe gel\u00f6scht');
       document.getElementById('task-delete-dialog').close();
       await loadTasks();
       renderDetailContent();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) {
+      toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; }
   });
 
   // ── Import Tasks ────────────────────────────────────────
@@ -774,7 +787,7 @@
         document.getElementById('import-tasks-dialog').close();
         await loadTasks();
         renderDetailContent();
-      } catch (err) { toast(err.message, 'error'); } finally { btn.disabled = false; }
+      } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); } finally { btn.disabled = false; }
     };
     reader.readAsDataURL(file);
   });
@@ -796,7 +809,7 @@
         document.getElementById('import-risk-dialog').close();
         await loadRiskAnalysisSummary();
         renderDetailContent();
-      } catch (err) { toast(err.message, 'error'); }
+      } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
     };
     reader.readAsDataURL(file);
   });
@@ -811,7 +824,7 @@
       currentRiskAnalysis = ra;
       await loadRiskAnalysisSummary();
       renderDetailContent();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
   // ── EASA Form 2 Dialog ──────────────────────────────────
@@ -938,7 +951,7 @@
       });
       toast('E-Mail gesendet');
       document.getElementById('change-email-dialog').close();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   });
 
 
@@ -1167,7 +1180,7 @@
           signed_at: signedIso,
         }
       });
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
   // ── Risk Analysis Share Dialog ─────────────────────────
@@ -1196,9 +1209,13 @@
     document.getElementById('ra-share-email-section').style.display = '';
   });
 
-  document.getElementById('ra-share-email-send').addEventListener('click', async () => {
+  document.getElementById('ra-share-email-send').addEventListener('click', async (e) => {
     const to = document.getElementById('ra-share-email-to').value.trim();
     if (!to) { toast('E-Mail-Adresse erforderlich', 'error'); return; }
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Sende...';
     try {
       await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/send-email`, {
         method: 'POST', body: { to, authority: raShareEmailMode === 'authority' }
@@ -1206,7 +1223,9 @@
       toast('E-Mail gesendet');
       document.getElementById('ra-share-email-section').style.display = 'none';
       document.getElementById('ra-share-dialog').close();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) {
+      toast(err?.message || 'Senden fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; btn.textContent = origText; }
   });
 
   // ── Risk History Dialog ─────────────────────────────────
@@ -1225,6 +1244,8 @@
     e.preventDefault();
     const dateIso = parseDateDE(document.getElementById('risk-history-date').value);
     if (dateIso === undefined) { toast('Datumsformat: TT.MM.JJJJ', 'error'); return; }
+    const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/history`, {
         method: 'POST',
@@ -1239,7 +1260,9 @@
       document.getElementById('risk-history-dialog').close();
       riskHistory = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/history`);
       renderRiskAnalysisContent();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) {
+      toast(err?.message || 'Speichern fehlgeschlagen', 'error');
+    } finally { if (submitBtn) submitBtn.disabled = false; }
   });
 
   // ── Risk Item Dialog ────────────────────────────────────
@@ -1327,7 +1350,7 @@
       // Update breadcrumb name
       const lastSeg = navPath[navPath.length - 1];
       if (lastSeg) { lastSeg.name = data.risk_type || data.description || 'Risiko'; renderBreadcrumb(); }
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
   // Keep dialog-based add for new items (lightweight)
@@ -1372,6 +1395,8 @@
       implementation_date: implIso,
     };
 
+    const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/items`, { method: 'POST', body: data });
       toast('Risiko hinzugef\u00fcgt');
@@ -1379,7 +1404,9 @@
       riskItems = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/items`);
       riskHistory = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/history`);
       renderRiskAnalysisContent();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) {
+      toast(err?.message || 'Speichern fehlgeschlagen', 'error');
+    } finally { if (submitBtn) submitBtn.disabled = false; }
   });
 
   // ── Risk Item Delete ────────────────────────────────────
@@ -1390,8 +1417,10 @@
   }
 
   document.getElementById('risk-item-delete-cancel').addEventListener('click', () => document.getElementById('risk-item-delete-dialog').close());
-  document.getElementById('risk-item-delete-confirm').addEventListener('click', async () => {
+  document.getElementById('risk-item-delete-confirm').addEventListener('click', async (e) => {
     if (!deleteRiskItemId) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       await fetchJSON(`/api/risk-items/${deleteRiskItemId}`, { method: 'DELETE' });
       toast('Risiko gel\u00f6scht');
@@ -1399,7 +1428,9 @@
       riskItems = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/items`);
       riskHistory = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/history`);
       renderRiskAnalysisContent();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) {
+      toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; }
   });
 
   // ── Init ──────────────────────────────────────────────────

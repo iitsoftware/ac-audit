@@ -64,11 +64,11 @@
       <div class="form-row">
         <div class="form-group">
           <label for="change-form-requested-date">Antragsdatum</label>
-          <input type="text" id="change-form-requested-date" placeholder="TT.MM.JJJJ">
+          <input type="text" id="change-form-requested-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
         </div>
         <div class="form-group">
           <label for="change-form-target-date">Zieldatum</label>
-          <input type="text" id="change-form-target-date" placeholder="TT.MM.JJJJ">
+          <input type="text" id="change-form-target-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
         </div>
       </div>
     </div>
@@ -126,12 +126,12 @@
         </div>
         <div class="form-group">
           <label for="task-form-target-date">Zieldatum</label>
-          <input type="text" id="task-form-target-date" placeholder="TT.MM.JJJJ">
+          <input type="text" id="task-form-target-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
         </div>
       </div>
       <div class="form-group">
         <label for="task-form-completion-date">Erledigt am</label>
-        <input type="text" id="task-form-completion-date" placeholder="TT.MM.JJJJ (leer = offen)">
+        <input type="text" id="task-form-completion-date" placeholder="TT.MM.JJJJ (leer = offen)" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
       </div>
     </div>
     <div class="dialog-footer">
@@ -154,7 +154,7 @@
 </dialog>
 
 <!-- Risk Item Add / Edit dialog -->
-<dialog id="risk-item-dialog" style="max-width:800px" aria-labelledby="risk-item-dialog-title">
+<dialog id="risk-item-dialog" class="dialog-xl" aria-labelledby="risk-item-dialog-title">
   <div class="dialog-header" id="risk-item-dialog-title">Risiko hinzuf&uuml;gen</div>
   <form id="risk-item-form" method="dialog">
     <div class="dialog-body">
@@ -198,7 +198,7 @@
       <div class="form-row">
         <div class="form-group">
           <label for="risk-item-form-impl-date">Termin f&uuml;r Umsetzung</label>
-          <input type="text" id="risk-item-form-impl-date" placeholder="TT.MM.JJJJ">
+          <input type="text" id="risk-item-form-impl-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
         </div>
         <div class="form-group">
           <label for="risk-item-form-next-step">N&auml;chster Schritt</label>
@@ -257,7 +257,7 @@
       <div class="form-row">
         <div class="form-group">
           <label for="risk-meta-signed-at">Freigabe-Datum</label>
-          <input type="text" id="risk-meta-signed-at" placeholder="TT.MM.JJJJ">
+          <input type="text" id="risk-meta-signed-at" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
         </div>
         <div class="form-group"></div>
       </div>
@@ -281,7 +281,7 @@
         </div>
         <div class="form-group">
           <label for="risk-history-date">Datum</label>
-          <input type="text" id="risk-history-date" placeholder="TT.MM.JJJJ">
+          <input type="text" id="risk-history-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
         </div>
       </div>
       <div class="form-group">
@@ -331,7 +331,7 @@
 </dialog>
 
 <!-- EASA Form 2 dialog -->
-<dialog id="easa-form2-dialog" style="max-width:600px" aria-labelledby="easa-form2-dialog-title">
+<dialog id="easa-form2-dialog" class="dialog-lg" aria-labelledby="easa-form2-dialog-title">
   <div class="dialog-header" id="easa-form2-dialog-title">EASA Form 2</div>
   <form id="easa-form2-form" method="dialog">
     <div class="dialog-body">

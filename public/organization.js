@@ -33,7 +33,7 @@
     try {
       companies = await fetchJSON('/api/companies');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       companies = [];
     }
     renderCompanyTabs();
@@ -98,7 +98,7 @@
     try {
       departments = await fetchJSON(`/api/companies/${selectedId}/departments`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       departments = [];
     }
   }
@@ -118,7 +118,7 @@
     let html = '<div class="org-company-detail">';
     html += '<div class="org-company-header">';
     if (company.has_logo) {
-      html += `<img src="/api/companies/${company.id}/logo?t=${Date.now()}" class="company-logo">`;
+      html += `<img src="/api/companies/${company.id}/logo?t=${Date.now()}" class="company-logo" alt="${escapeAttr(company.name)} Logo">`;
     } else {
       html += '<div class="company-logo-placeholder">&#127970;</div>';
     }
@@ -359,6 +359,8 @@
 
     if (!data.name) { toast('Name ist erforderlich', 'error'); return; }
 
+    const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       if (id) {
         await fetchJSON(`/api/companies/${id}`, { method: 'PUT', body: data });
@@ -388,7 +390,9 @@
       await loadCompanies();
       if (selectedId) await selectCompany(selectedId);
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Speichern fehlgeschlagen', 'error');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 
@@ -402,8 +406,10 @@
   }
 
   document.getElementById('delete-cancel').addEventListener('click', () => deleteDialog.close());
-  document.getElementById('delete-confirm').addEventListener('click', async () => {
+  document.getElementById('delete-confirm').addEventListener('click', async (e) => {
     if (!deleteTarget) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       await fetchJSON(`/api/companies/${deleteTarget.id}`, { method: 'DELETE' });
       toast('Firma gel\u00f6scht');
@@ -411,8 +417,8 @@
       showEmpty();
       await loadCompanies();
     } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; }
   });
 
   // ── Department Dialog (Add / Edit) ────────────────────────
@@ -476,6 +482,7 @@
 
   document.getElementById('dept-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
     const id = document.getElementById('dept-form-id').value;
     const data = {
       name: document.getElementById('dept-form-name').value.trim(),
@@ -489,6 +496,7 @@
 
     if (!data.name) { toast('Name ist erforderlich', 'error'); return; }
 
+    if (submitBtn) submitBtn.disabled = true;
     try {
       if (id) {
         await fetchJSON(`/api/departments/${id}`, { method: 'PUT', body: data });
@@ -522,7 +530,9 @@
       await loadPersons();
       renderOrgDetail();
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Speichern fehlgeschlagen', 'error');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 
@@ -536,8 +546,10 @@
   }
 
   document.getElementById('dept-delete-cancel').addEventListener('click', () => deptDeleteDialog.close());
-  document.getElementById('dept-delete-confirm').addEventListener('click', async () => {
+  document.getElementById('dept-delete-confirm').addEventListener('click', async (e) => {
     if (!deptDeleteTarget) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       await fetchJSON(`/api/departments/${deptDeleteTarget.id}`, { method: 'DELETE' });
       toast('Abteilung gel\u00f6scht');
@@ -546,8 +558,8 @@
       await loadDepartments();
       renderOrgDetail();
     } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; }
   });
 
   // ── Init ──────────────────────────────────────────────────

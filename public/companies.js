@@ -61,7 +61,7 @@
     try {
       companies = await fetchJSON('/api/companies');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       companies = [];
     }
     renderCompanyTabsLocal();
@@ -202,7 +202,7 @@
     try {
       departments = await fetchJSON(`/api/companies/${selectedId}/departments`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       departments = [];
     }
     renderDeptTabsLocal();
@@ -241,7 +241,7 @@
     try {
       auditPlans = await fetchJSON(`/api/departments/${currentDeptId}/audit-plans`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       auditPlans = [];
     }
     renderAuditPlans();
@@ -342,6 +342,8 @@
 
     if (!data.year || isNaN(data.year)) { toast('Jahr ist erforderlich', 'error'); return; }
 
+    const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       if (id) {
         await fetchJSON(`/api/audit-plans/${id}`, { method: 'PUT', body: data });
@@ -353,8 +355,8 @@
       planDialog.close();
       await loadAuditPlans();
     } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(err?.message || 'Speichern fehlgeschlagen', 'error');
+    } finally { if (submitBtn) submitBtn.disabled = false; }
   });
 
   // ── Audit Plan Delete ─────────────────────────────────────
@@ -367,16 +369,18 @@
   }
 
   document.getElementById('plan-delete-cancel').addEventListener('click', () => planDeleteDialog.close());
-  document.getElementById('plan-delete-confirm').addEventListener('click', async () => {
+  document.getElementById('plan-delete-confirm').addEventListener('click', async (e) => {
     if (!planDeleteTarget) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       await fetchJSON(`/api/audit-plans/${planDeleteTarget.id}`, { method: 'DELETE' });
       toast('Auditplan gel\u00f6scht');
       planDeleteDialog.close();
       await loadAuditPlans();
     } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; }
   });
 
   // ── Plan Type Dialog ───────────────────────────────────────
@@ -398,7 +402,7 @@
       toast('Behördenaudits erstellt');
       await loadAuditPlans();
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   });
 
@@ -419,7 +423,7 @@
         toast('Auditplan erstellt');
         await loadAuditPlans();
       } catch (err) {
-        toast(err.message, 'error');
+        toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
       }
       return;
     }
@@ -438,7 +442,7 @@
       toast('Leerer Auditplan erstellt');
       await loadAuditPlans();
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   });
 
@@ -467,14 +471,14 @@
               toast('Neue Revision erstellt');
               await loadAuditPlans();
             } catch (err) {
-              toast(err.message, 'error');
+              toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
             }
           });
         });
       }
       revisionSelectDialog.showModal();
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   });
 
@@ -504,14 +508,14 @@
               toast('Plan von Vorlage erstellt');
               await loadAuditPlans();
             } catch (err) {
-              toast(err.message, 'error');
+              toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
             }
           });
         });
       }
       templateSelectDialog.showModal();
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   });
 
@@ -538,7 +542,7 @@
         saveNav();
       }
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       currentPlan = null;
       planLines = [];
     }
@@ -678,7 +682,7 @@
             <th>Geplant</th>
             <th>Durchgef\u00fchrt</th>
             <th></th>
-            <th class="col-select"><label class="select-header"><input type="checkbox" class="select-all-lines" title="Alle ausw\u00e4hlen">${ICON_SHARE}</label></th>
+            <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-lines" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte Themenbereiche als PDF exportieren">${ICON_SHARE}</button></span></th>
           </tr>
         </thead>
         <tbody>`;
@@ -786,7 +790,7 @@
           body: { approved_at: approvedIso, submitted_planned_at: submittedPlannedIso, submitted_at: submittedIso }
         });
       } catch (err) {
-        toast(err.message, 'error');
+        toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
       }
     }
 
@@ -815,13 +819,13 @@
         navPath.push({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich') });
         renderCurrentLevel();
       } catch (err) {
-        toast(err.message, 'error');
+        toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
       }
     });
 
     // Bind row click → drill-down to line detail
     contentEl.querySelectorAll('.line-row-clickable').forEach(row => {
-      row.addEventListener('click', (e) => {
+      makeRowClickable(row, (e) => {
         if (e.target.closest('.pane-action-btn') || e.target.closest('.col-select')) return;
         const lineId = row.dataset.id;
         const line = planLines.find(l => l.id === lineId);
@@ -848,7 +852,7 @@
         updateLineSelection();
       });
       lineCbs.forEach(cb => cb.addEventListener('change', updateLineSelection));
-      lineHeader.querySelector('svg').addEventListener('click', () => {
+      lineHeader.querySelector('.select-share-btn').addEventListener('click', () => {
         const ids = [...lineCbs].filter(cb => cb.checked).map(cb => cb.dataset.lineId);
         if (ids.length === 0) { toast('Keine Themenbereiche ausgew\u00e4hlt', 'error'); return; }
         window.open(`/api/audit-plan-lines/pdf?ids=${ids.join(',')}`);
@@ -888,16 +892,18 @@
   }
 
   document.getElementById('line-delete-cancel').addEventListener('click', () => lineDeleteDialog.close());
-  document.getElementById('line-delete-confirm').addEventListener('click', async () => {
+  document.getElementById('line-delete-confirm').addEventListener('click', async (e) => {
     if (!lineDeleteTarget) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       await fetchJSON(`/api/audit-plan-lines/${lineDeleteTarget.id}`, { method: 'DELETE' });
       toast('Themenbereich gel\u00f6scht');
       lineDeleteDialog.close();
       await loadAuditPlanDetail(currentPlan.id);
     } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; }
   });
 
   // ── Line Detail Level (Checklist + Audit Summary) ──────────
@@ -915,7 +921,7 @@
       currentLine = await fetchJSON(`/api/audit-plan-lines/${lineId}`);
       checklistItems = await fetchJSON(`/api/audit-plan-lines/${lineId}/checklist-items`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       currentLine = null;
       checklistItems = [];
     }
@@ -947,10 +953,10 @@
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>${sectionLabel}</h3></div>
       <div class="inline-form-grid">
-        <label>${sectionLabel}</label><input class="inline-input" id="ld-subject" value="${escapeHtml(currentLine.subject || '')}">
-        <label>Vorschriften</label><textarea class="inline-input inline-textarea" id="ld-regulations" rows="2">${escapeHtml(currentLine.regulations || '')}</textarea>
-        <label>Ort</label><input class="inline-input" id="ld-location" value="${escapeHtml(currentLine.location || '')}">
-        ${isAuthorityLine ? '' : `<label>Monat geplant</label>${monthSelect('ld-planned-window', currentLine.planned_window)}`}
+        <label for="ld-subject">${sectionLabel}</label><input class="inline-input" id="ld-subject" value="${escapeHtml(currentLine.subject || '')}">
+        <label for="ld-regulations">Vorschriften</label><textarea class="inline-input inline-textarea" id="ld-regulations" rows="2">${escapeHtml(currentLine.regulations || '')}</textarea>
+        <label for="ld-location">Ort</label><input class="inline-input" id="ld-location" value="${escapeHtml(currentLine.location || '')}">
+        ${isAuthorityLine ? '' : `<label for="ld-planned-window">Monat geplant</label>${monthSelect('ld-planned-window', currentLine.planned_window)}`}
       </div>
     </div>`;
 
@@ -958,15 +964,15 @@
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Audit-Informationen</h3></div>
       <div class="inline-form-grid">
-        <label>Auditor Team</label><input class="inline-input" id="ld-auditor-team" value="${escapeHtml(currentLine.auditor_team || '')}">
-        <label>Auditee</label><input class="inline-input" id="ld-auditee" value="${escapeHtml(currentLine.auditee || '')}">
-        <label>Start</label><input class="inline-input" id="ld-audit-start-date" value="${escapeHtml(formatDateDE(currentLine.audit_start_date))}" placeholder="TT.MM.JJJJ">
-        <label>Ende</label><input class="inline-input" id="ld-audit-end-date" value="${escapeHtml(formatDateDE(currentLine.audit_end_date))}" placeholder="TT.MM.JJJJ">
-        <label>Audit Ort</label><input class="inline-input" id="ld-audit-location" value="${escapeHtml(currentLine.audit_location || '')}">
-        <label>Dokument Ref.</label><input class="inline-input" id="ld-doc-ref" value="${escapeHtml(currentLine.document_ref || '')}">
-        <label>Iss/Rev</label><input class="inline-input" id="ld-doc-iss-rev" value="${escapeHtml(currentLine.document_iss_rev || '')}">
-        <label>Rev Datum</label><input class="inline-input" id="ld-doc-rev-date" value="${escapeHtml(formatDateDE(currentLine.document_rev_date))}" placeholder="TT.MM.JJJJ">
-        <label>Empfehlung</label><textarea class="inline-input inline-textarea" id="ld-recommendation" rows="2">${escapeHtml(currentLine.recommendation || '')}</textarea>
+        <label for="ld-auditor-team">Auditor Team</label><input class="inline-input" id="ld-auditor-team" value="${escapeHtml(currentLine.auditor_team || '')}">
+        <label for="ld-auditee">Auditee</label><input class="inline-input" id="ld-auditee" value="${escapeHtml(currentLine.auditee || '')}">
+        <label for="ld-audit-start-date">Start</label><input class="inline-input" id="ld-audit-start-date" value="${escapeHtml(formatDateDE(currentLine.audit_start_date))}" placeholder="TT.MM.JJJJ">
+        <label for="ld-audit-end-date">Ende</label><input class="inline-input" id="ld-audit-end-date" value="${escapeHtml(formatDateDE(currentLine.audit_end_date))}" placeholder="TT.MM.JJJJ">
+        <label for="ld-audit-location">Audit Ort</label><input class="inline-input" id="ld-audit-location" value="${escapeHtml(currentLine.audit_location || '')}">
+        <label for="ld-doc-ref">Dokument Ref.</label><input class="inline-input" id="ld-doc-ref" value="${escapeHtml(currentLine.document_ref || '')}">
+        <label for="ld-doc-iss-rev">Iss/Rev</label><input class="inline-input" id="ld-doc-iss-rev" value="${escapeHtml(currentLine.document_iss_rev || '')}">
+        <label for="ld-doc-rev-date">Rev Datum</label><input class="inline-input" id="ld-doc-rev-date" value="${escapeHtml(formatDateDE(currentLine.document_rev_date))}" placeholder="TT.MM.JJJJ">
+        <label for="ld-recommendation">Empfehlung</label><textarea class="inline-input inline-textarea" id="ld-recommendation" rows="2">${escapeHtml(currentLine.recommendation || '')}</textarea>
       </div>
     </div>`;
 
@@ -1063,7 +1069,7 @@
         // Update header
         headerEl.querySelector('h2').textContent = data.subject || 'Themenbereich';
       } catch (err) {
-        toast(err.message, 'error');
+        toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
       }
     }
 
@@ -1187,6 +1193,8 @@
       document_ref: document.getElementById('ci-form-doc-ref').value.trim(),
     };
 
+    const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       if (id) {
         await fetchJSON(`/api/checklist-items/${id}`, { method: 'PUT', body: data });
@@ -1198,8 +1206,8 @@
       ciDialog.close();
       await loadLineDetail(currentLine.id);
     } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(err?.message || 'Speichern fehlgeschlagen', 'error');
+    } finally { if (submitBtn) submitBtn.disabled = false; }
   });
 
   // ── Checklist Item Delete ──────────────────────────────────
@@ -1211,16 +1219,18 @@
   }
 
   document.getElementById('ci-delete-cancel').addEventListener('click', () => ciDeleteDialog.close());
-  document.getElementById('ci-delete-confirm').addEventListener('click', async () => {
+  document.getElementById('ci-delete-confirm').addEventListener('click', async (e) => {
     if (!ciDeleteTarget) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       await fetchJSON(`/api/checklist-items/${ciDeleteTarget.id}`, { method: 'DELETE' });
       toast('Eintrag gel\u00f6scht');
       ciDeleteDialog.close();
       await loadLineDetail(currentLine.id);
     } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; }
   });
 
   // ── Import .docx ────────────────────────────────────────────
@@ -1243,7 +1253,7 @@
       toast(`Auditplan importiert (${data.lineCount} Themenbereiche)`);
       await loadAuditPlans();
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   });
 
@@ -1298,7 +1308,7 @@
 
         html += `<div class="import-mapping-row">
           <span class="import-mapping-file">${escapeHtml(file.name)}</span>
-          <select class="import-mapping-select" data-filename="${escapeHtml(file.name)}">
+          <select class="import-mapping-select" data-filename="${escapeHtml(file.name)}" aria-label="Themenbereich für ${escapeAttr(file.name)} ausw\u00e4hlen">
             <option value="">-- Import überspringen --</option>`;
         for (const line of planLines) {
           const selected = (line.id === bestId) ? ' selected' : '';
@@ -1314,7 +1324,7 @@
       document.getElementById('import-results-footer').style.display = 'none';
       importResultsDialog.showModal();
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   });
 
@@ -1338,6 +1348,8 @@
 
     const btn = document.getElementById('import-mapping-confirm');
     btn.disabled = true;
+    const origText = btn.textContent;
+    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Importiere...';
     try {
       const result = await fetchJSON(`/api/audit-plans/${currentPlan.id}/import-audits`, {
         method: 'POST',
@@ -1375,9 +1387,10 @@
       document.getElementById('import-mapping-footer').style.display = 'none';
       document.getElementById('import-results-footer').style.display = '';
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Import fehlgeschlagen', 'error');
     } finally {
       btn.disabled = false;
+      btn.textContent = origText;
     }
   });
 
@@ -1423,7 +1436,7 @@
       toast(`Auditplan an ${dept.authority_email} gesendet`);
       pdfExportDialog.close();
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   }
   document.getElementById('pdf-export-open-authority').addEventListener('click', () => sendToAuthority('open'));
@@ -1447,6 +1460,9 @@
   pdfEmailSendBtn.addEventListener('click', async () => {
     const to = pdfEmailInput.value.trim();
     if (!to || !pdfEmailInput.validity.valid || !currentPlan) return;
+    pdfEmailSendBtn.disabled = true;
+    const origText = pdfEmailSendBtn.textContent;
+    pdfEmailSendBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Sende...';
     try {
       await fetchJSON(`/api/audit-plans/${currentPlan.id}/send-email`, {
         method: 'POST', body: { to, type: pdfEmailType }
@@ -1455,8 +1471,8 @@
       pdfEmailSection.style.display = 'none';
       pdfExportDialog.close();
     } catch (e) {
-      toast(e.message, 'error');
-    }
+      toast(e?.message || 'Senden fehlgeschlagen', 'error');
+    } finally { pdfEmailSendBtn.disabled = false; pdfEmailSendBtn.textContent = origText; }
   });
 
   // ── CAP Section ──────────────────────────────────────────
@@ -1508,7 +1524,7 @@
       html += `<div class="lines-table-wrap"><table class="lines-table">
         <thead><tr>
           <th>Nr.</th><th>Audit-Nr.</th><th>Thema</th><th>Finding</th><th>Level</th><th>Deadline</th><th>Status</th>
-          <th class="col-select"><label class="select-header"><input type="checkbox" class="select-all-cap" title="Alle ausw\u00e4hlen">${ICON_SHARE}</label></th>
+          <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-cap" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte CAPs als PDF exportieren">${ICON_SHARE}</button></span></th>
         </tr></thead><tbody>`;
       filtered.forEach((cap, idx) => {
         const evalClass = cap.evaluation ? `eval-${cap.evaluation}` : '';
@@ -1541,7 +1557,7 @@
 
     // Row click → navigate to CAP detail
     section.querySelectorAll('.cap-row-clickable').forEach(row => {
-      row.addEventListener('click', (e) => {
+      makeRowClickable(row, (e) => {
         if (e.target.closest('.col-select')) return;
         const cap = capItems.find(c => c.id === row.dataset.capId);
         if (cap) {
@@ -1565,7 +1581,7 @@
         updateCapSelection();
       });
       capCbs.forEach(cb => cb.addEventListener('change', updateCapSelection));
-      capHeader.querySelector('svg').addEventListener('click', () => {
+      capHeader.querySelector('.select-share-btn').addEventListener('click', () => {
         const ids = [...capCbs].filter(cb => cb.checked).map(cb => cb.dataset.capId);
         if (ids.length === 0) { toast('Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
         selectedCapIds = ids;
@@ -1592,7 +1608,11 @@
     capExportDialog.close();
   });
 
-  document.getElementById('cap-export-authority').addEventListener('click', async () => {
+  document.getElementById('cap-export-authority').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Sende...';
     try {
       await fetchJSON('/api/cap-items/send-email', {
         method: 'POST', body: { ids: selectedCapIds, authority: true }
@@ -1600,8 +1620,8 @@
       toast('CAP an Beh\u00f6rde gesendet');
       capExportDialog.close();
     } catch (e) {
-      toast(e.message, 'error');
-    }
+      toast(e?.message || 'Senden fehlgeschlagen', 'error');
+    } finally { btn.disabled = false; btn.textContent = origText; }
   });
 
   document.getElementById('cap-export-email').addEventListener('click', () => {
@@ -1618,6 +1638,9 @@
   capExportEmailSendBtn.addEventListener('click', async () => {
     const to = capExportEmailInput.value.trim();
     if (!to || !capExportEmailInput.validity.valid) return;
+    capExportEmailSendBtn.disabled = true;
+    const origText = capExportEmailSendBtn.textContent;
+    capExportEmailSendBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span>Sende...';
     try {
       await fetchJSON('/api/cap-items/send-email', {
         method: 'POST', body: { ids: selectedCapIds, to }
@@ -1626,8 +1649,8 @@
       capExportEmailSection.style.display = 'none';
       capExportDialog.close();
     } catch (e) {
-      toast(e.message, 'error');
-    }
+      toast(e?.message || 'Senden fehlgeschlagen', 'error');
+    } finally { capExportEmailSendBtn.disabled = false; capExportEmailSendBtn.textContent = origText; }
   });
 
   // ── CAP Detail Level (inline drill-down) ──────────────────
@@ -1640,7 +1663,7 @@
     try {
       currentCapItem = await fetchJSON(`/api/cap-items/${capItemId}`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       currentCapItem = null;
     }
 
@@ -1679,12 +1702,12 @@
       html += `<div class="audit-section">
         <div class="audit-section-header"><h3>5-Why Analyse</h3></div>
         <div class="inline-form-grid">
-          <label>1. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2" placeholder="Warum ist das Problem aufgetreten?"></textarea>
-          <label>2. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2" placeholder="Warum war das so?"></textarea>
-          <label>3. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2" placeholder="Warum war das so?"></textarea>
-          <label>4. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2" placeholder="Warum war das so?"></textarea>
-          <label>5. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2" placeholder="Warum war das so?"></textarea>
-          <label>Root Cause</label><textarea class="inline-input inline-textarea five-why-field" id="fw-root-cause" rows="3" placeholder="Grundursache (wird als Ursache übernommen)"></textarea>
+          <label for="fw-why1">1. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2" placeholder="Warum ist das Problem aufgetreten?"></textarea>
+          <label for="fw-why2">2. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2" placeholder="Warum war das so?"></textarea>
+          <label for="fw-why3">3. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2" placeholder="Warum war das so?"></textarea>
+          <label for="fw-why4">4. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2" placeholder="Warum war das so?"></textarea>
+          <label for="fw-why5">5. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2" placeholder="Warum war das so?"></textarea>
+          <label for="fw-root-cause">Root Cause</label><textarea class="inline-input inline-textarea five-why-field" id="fw-root-cause" rows="3" placeholder="Grundursache (wird als Ursache übernommen)"></textarea>
         </div>
       </div>`;
     }
@@ -1693,13 +1716,13 @@
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Corrective Action</h3></div>
       <div class="inline-form-grid">
-        <label>Deadline</label><input class="inline-input cap-field" id="cap-f-deadline" value="${escapeHtml(formatDateDE(cap.deadline))}" placeholder="TT.MM.JJJJ">
-        <label>Verantwortlich</label><input class="inline-input cap-field" id="cap-f-responsible" value="${escapeHtml(cap.responsible_person || '')}">
-        <label>Ursache</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-root-cause" rows="3" ${hasFiveWhy ? 'readonly style="background:var(--bg-secondary);opacity:0.7;cursor:not-allowed"' : ''}>${escapeHtml(cap.root_cause || '')}</textarea>
-        <label>Korrekturma\u00dfnahme</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-corrective" rows="3">${escapeHtml(cap.corrective_action || '')}</textarea>
-        <label>Vorbeugema\u00dfnahme</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-preventive" rows="3">${escapeHtml(cap.preventive_action || '')}</textarea>
-        <label>Erledigt am</label><input class="inline-input cap-field" id="cap-f-completion-date" value="${escapeHtml(formatDateDE(cap.completion_date))}" placeholder="TT.MM.JJJJ">
-        <label>Nachweis</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-evidence" rows="3">${escapeHtml(cap.evidence || '')}</textarea>
+        <label for="cap-f-deadline">Deadline</label><input class="inline-input cap-field" id="cap-f-deadline" value="${escapeHtml(formatDateDE(cap.deadline))}" placeholder="TT.MM.JJJJ">
+        <label for="cap-f-responsible">Verantwortlich</label><input class="inline-input cap-field" id="cap-f-responsible" value="${escapeHtml(cap.responsible_person || '')}">
+        <label for="cap-f-root-cause">Ursache</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-root-cause" rows="3" ${hasFiveWhy ? 'readonly style="background:var(--bg-secondary);opacity:0.7;cursor:not-allowed"' : ''}>${escapeHtml(cap.root_cause || '')}</textarea>
+        <label for="cap-f-corrective">Korrekturma\u00dfnahme</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-corrective" rows="3">${escapeHtml(cap.corrective_action || '')}</textarea>
+        <label for="cap-f-preventive">Vorbeugema\u00dfnahme</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-preventive" rows="3">${escapeHtml(cap.preventive_action || '')}</textarea>
+        <label for="cap-f-completion-date">Erledigt am</label><input class="inline-input cap-field" id="cap-f-completion-date" value="${escapeHtml(formatDateDE(cap.completion_date))}" placeholder="TT.MM.JJJJ">
+        <label for="cap-f-evidence">Nachweis</label><textarea class="inline-input inline-textarea cap-field" id="cap-f-evidence" rows="3">${escapeHtml(cap.evidence || '')}</textarea>
       </div>
     </div>`;
 
@@ -1753,7 +1776,7 @@
           await fetchJSON(`/api/cap-items/${cap.id}/five-why`, { method: 'PUT', body: data });
           // Sync root_cause to the read-only Ursache field
           document.getElementById('cap-f-root-cause').value = data.root_cause;
-        } catch (err) { toast(err.message, 'error'); }
+        } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
       }
 
       contentEl.querySelectorAll('.five-why-field').forEach(el => {
@@ -1775,7 +1798,7 @@
             body: { filename: file.name, mime_type: file.type || 'image/png', data: base64 }
           });
           addEvidenceThumb(container, created, '/api/evidence-files');
-        } catch (err) { toast(err.message, 'error'); }
+        } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
       }
       e.target.value = '';
     });
@@ -1799,7 +1822,7 @@
     try {
       await fetchJSON(`/api/cap-items/${capId}`, { method: 'PUT', body: data });
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   }
 
@@ -1846,7 +1869,7 @@
       try {
         await fetchJSON(`${apiPrefix}/${file.id}`, { method: 'DELETE' });
         wrap.remove();
-      } catch (err) { toast(err.message, 'error'); }
+      } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
     });
     wrap.appendChild(btn);
     container.appendChild(wrap);
@@ -1874,7 +1897,7 @@
           body: { filename: file.name, mime_type: file.type || 'image/png', data: base64 }
         });
         addEvidenceThumb(container, created, '/api/checklist-evidence-files');
-      } catch (err) { toast(err.message, 'error'); }
+      } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
     }
     e.target.value = '';
   });

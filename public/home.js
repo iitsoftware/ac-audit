@@ -138,7 +138,7 @@
 
     // Click handler for rows — deep-link into CAP detail
     capContainer.querySelectorAll('tr[data-cap-id]').forEach(row => {
-      row.addEventListener('click', () => {
+      makeRowClickable(row, () => {
         const capId = row.dataset.capId;
         const cap = allCapItems.find(c => c.id === capId);
         if (!cap) return;

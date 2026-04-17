@@ -152,6 +152,20 @@ function renderDeptTabs(departments, activeDeptId, container, onSelect) {
   });
 }
 
+// Make a row keyboard-accessible (Enter/Space activates handler)
+function makeRowClickable(row, handler) {
+  if (!row) return;
+  row.setAttribute('role', 'button');
+  row.setAttribute('tabindex', '0');
+  row.addEventListener('click', handler);
+  row.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handler(e);
+    }
+  });
+}
+
 // Toast notifications
 (function () {
   let container;
