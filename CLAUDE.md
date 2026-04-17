@@ -48,12 +48,53 @@ No build step. No external database server.
 ```
 ac-audit/
 ├── package.json
-├── server.js              # Express app, all routes, PDF rendering, import parsing
-├── db.js                  # SQLite setup, migrations, prepared statements
+├── server.js              # Express app bootstrap: middleware + route mounting + scheduler startup
+├── db.js                  # SQLite connection + prepared statements (exports db, stmts, dataDir)
+├── migrations.js          # Schema execution + additive column migrations (runs on boot from db.js)
 ├── schema.sql             # All tables (CREATE IF NOT EXISTS)
 ├── Dockerfile             # Docker image (node:20-alpine)
 ├── docker-compose.yml     # Docker Compose config (local dev)
 ├── docker-compose.prod.yml # Docker Compose config (production, pre-built image)
+├── middleware/
+│   ├── auth.js            # parseCookies, session token, authMiddleware
+│   └── load-resource.js   # loadResource(stmtKey, paramKey, msg) — 404 helper factory
+├── routes/
+│   ├── auth.js            # /login (GET/POST), /logout
+│   ├── pages.js           # EJS-rendered page routes (/, /home, /companies, /change, /organization, /settings, /logs, /trash)
+│   ├── health.js          # /health
+│   ├── home.js            # /api/home/stats
+│   ├── companies.js       # Company CRUD + logo
+│   ├── departments.js     # Department CRUD + reorder
+│   ├── persons.js         # Person CRUD + signature
+│   ├── audit-plans.js     # Audit plan CRUD + copy + PDF + email + docx import
+│   ├── audit-plan-lines.js # Audit line CRUD + PDF (single + batch) + xlsx import
+│   ├── checklist-items.js # Checklist item CRUD + evidence files
+│   ├── cap-items.js       # CAP CRUD + PDF + 5-Why + evidence + email + deadline recalc
+│   ├── change-requests.js # Change request CRUD + Form 2 + import + PDF + email
+│   ├── change-tasks.js    # Change task CRUD
+│   ├── risk-analysis.js   # Risk analysis CRUD + items + history + PDF + email + import
+│   ├── settings.js        # Settings CRUD + SMTP test
+│   ├── backup.js          # /api/backup/now + /api/backup/list
+│   ├── logs.js            # /api/logs
+│   └── trash.js           # Trash list/count/restore/delete/empty
+├── services/
+│   ├── audit-log.js       # logAction()
+│   ├── email.js           # getSmtpConfig, createTransporter, getQmForDepartment, buildAuthoritySalutation, sendDocumentEmail
+│   ├── cap-deadlines.js   # getCapDeadlineDays, calcCapDeadline
+│   ├── trash.js           # snapshot* + restore* helpers + startTrashCleanupScheduler
+│   ├── backup.js          # SQLite Online Backup API + startBackupScheduler
+│   ├── notifications.js   # CAP deadline notifications + startNotifyScheduler
+│   ├── log-cleanup.js     # Audit-log retention scheduler
+│   └── form2.js           # EASA Form 2 PDF filling (pdf-lib)
+├── pdf/
+│   ├── common.js          # createPdfDoc({ landscape, margin }) + addPdfFooter
+│   ├── audit.js           # renderAuditPlanPdf, renderAuditLinePdf + buffer generators
+│   ├── cap.js             # renderCapItemPdf + generateCapItemsPdfBuffer
+│   └── risk.js            # renderRiskAnalysisPdf + buffer generator
+├── imports/
+│   ├── audit.js           # parseAuditChecklist (xlsx), parseAuditPlanDocx (docx)
+│   ├── change.js          # parseChangeTasks (xlsx/docx)
+│   └── risk.js            # parseRiskAnalysis (xlsx/docx)
 ├── public/
 │   ├── style.css          # Custom CSS (blue theme, dark/light auto)
 │   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting, parseDateDE, saveNavState/loadNavState, renderCompanyTabs/renderDeptTabs, nav toggles, trash badge
@@ -137,8 +178,6 @@ Company + Department (shared)
 - `PUT /api/audit-plans/:id` — Update year
 - `PATCH /api/audit-plans/:id/status` — Update plan status (ENTWURF, AKTIV, ARCHIV)
 - `PATCH /api/audit-plans/:id/dates` — Update dates (approved_at, submitted_planned_at, submitted_at)
-- `PATCH /api/audit-plans/:id/approved-date` — Update approved_at only (overlaps with /dates)
-- `PATCH /api/audit-plans/:id/submission` — Update submitted_to + submitted_at (overlaps with /dates)
 - `POST /api/audit-plans/:id/copy` — Copy to new year (increments revision)
 - `DELETE /api/audit-plans/:id` — Delete
 
@@ -274,7 +313,11 @@ Company + Department (shared)
 
 - Database schema runs on every startup with `CREATE TABLE IF NOT EXISTS`
 - SQLite pragmas: `foreign_keys = ON`, `journal_mode = WAL`
-- All API handlers in `server.js` follow: parse request → call db → return JSON
+- API handlers live in `routes/*.js`, mounted by `server.js`. Each handler: parse request → call db/service → return JSON
+- Cross-cutting logic factored into `services/*.js` (email, audit-log, cap-deadlines, trash, backup, notifications, log-cleanup, form2)
+- PDF generation lives in `pdf/*.js`: `pdf/common.js` exports `createPdfDoc({ landscape, margin })` + `addPdfFooter()`; domain-specific renderers in `pdf/audit.js`, `pdf/cap.js`, `pdf/risk.js`
+- Import parsers live in `imports/*.js` (audit, change, risk) — pure functions that accept a buffer/rows array and return parsed records
+- Migrations run on boot: `db.js` calls `runMigrations(db)` from `migrations.js` before preparing statements. The `audit_checklist_item` drop+recreate migration is wrapped in a single `db.transaction()`
 - Frontend: EJS template (HTML shell) + vanilla JS (fetch data, render, handle events)
 - Page rendering: `renderPage()` helper renders page EJS into layout
 - Modals: native `<dialog>` element (`.showModal()` / `.close()`)
