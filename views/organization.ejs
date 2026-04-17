@@ -56,14 +56,14 @@
         </div>
       </div>
       <div id="company-persons-section" style="display:none">
-        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
+        <hr class="form-divider">
         <div class="form-group">
           <label>Accountable Manager</label>
           <div class="form-row">
             <input type="text" id="form-acc-firstname" placeholder="Vorname" aria-label="Accountable Manager Vorname" class="form-group">
             <input type="text" id="form-acc-lastname" placeholder="Nachname" aria-label="Accountable Manager Nachname" class="form-group">
           </div>
-          <input type="email" id="form-acc-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+          <input type="email" id="form-acc-email" placeholder="E-Mail" class="form-input form-input--mt">
           <div class="sig-upload-row">
             <input type="file" id="form-acc-sig" accept="image/*" class="sig-file-input">
             <div class="logo-preview-row" id="form-acc-sig-preview-row" style="display:none">
@@ -82,16 +82,12 @@
 </dialog>
 
 <!-- Company Delete confirmation dialog -->
-<dialog id="delete-dialog" aria-labelledby="delete-dialog-title">
-  <div class="dialog-header" id="delete-dialog-title">Firma l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll <strong id="delete-name"></strong> wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
+<%- include('partials/dialog', {
+  id: 'delete-dialog',
+  title: 'Firma l&ouml;schen',
+  body: '<p>Soll <strong id="delete-name"></strong> wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="delete-cancel">Abbrechen</button><button class="btn btn-danger" id="delete-confirm">L&ouml;schen</button>'
+}) %>
 
 <!-- Department Add / Edit dialog -->
 <dialog id="dept-dialog" aria-labelledby="dept-dialog-title">
@@ -111,29 +107,29 @@
         <label for="dept-form-regulation">Regulation</label>
         <input type="text" id="dept-form-regulation">
       </div>
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
+      <hr class="form-divider">
       <div class="form-group">
         <label>Zust&auml;ndige Aufsichtsperson Beh&ouml;rde</label>
         <div class="form-row">
-          <select id="dept-form-authority-salutation" style="width:auto;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+          <select id="dept-form-authority-salutation" class="form-input form-input--auto">
             <option value="">Anrede</option>
             <option value="Herr">Herr</option>
             <option value="Frau">Frau</option>
           </select>
           <input type="text" id="dept-form-authority-name" placeholder="Name" class="form-group">
         </div>
-        <input type="email" id="dept-form-authority-email" placeholder="E-Mail Betriebspr&uuml;fer" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
-        <input type="email" id="dept-form-initial-approval-email" placeholder="E-Mail Erstgenehmigung (z.B. RefT5@lba.de)" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+        <input type="email" id="dept-form-authority-email" placeholder="E-Mail Betriebspr&uuml;fer" class="form-input form-input--mt">
+        <input type="email" id="dept-form-initial-approval-email" placeholder="E-Mail Erstgenehmigung (z.B. RefT5@lba.de)" class="form-input form-input--mt">
       </div>
       <div id="dept-persons-section" style="display:none">
-        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0 12px">
+        <hr class="form-divider">
         <div class="form-group">
           <label>Compliance Monitoring Manager</label>
           <div class="form-row">
             <input type="text" id="dept-form-qm-firstname" placeholder="Vorname" aria-label="Compliance Monitoring Manager Vorname" class="form-group">
             <input type="text" id="dept-form-qm-lastname" placeholder="Nachname" aria-label="Compliance Monitoring Manager Nachname" class="form-group">
           </div>
-          <input type="email" id="dept-form-qm-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+          <input type="email" id="dept-form-qm-email" placeholder="E-Mail" class="form-input form-input--mt">
           <div class="sig-upload-row">
             <input type="file" id="dept-form-qm-sig" accept="image/*" class="sig-file-input">
             <div class="logo-preview-row" id="dept-form-qm-sig-preview-row" style="display:none">
@@ -148,7 +144,7 @@
             <input type="text" id="dept-form-al-firstname" placeholder="Vorname" aria-label="Abteilungsleiter Vorname" class="form-group">
             <input type="text" id="dept-form-al-lastname" placeholder="Nachname" aria-label="Abteilungsleiter Nachname" class="form-group">
           </div>
-          <input type="email" id="dept-form-al-email" placeholder="E-Mail" style="margin-top:4px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text)">
+          <input type="email" id="dept-form-al-email" placeholder="E-Mail" class="form-input form-input--mt">
           <div class="sig-upload-row">
             <input type="file" id="dept-form-al-sig" accept="image/*" class="sig-file-input">
             <div class="logo-preview-row" id="dept-form-al-sig-preview-row" style="display:none">
@@ -167,13 +163,9 @@
 </dialog>
 
 <!-- Department Delete confirmation dialog -->
-<dialog id="dept-delete-dialog" aria-labelledby="dept-delete-dialog-title">
-  <div class="dialog-header" id="dept-delete-dialog-title">Abteilung l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll <strong id="dept-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="dept-delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="dept-delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
+<%- include('partials/dialog', {
+  id: 'dept-delete-dialog',
+  title: 'Abteilung l&ouml;schen',
+  body: '<p>Soll <strong id="dept-delete-name"></strong> wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="dept-delete-cancel">Abbrechen</button><button class="btn btn-danger" id="dept-delete-confirm">L&ouml;schen</button>'
+}) %>

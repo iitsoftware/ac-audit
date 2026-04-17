@@ -129,12 +129,11 @@
     await renderCurrentLevel();
   }
 
-  function renderBreadcrumb() {
+  function paintBreadcrumb() {
     const company = getSelectedCompany();
     if (!company) return;
 
     // Breadcrumb skips department (shown as tab)
-    // audit-plan only shown as clickable link when deeper levels exist
     const bcSegments = navPath.filter(s => s.type !== 'department');
     // If the only segment is audit-plan itself, don't show breadcrumb
     if (bcSegments.length === 1 && bcSegments[0].type === 'audit-plan') {
@@ -142,40 +141,15 @@
       return;
     }
 
-    let html = '';
-    if (bcSegments.length === 0) {
-      breadcrumbEl.innerHTML = '';
-      return;
-    }
-
-    // Back button to home
-    html += `<button class="breadcrumb-back" data-nav="home" title="Zur\u00fcck zur \u00dcbersicht">\u2190</button>`;
-
-    bcSegments.forEach((segment, i) => {
-      html += `<span class="breadcrumb-sep">\u203a</span>`;
-      const navIdx = navPath.indexOf(segment);
-      if (i < bcSegments.length - 1) {
-        html += `<button class="breadcrumb-item" data-nav="${navIdx}">${escapeHtml(segment.name)}</button>`;
-      } else {
-        html += `<span class="breadcrumb-current">${escapeHtml(segment.name)}</span>`;
-      }
-    });
-
-    breadcrumbEl.innerHTML = html;
-
-    const backBtn = breadcrumbEl.querySelector('.breadcrumb-back');
-    if (backBtn) {
-      backBtn.addEventListener('click', () => { window.location.href = '/home'; });
-    }
-
-    breadcrumbEl.querySelectorAll('.breadcrumb-item').forEach(btn => {
-      btn.addEventListener('click', () => navigateTo(parseInt(btn.dataset.nav)));
+    const segments = bcSegments.map(seg => ({ label: seg.name, navIdx: navPath.indexOf(seg) }));
+    renderBreadcrumb(segments, breadcrumbEl, (seg) => navigateTo(seg.navIdx), {
+      backButton: { title: 'Zur\u00fcck zur \u00dcbersicht', onClick: () => { window.location.href = '/home'; } }
     });
   }
 
   async function renderCurrentLevel() {
     saveNav();
-    renderBreadcrumb();
+    paintBreadcrumb();
 
     const lastSegment = navPath.length > 0 ? navPath[navPath.length - 1] : null;
 
@@ -1064,7 +1038,7 @@
         if (lastSeg && lastSeg.type === 'audit-plan-line') {
           lastSeg.name = data.subject || 'Themenbereich';
           saveNav();
-          renderBreadcrumb();
+          paintBreadcrumb();
         }
         // Update header
         headerEl.querySelector('h2').textContent = data.subject || 'Themenbereich';
@@ -1901,15 +1875,6 @@
     }
     e.target.value = '';
   });
-
-  function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
 
   // ── Init ──────────────────────────────────────────────────
   async function init() {

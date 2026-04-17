@@ -1,0 +1,29 @@
+<%
+// Shared <dialog> shell.
+// Locals:
+//   id              required — dialog element id (also used to derive default titleId)
+//   title           required — dialog header text (raw HTML allowed)
+//   body            required — dialog body HTML
+//   footer          optional — dialog footer HTML
+//   titleId         optional — id for header element (defaults to `${id}-title`)
+//   ariaLabelledby  optional — overrides aria-labelledby (defaults to titleId)
+//   extraClass      optional — extra class names on the <dialog> (e.g. 'dialog-wide')
+//   bodyClass       optional — extra class names on the body wrapper (e.g. 'dialog-body-scroll')
+//   formId          optional — when set, body+footer are wrapped in <form id="…" method="dialog">
+const _titleId = locals.titleId || (id + '-title');
+const _aria = locals.ariaLabelledby || _titleId;
+const _extra = locals.extraClass ? ' ' + locals.extraClass : '';
+const _bodyCls = locals.bodyClass ? ' ' + locals.bodyClass : '';
+const _footer = locals.footer || '';
+%><dialog id="<%= id %>"<%= _extra ? ' class="' + _extra.trim() + '"' : '' %> aria-labelledby="<%= _aria %>">
+  <div class="dialog-header" id="<%= _titleId %>"><%- title %></div>
+  <% if (locals.formId) { %>
+  <form id="<%= formId %>" method="dialog">
+    <div class="dialog-body<%= _bodyCls %>"><%- body %></div>
+    <% if (_footer) { %><div class="dialog-footer"><%- _footer %></div><% } %>
+  </form>
+  <% } else { %>
+  <div class="dialog-body<%= _bodyCls %>"><%- body %></div>
+  <% if (_footer) { %><div class="dialog-footer"><%- _footer %></div><% } %>
+  <% } %>
+</dialog>

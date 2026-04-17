@@ -43,16 +43,9 @@
   const CAT_TAG_MAP = { OFFEN: 'tag-open', PRIOR: 'tag-finding', NON_PRIOR: 'tag-planned' };
   const PRIO_TAG_MAP = { LOW: 'tag-done', MEDIUM: 'tag-observation', HIGH: 'tag-progress', CRITICAL: 'tag-finding' };
 
-  function statusBadgeHtml(status) {
-    return `<span class="audit-tag ${STATUS_TAG_MAP[status] || 'tag-open'}">${escapeHtml(STATUS_LABELS[status] || status)}</span>`;
-  }
-  function categoryBadgeHtml(category) {
-    return `<span class="audit-tag ${CAT_TAG_MAP[category] || 'tag-open'}">${escapeHtml(CATEGORY_LABELS[category] || category)}</span>`;
-  }
-  function priorityBadgeHtml(priority) {
-    if (!priority) return '';
-    return `<span class="audit-tag ${PRIO_TAG_MAP[priority] || 'tag-open'}">${escapeHtml(PRIORITY_LABELS[priority] || priority)}</span>`;
-  }
+  const statusBadgeHtml   = (status)   => badge(status, STATUS_TAG_MAP, STATUS_LABELS);
+  const categoryBadgeHtml = (category) => badge(category, CAT_TAG_MAP, CATEGORY_LABELS);
+  const priorityBadgeHtml = (priority) => badge(priority, PRIO_TAG_MAP, PRIORITY_LABELS);
 
   function progressBarHtml(done, total) {
     if (!total) return '';
@@ -140,7 +133,7 @@
 
   async function renderCurrentLevel() {
     saveNav();
-    renderBreadcrumb();
+    paintBreadcrumb();
     const lastSegment = navPath.length > 0 ? navPath[navPath.length - 1] : null;
     if (!lastSegment) {
       headerEl.innerHTML = '';
@@ -156,27 +149,14 @@
     }
   }
 
-  function renderBreadcrumb() {
-    let html = '';
-    navPath.forEach((seg, idx) => {
-      if (idx > 0) html += ' <span class="breadcrumb-sep">/</span> ';
-      if (idx < navPath.length - 1) {
-        html += `<button type="button" class="breadcrumb-item" data-nav-idx="${idx}">${escapeHtml(seg.name)}</button>`;
-      } else {
-        html += `<span class="breadcrumb-current">${escapeHtml(seg.name)}</span>`;
-      }
-    });
-    breadcrumbEl.innerHTML = html;
-    breadcrumbEl.querySelectorAll('.breadcrumb-item').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const idx = parseInt(link.dataset.navIdx);
-        navPath = navPath.slice(0, idx + 1);
-        saveNav();
-        renderDeptTabsLocal();
-        renderCurrentLevel();
-      });
-    });
+  function paintBreadcrumb() {
+    const segments = navPath.map(seg => ({ label: seg.name }));
+    renderBreadcrumb(segments, breadcrumbEl, (_seg, idx) => {
+      navPath = navPath.slice(0, idx + 1);
+      saveNav();
+      renderDeptTabsLocal();
+      renderCurrentLevel();
+    }, { separator: '/' });
   }
 
   // ── Change List ─────────────────────────────────────────
@@ -598,13 +578,13 @@
     const importTasksBtn = document.getElementById('btn-import-tasks');
     importTasksBtn.addEventListener('click', () => {
       document.getElementById('import-tasks-file').value = '';
-      document.getElementById('import-tasks-dialog').showModal();
+      openDialog('import-tasks-dialog');
     });
 
     const importRiskBtn = document.getElementById('btn-import-risk');
     importRiskBtn.addEventListener('click', () => {
       document.getElementById('import-risk-file').value = '';
-      document.getElementById('import-risk-dialog').showModal();
+      openDialog('import-risk-dialog');
     });
 
     const createRiskBtn = document.getElementById('btn-create-risk');
@@ -664,7 +644,7 @@
       if (lastSeg && lastSeg.type === 'change-detail') {
         lastSeg.name = currentCR.change_no || currentCR.title;
         saveNav();
-        renderBreadcrumb();
+        paintBreadcrumb();
       }
       // Refresh header badges
       const h2 = headerEl.querySelector('h2');
@@ -701,11 +681,11 @@
     initDateAutoFormat(targetInput);
     initDateAutoFormat(completionInput);
 
-    document.getElementById('task-dialog').showModal();
+    openDialog('task-dialog');
     document.getElementById('task-form-process').focus();
   }
 
-  document.getElementById('task-btn-cancel').addEventListener('click', () => document.getElementById('task-dialog').close());
+  document.getElementById('task-btn-cancel').addEventListener('click', () => closeDialog('task-dialog'));
   document.getElementById('task-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = document.getElementById('task-form-id').value;
@@ -737,7 +717,7 @@
         await fetchJSON(`/api/change-requests/${currentCR.id}/tasks`, { method: 'POST', body: data });
         toast('Aufgabe erstellt');
       }
-      document.getElementById('task-dialog').close();
+      closeDialog('task-dialog');
       await loadTasks();
       renderDetailContent();
     } catch (err) {
@@ -749,10 +729,10 @@
   let deleteTaskId = null;
   function confirmDeleteTask(taskId) {
     deleteTaskId = taskId;
-    document.getElementById('task-delete-dialog').showModal();
+    openDialog('task-delete-dialog');
   }
 
-  document.getElementById('task-delete-cancel').addEventListener('click', () => document.getElementById('task-delete-dialog').close());
+  document.getElementById('task-delete-cancel').addEventListener('click', () => closeDialog('task-delete-dialog'));
   document.getElementById('task-delete-confirm').addEventListener('click', async (e) => {
     if (!deleteTaskId) return;
     const btn = e.currentTarget;
@@ -760,7 +740,7 @@
     try {
       await fetchJSON(`/api/change-tasks/${deleteTaskId}`, { method: 'DELETE' });
       toast('Aufgabe gel\u00f6scht');
-      document.getElementById('task-delete-dialog').close();
+      closeDialog('task-delete-dialog');
       await loadTasks();
       renderDetailContent();
     } catch (err) {
@@ -769,49 +749,41 @@
   });
 
   // ── Import Tasks ────────────────────────────────────────
-  document.getElementById('import-tasks-cancel').addEventListener('click', () => document.getElementById('import-tasks-dialog').close());
+  document.getElementById('import-tasks-cancel').addEventListener('click', () => closeDialog('import-tasks-dialog'));
   document.getElementById('import-tasks-confirm').addEventListener('click', async () => {
     const fileInput = document.getElementById('import-tasks-file');
     if (!fileInput.files.length) { toast('Datei auswählen', 'error'); return; }
     const file = fileInput.files[0];
     const btn = document.getElementById('import-tasks-confirm');
     btn.disabled = true;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target.result.split(',')[1];
-      try {
-        const result = await fetchJSON(`/api/change-requests/${currentCR.id}/import-tasks`, {
-          method: 'POST', body: { file: base64 }
-        });
-        toast(`${result.imported} Aufgaben importiert`);
-        document.getElementById('import-tasks-dialog').close();
-        await loadTasks();
-        renderDetailContent();
-      } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); } finally { btn.disabled = false; }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const base64 = await fileToBase64(file);
+      const result = await fetchJSON(`/api/change-requests/${currentCR.id}/import-tasks`, {
+        method: 'POST', body: { file: base64 }
+      });
+      toast(`${result.imported} Aufgaben importiert`);
+      closeDialog('import-tasks-dialog');
+      await loadTasks();
+      renderDetailContent();
+    } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); } finally { btn.disabled = false; }
   });
 
   // ── Import Risk Analysis ────────────────────────────────
-  document.getElementById('import-risk-cancel').addEventListener('click', () => document.getElementById('import-risk-dialog').close());
+  document.getElementById('import-risk-cancel').addEventListener('click', () => closeDialog('import-risk-dialog'));
   document.getElementById('import-risk-confirm').addEventListener('click', async () => {
     const fileInput = document.getElementById('import-risk-file');
     if (!fileInput.files.length) { toast('Datei auswählen', 'error'); return; }
     const file = fileInput.files[0];
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target.result.split(',')[1];
-      try {
-        const result = await fetchJSON(`/api/change-requests/${currentCR.id}/import-risk-analysis`, {
-          method: 'POST', body: { file: base64 }
-        });
-        toast(`${result.imported} Risiken importiert`);
-        document.getElementById('import-risk-dialog').close();
-        await loadRiskAnalysisSummary();
-        renderDetailContent();
-      } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const base64 = await fileToBase64(file);
+      const result = await fetchJSON(`/api/change-requests/${currentCR.id}/import-risk-analysis`, {
+        method: 'POST', body: { file: base64 }
+      });
+      toast(`${result.imported} Risiken importiert`);
+      closeDialog('import-risk-dialog');
+      await loadRiskAnalysisSummary();
+      renderDetailContent();
+    } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   });
 
   // ── Create Risk Analysis ────────────────────────────────
@@ -866,7 +838,7 @@
       document.getElementById('easa-form2-scope-5d').value = saved.scope_5d || '';
     }
 
-    document.getElementById('easa-form2-dialog').showModal();
+    openDialog('easa-form2-dialog');
 
     // Bind auto-save on blur/change (once)
     if (!form2AutoSaveBound) {
@@ -879,7 +851,7 @@
     }
   }
 
-  document.getElementById('easa-form2-btn-cancel').addEventListener('click', () => document.getElementById('easa-form2-dialog').close());
+  document.getElementById('easa-form2-btn-cancel').addEventListener('click', () => closeDialog('easa-form2-dialog'));
 
   function getForm2Params() {
     const is145 = isForm2_145();
@@ -918,14 +890,14 @@
     const params = getForm2Params();
     const qs = new URLSearchParams(params).toString();
     window.open(`/api/change-requests/${currentCR.id}/easa-form2/pdf?${qs}`, '_blank');
-    document.getElementById('easa-form2-dialog').close();
+    closeDialog('easa-form2-dialog');
     saveForm2Data(); // save in background, don't block
   });
 
   document.getElementById('easa-form2-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     await saveForm2Data();
-    document.getElementById('easa-form2-dialog').close();
+    closeDialog('easa-form2-dialog');
     const dept = departments.find(d => d.id === currentCR.department_id);
     const params = getForm2Params();
     let defaultTo = '';
@@ -935,11 +907,11 @@
       defaultTo = dept.authority_email;
     }
     document.getElementById('change-email-to').value = defaultTo;
-    document.getElementById('change-email-dialog').showModal();
+    openDialog('change-email-dialog');
   });
 
   // ── Email dialog ────────────────────────────────────────
-  document.getElementById('change-email-cancel').addEventListener('click', () => document.getElementById('change-email-dialog').close());
+  document.getElementById('change-email-cancel').addEventListener('click', () => closeDialog('change-email-dialog'));
   document.getElementById('change-email-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const to = document.getElementById('change-email-to').value.trim();
@@ -950,7 +922,7 @@
         body: { to, type: 'form2', formData: getForm2Params() }
       });
       toast('E-Mail gesendet');
-      document.getElementById('change-email-dialog').close();
+      closeDialog('change-email-dialog');
     } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   });
 
@@ -1122,7 +1094,7 @@
     // Event handlers
     document.getElementById('btn-add-risk-item').addEventListener('click', () => openRiskItemDialog());
     document.getElementById('btn-ra-share').addEventListener('click', () => {
-      document.getElementById('ra-share-dialog').showModal();
+      openDialog('ra-share-dialog');
     });
 
     contentEl.querySelectorAll('.risk-item-row').forEach(row => {
@@ -1186,13 +1158,13 @@
   // ── Risk Analysis Share Dialog ─────────────────────────
   document.getElementById('ra-share-cancel').addEventListener('click', () => {
     document.getElementById('ra-share-email-section').style.display = 'none';
-    document.getElementById('ra-share-dialog').close();
+    closeDialog('ra-share-dialog');
   });
 
   document.getElementById('ra-share-download').addEventListener('click', () => {
     if (!riskAnalysisData) return;
     window.open(`/api/risk-analysis/${riskAnalysisData.id}/pdf`, '_blank');
-    document.getElementById('ra-share-dialog').close();
+    closeDialog('ra-share-dialog');
   });
 
   let raShareEmailMode = null; // 'authority' | 'email'
@@ -1222,7 +1194,7 @@
       });
       toast('E-Mail gesendet');
       document.getElementById('ra-share-email-section').style.display = 'none';
-      document.getElementById('ra-share-dialog').close();
+      closeDialog('ra-share-dialog');
     } catch (err) {
       toast(err?.message || 'Senden fehlgeschlagen', 'error');
     } finally { btn.disabled = false; btn.textContent = origText; }
@@ -1236,10 +1208,10 @@
     initDateAutoFormat(dateInput);
     document.getElementById('risk-history-author').value = riskAnalysisData.author || '';
     document.getElementById('risk-history-reason').value = '';
-    document.getElementById('risk-history-dialog').showModal();
+    openDialog('risk-history-dialog');
   }
 
-  document.getElementById('risk-history-btn-cancel').addEventListener('click', () => document.getElementById('risk-history-dialog').close());
+  document.getElementById('risk-history-btn-cancel').addEventListener('click', () => closeDialog('risk-history-dialog'));
   document.getElementById('risk-history-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const dateIso = parseDateDE(document.getElementById('risk-history-date').value);
@@ -1257,7 +1229,7 @@
         }
       });
       toast('Eintrag hinzugefügt');
-      document.getElementById('risk-history-dialog').close();
+      closeDialog('risk-history-dialog');
       riskHistory = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/history`);
       renderRiskAnalysisContent();
     } catch (err) {
@@ -1349,7 +1321,7 @@
       headerEl.querySelector('h2').textContent = data.risk_type || data.description || 'Risiko';
       // Update breadcrumb name
       const lastSeg = navPath[navPath.length - 1];
-      if (lastSeg) { lastSeg.name = data.risk_type || data.description || 'Risiko'; renderBreadcrumb(); }
+      if (lastSeg) { lastSeg.name = data.risk_type || data.description || 'Risiko'; paintBreadcrumb(); }
     } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   }
 
@@ -1372,10 +1344,10 @@
     createRiskMatrix(initContainer, {});
     createRiskMatrix(resContainer, {});
 
-    document.getElementById('risk-item-dialog').showModal();
+    openDialog('risk-item-dialog');
   }
 
-  document.getElementById('risk-item-btn-cancel').addEventListener('click', () => document.getElementById('risk-item-dialog').close());
+  document.getElementById('risk-item-btn-cancel').addEventListener('click', () => closeDialog('risk-item-dialog'));
   document.getElementById('risk-item-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const implIso = parseDateDE(document.getElementById('risk-item-form-impl-date').value);
@@ -1400,7 +1372,7 @@
     try {
       await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/items`, { method: 'POST', body: data });
       toast('Risiko hinzugef\u00fcgt');
-      document.getElementById('risk-item-dialog').close();
+      closeDialog('risk-item-dialog');
       riskItems = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/items`);
       riskHistory = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/history`);
       renderRiskAnalysisContent();
@@ -1413,10 +1385,10 @@
   let deleteRiskItemId = null;
   function confirmDeleteRiskItem(riskId) {
     deleteRiskItemId = riskId;
-    document.getElementById('risk-item-delete-dialog').showModal();
+    openDialog('risk-item-delete-dialog');
   }
 
-  document.getElementById('risk-item-delete-cancel').addEventListener('click', () => document.getElementById('risk-item-delete-dialog').close());
+  document.getElementById('risk-item-delete-cancel').addEventListener('click', () => closeDialog('risk-item-delete-dialog'));
   document.getElementById('risk-item-delete-confirm').addEventListener('click', async (e) => {
     if (!deleteRiskItemId) return;
     const btn = e.currentTarget;
@@ -1424,7 +1396,7 @@
     try {
       await fetchJSON(`/api/risk-items/${deleteRiskItemId}`, { method: 'DELETE' });
       toast('Risiko gel\u00f6scht');
-      document.getElementById('risk-item-delete-dialog').close();
+      closeDialog('risk-item-delete-dialog');
       riskItems = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/items`);
       riskHistory = await fetchJSON(`/api/risk-analysis/${riskAnalysisData.id}/history`);
       renderRiskAnalysisContent();

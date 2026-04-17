@@ -44,7 +44,10 @@
   --border: #e2e8f0;
   --danger: #ef4444;
   --danger-hover: #dc2626;
+  --danger-light: #fee2e2;
+  --danger-text: #991b1b;
   --radius: 8px;
+  --form-padding: 8px 12px;
   --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
   --shadow-lg: 0 4px 12px rgba(0,0,0,.1);
   --nav-height: 56px;
@@ -63,6 +66,8 @@
     --border: #334155;
     --danger: #f87171;
     --danger-hover: #ef4444;
+    --danger-light: #450a0a;
+    --danger-text: #fca5a5;
     --shadow: 0 1px 3px rgba(0,0,0,.3);
     --shadow-lg: 0 4px 12px rgba(0,0,0,.4);
   }
@@ -534,11 +539,13 @@ dialog.dialog-wide {
 
 .form-group input[type="text"],
 .form-group input[type="number"],
+.form-group input[type="email"],
 .form-group input[type="file"],
 .form-group select,
-.form-group textarea {
+.form-group textarea,
+.form-input {
   width: 100%;
-  padding: 8px 12px;
+  padding: var(--form-padding);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 14px;
@@ -549,17 +556,25 @@ dialog.dialog-wide {
 
 .form-group input[type="text"]:focus,
 .form-group input[type="number"]:focus,
+.form-group input[type="email"]:focus,
 .form-group select:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, .15);
 }
 .form-group input[type="text"]:focus:not(:focus-visible),
 .form-group input[type="number"]:focus:not(:focus-visible),
+.form-group input[type="email"]:focus:not(:focus-visible),
 .form-group select:focus:not(:focus-visible),
-.form-group textarea:focus:not(:focus-visible) {
+.form-group textarea:focus:not(:focus-visible),
+.form-input:focus:not(:focus-visible) {
   outline: none;
 }
+
+.form-input--auto { width: auto; }
+.form-input--mt { margin-top: 4px; }
+.form-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0 12px; }
 
 .form-group textarea {
   resize: vertical;
@@ -951,17 +966,17 @@ dialog.dialog-wide {
 .eval-C { background: #d1fae5; color: #065f46; }
 .eval-NA { background: #e2e8f0; color: #334155; }
 .eval-O { background: #fde68a; color: #78350f; }
-.eval-L1 { background: #fee2e2; color: #991b1b; }
-.eval-L2 { background: #fee2e2; color: #991b1b; }
-.eval-L3 { background: #fee2e2; color: #991b1b; }
+.eval-L1 { background: var(--danger-light); color: var(--danger-text); }
+.eval-L2 { background: var(--danger-light); color: var(--danger-text); }
+.eval-L3 { background: var(--danger-light); color: var(--danger-text); }
 
 @media (prefers-color-scheme: dark) {
   .eval-C { background: #064e3b; color: #6ee7b7; }
   .eval-NA { background: #334155; color: #cbd5e1; }
   .eval-O { background: #713f12; color: #fde68a; }
-  .eval-L1 { background: #450a0a; color: #fca5a5; }
-  .eval-L2 { background: #450a0a; color: #fca5a5; }
-  .eval-L3 { background: #450a0a; color: #fca5a5; }
+  .eval-L1 { background: var(--danger-light); color: var(--danger-text); }
+  .eval-L2 { background: var(--danger-light); color: var(--danger-text); }
+  .eval-L3 { background: var(--danger-light); color: var(--danger-text); }
 }
 
 /* ── Audit Detail ────────────────────────────────────────── */
@@ -1439,7 +1454,7 @@ dialog.dialog-wide {
 .tag-planned    { background: #dbeafe; color: #1e40af; }
 .tag-progress   { background: #ffedd5; color: #9a3412; }
 .tag-done       { background: #d1fae5; color: #065f46; }
-.tag-finding    { background: #fee2e2; color: #991b1b; }
+.tag-finding    { background: var(--danger-light); color: var(--danger-text); }
 .tag-observation { background: #fef9c3; color: #854d0e; }
 .tag-recommendation { background: #ede9fe; color: #5b21b6; }
 .tag-checklist  { background: #ccfbf1; color: #0f766e; }
@@ -1450,7 +1465,7 @@ dialog.dialog-wide {
   .tag-planned    { background: #1e3a5f; color: #93c5fd; }
   .tag-progress   { background: #431407; color: #fdba74; }
   .tag-done       { background: #064e3b; color: #6ee7b7; }
-  .tag-finding    { background: #450a0a; color: #fca5a5; }
+  .tag-finding    { background: var(--danger-light); color: var(--danger-text); }
   .tag-observation { background: #422006; color: #fde68a; }
   .tag-recommendation { background: #2e1065; color: #c4b5fd; }
   .tag-checklist  { background: #042f2e; color: #5eead4; }
@@ -1509,8 +1524,8 @@ dialog.dialog-wide {
   border-radius: 12px;
   font-size: 11px;
   font-weight: 700;
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--danger-light);
+  color: var(--danger-text);
 }
 
 .cap-status-CLOSED {
@@ -1524,7 +1539,7 @@ dialog.dialog-wide {
 }
 
 @media (prefers-color-scheme: dark) {
-  .cap-status-OPEN { background: #450a0a; color: #fca5a5; }
+  .cap-status-OPEN { background: var(--danger-light); color: var(--danger-text); }
   .cap-status-CLOSED { background: #064e3b; color: #6ee7b7; }
 }
 
@@ -1802,8 +1817,8 @@ dialog.dialog-wide {
 }
 
 .login-error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--danger-light);
+  color: var(--danger-text);
   padding: 8px 12px;
   border-radius: var(--radius);
   font-size: 13px;
@@ -1811,7 +1826,7 @@ dialog.dialog-wide {
 }
 
 @media (prefers-color-scheme: dark) {
-  .login-error { background: #450a0a; color: #fca5a5; }
+  .login-error { background: var(--danger-light); color: var(--danger-text); }
 }
 
 .login-input {
@@ -2337,8 +2352,8 @@ dialog.dialog-wide {
 }
 
 .home-cap-badge--overdue {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--danger-light);
+  color: var(--danger-text);
 }
 
 .home-cap-badge--module {
@@ -2354,16 +2369,16 @@ dialog.dialog-wide {
   font-weight: 700;
 }
 
-.home-cap-eval--l1 { background: #fee2e2; color: #991b1b; }
+.home-cap-eval--l1 { background: var(--danger-light); color: var(--danger-text); }
 .home-cap-eval--l2 { background: #ffedd5; color: #9a3412; }
 .home-cap-eval--l3 { background: #fef9c3; color: #854d0e; }
 .home-cap-eval--obs { background: #dbeafe; color: #1e40af; }
 
 @media (prefers-color-scheme: dark) {
   .home-cap-badge--open { background: #1e3a5f; color: #93c5fd; }
-  .home-cap-badge--overdue { background: #450a0a; color: #fca5a5; }
+  .home-cap-badge--overdue { background: var(--danger-light); color: var(--danger-text); }
   .home-cap-badge--module { background: #1e293b; color: #3b82f6; }
-  .home-cap-eval--l1 { background: #450a0a; color: #fca5a5; }
+  .home-cap-eval--l1 { background: var(--danger-light); color: var(--danger-text); }
   .home-cap-eval--l2 { background: #431407; color: #fdba74; }
   .home-cap-eval--l3 { background: #422006; color: #fde68a; }
   .home-cap-eval--obs { background: #1e3a5f; color: #93c5fd; }
@@ -2603,17 +2618,17 @@ dialog.dialog-wide {
 .change-status-APPROVED { background: #d1fae5; color: #065f46; }
 .change-status-IMPLEMENTED { background: #ccfbf1; color: #0f766e; }
 .change-status-CLOSED { background: #ede9fe; color: #5b21b6; }
-.change-status-REJECTED { background: #fee2e2; color: #991b1b; }
+.change-status-REJECTED { background: var(--danger-light); color: var(--danger-text); }
 
 /* Category tags */
-.change-cat-PRIOR { background: #fee2e2; color: #991b1b; }
+.change-cat-PRIOR { background: var(--danger-light); color: var(--danger-text); }
 .change-cat-NON_PRIOR { background: #dbeafe; color: #1e40af; }
 
 /* Priority tags */
 .change-prio-LOW { background: #d1fae5; color: #065f46; }
 .change-prio-MEDIUM { background: #fef9c3; color: #854d0e; }
 .change-prio-HIGH { background: #ffedd5; color: #9a3412; }
-.change-prio-CRITICAL { background: #fee2e2; color: #991b1b; }
+.change-prio-CRITICAL { background: var(--danger-light); color: var(--danger-text); }
 
 @media (prefers-color-scheme: dark) {
   .change-status-DRAFT { background: #374151; color: #d1d5db; }
@@ -2621,13 +2636,13 @@ dialog.dialog-wide {
   .change-status-APPROVED { background: #064e3b; color: #6ee7b7; }
   .change-status-IMPLEMENTED { background: #042f2e; color: #5eead4; }
   .change-status-CLOSED { background: #2e1065; color: #c4b5fd; }
-  .change-status-REJECTED { background: #450a0a; color: #fca5a5; }
-  .change-cat-PRIOR { background: #450a0a; color: #fca5a5; }
+  .change-status-REJECTED { background: var(--danger-light); color: var(--danger-text); }
+  .change-cat-PRIOR { background: var(--danger-light); color: var(--danger-text); }
   .change-cat-NON_PRIOR { background: #1e3a5f; color: #93c5fd; }
   .change-prio-LOW { background: #064e3b; color: #6ee7b7; }
   .change-prio-MEDIUM { background: #422006; color: #fde68a; }
   .change-prio-HIGH { background: #431407; color: #fdba74; }
-  .change-prio-CRITICAL { background: #450a0a; color: #fca5a5; }
+  .change-prio-CRITICAL { background: var(--danger-light); color: var(--danger-text); }
 }
 
 /* Risk indicator */

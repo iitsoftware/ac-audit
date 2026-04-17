@@ -74,28 +74,20 @@
 </dialog>
 
 <!-- Audit Plan Delete confirmation dialog -->
-<dialog id="plan-delete-dialog" aria-labelledby="plan-delete-dialog-title">
-  <div class="dialog-header" id="plan-delete-dialog-title">Auditplan l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll <strong id="plan-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="plan-delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="plan-delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
+<%- include('partials/dialog', {
+  id: 'plan-delete-dialog',
+  title: 'Auditplan l&ouml;schen',
+  body: '<p>Soll <strong id="plan-delete-name"></strong> wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="plan-delete-cancel">Abbrechen</button><button class="btn btn-danger" id="plan-delete-confirm">L&ouml;schen</button>'
+}) %>
 
 <!-- Themenbereich Delete confirmation dialog -->
-<dialog id="line-delete-dialog" aria-labelledby="line-delete-dialog-title">
-  <div class="dialog-header" id="line-delete-dialog-title">Themenbereich l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll dieser Themenbereich wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="line-delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="line-delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
+<%- include('partials/dialog', {
+  id: 'line-delete-dialog',
+  title: 'Themenbereich l&ouml;schen',
+  body: '<p>Soll dieser Themenbereich wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="line-delete-cancel">Abbrechen</button><button class="btn btn-danger" id="line-delete-confirm">L&ouml;schen</button>'
+}) %>
 
 <!-- Checklist Item Add / Edit dialog -->
 <dialog id="checklist-item-dialog" aria-labelledby="checklist-item-dialog-title">
@@ -253,13 +245,10 @@
 </dialog>
 
 <!-- Checklist Item Delete confirmation dialog -->
-<dialog id="checklist-item-delete-dialog" aria-labelledby="ci-delete-dialog-title">
-  <div class="dialog-header" id="ci-delete-dialog-title">Checklist-Eintrag l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll dieser Eintrag wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="ci-delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="ci-delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
+<%- include('partials/dialog', {
+  id: 'checklist-item-delete-dialog',
+  titleId: 'ci-delete-dialog-title',
+  title: 'Checklist-Eintrag l&ouml;schen',
+  body: '<p>Soll dieser Eintrag wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="ci-delete-cancel">Abbrechen</button><button class="btn btn-danger" id="ci-delete-confirm">L&ouml;schen</button>'
+}) %>

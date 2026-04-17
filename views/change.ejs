@@ -80,16 +80,12 @@
 </dialog>
 
 <!-- Change Delete confirmation -->
-<dialog id="change-delete-dialog" aria-labelledby="change-delete-dialog-title">
-  <div class="dialog-header" id="change-delete-dialog-title">Change Request l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll <strong id="change-delete-name"></strong> wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="change-delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="change-delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
+<%- include('partials/dialog', {
+  id: 'change-delete-dialog',
+  title: 'Change Request l&ouml;schen',
+  body: '<p>Soll <strong id="change-delete-name"></strong> wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="change-delete-cancel">Abbrechen</button><button class="btn btn-danger" id="change-delete-confirm">L&ouml;schen</button>'
+}) %>
 
 <!-- Task Add / Edit dialog -->
 <dialog id="task-dialog" aria-labelledby="task-dialog-title">
@@ -142,16 +138,12 @@
 </dialog>
 
 <!-- Task Delete confirmation -->
-<dialog id="task-delete-dialog" aria-labelledby="task-delete-dialog-title">
-  <div class="dialog-header" id="task-delete-dialog-title">Aufgabe l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll diese Aufgabe wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="task-delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="task-delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
+<%- include('partials/dialog', {
+  id: 'task-delete-dialog',
+  title: 'Aufgabe l&ouml;schen',
+  body: '<p>Soll diese Aufgabe wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="task-delete-cancel">Abbrechen</button><button class="btn btn-danger" id="task-delete-confirm">L&ouml;schen</button>'
+}) %>
 
 <!-- Risk Item Add / Edit dialog -->
 <dialog id="risk-item-dialog" class="dialog-xl" aria-labelledby="risk-item-dialog-title">
@@ -214,16 +206,12 @@
 </dialog>
 
 <!-- Risk Item Delete confirmation -->
-<dialog id="risk-item-delete-dialog" aria-labelledby="risk-item-delete-dialog-title">
-  <div class="dialog-header" id="risk-item-delete-dialog-title">Risiko l&ouml;schen</div>
-  <div class="dialog-body">
-    <p>Soll dieses Risiko wirklich gel&ouml;scht werden?</p>
-  </div>
-  <div class="dialog-footer">
-    <button class="btn btn-secondary" id="risk-item-delete-cancel">Abbrechen</button>
-    <button class="btn btn-danger" id="risk-item-delete-confirm">L&ouml;schen</button>
-  </div>
-</dialog>
+<%- include('partials/dialog', {
+  id: 'risk-item-delete-dialog',
+  title: 'Risiko l&ouml;schen',
+  body: '<p>Soll dieses Risiko wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="risk-item-delete-cancel">Abbrechen</button><button class="btn btn-danger" id="risk-item-delete-confirm">L&ouml;schen</button>'
+}) %>
 
 <!-- Risk Analysis metadata dialog -->
 <dialog id="risk-meta-dialog" aria-labelledby="risk-meta-dialog-title">

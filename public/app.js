@@ -166,6 +166,124 @@ function makeRowClickable(row, handler) {
   });
 }
 
+// Read a File as base64 (strips the data URL prefix)
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Open a <dialog> by id, optionally running a fill callback first
+function openDialog(id, fillFn) {
+  const dlg = document.getElementById(id);
+  if (!dlg) return null;
+  if (typeof fillFn === 'function') fillFn(dlg);
+  dlg.showModal();
+  return dlg;
+}
+
+// Close a <dialog> by id
+function closeDialog(id) {
+  const dlg = document.getElementById(id);
+  if (dlg && dlg.open) dlg.close();
+}
+
+// Generic confirm-delete dialog (shared, lazily created)
+// opts: { title, message (HTML), confirmLabel?, onConfirm }
+function confirmDelete(opts) {
+  const o = opts || {};
+  let dlg = document.getElementById('shared-confirm-dialog');
+  if (!dlg) {
+    dlg = document.createElement('dialog');
+    dlg.id = 'shared-confirm-dialog';
+    dlg.setAttribute('aria-labelledby', 'shared-confirm-dialog-title');
+    dlg.innerHTML =
+      '<div class="dialog-header" id="shared-confirm-dialog-title"></div>' +
+      '<div class="dialog-body"><p id="shared-confirm-dialog-msg"></p></div>' +
+      '<div class="dialog-footer">' +
+        '<button type="button" class="btn btn-secondary" data-confirm-cancel>Abbrechen</button>' +
+        '<button type="button" class="btn btn-danger" data-confirm-ok>L\u00f6schen</button>' +
+      '</div>';
+    document.body.appendChild(dlg);
+  }
+  dlg.querySelector('#shared-confirm-dialog-title').textContent = o.title || 'L\u00f6schen';
+  dlg.querySelector('#shared-confirm-dialog-msg').innerHTML = o.message || '';
+  // Replace buttons to drop prior listeners
+  const oldOk = dlg.querySelector('[data-confirm-ok]');
+  const oldCancel = dlg.querySelector('[data-confirm-cancel]');
+  const ok = oldOk.cloneNode(true);
+  const cancel = oldCancel.cloneNode(true);
+  oldOk.replaceWith(ok);
+  oldCancel.replaceWith(cancel);
+  ok.textContent = o.confirmLabel || 'L\u00f6schen';
+  cancel.addEventListener('click', () => dlg.close());
+  ok.addEventListener('click', async () => {
+    ok.disabled = true;
+    try {
+      if (typeof o.onConfirm === 'function') await o.onConfirm();
+      dlg.close();
+    } catch (err) {
+      window.toast?.(err?.message || 'Vorgang fehlgeschlagen', 'error');
+    } finally {
+      ok.disabled = false;
+    }
+  });
+  dlg.showModal();
+}
+
+// Render a breadcrumb into a container
+// segments: [{ label, ...anything }, ...]
+// onSegmentClick(segment, index)
+// options: { separator?, backButton?: { title, onClick } }
+function renderBreadcrumb(segments, container, onSegmentClick, options) {
+  const opts = options || {};
+  const sep = opts.separator || '\u203a';
+  if (!container) return;
+  if (!segments || segments.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  let html = '';
+  if (opts.backButton) {
+    const t = escapeAttr(opts.backButton.title || '');
+    html += `<button type="button" class="breadcrumb-back" data-bc-back="1" title="${t}">\u2190</button>`;
+  }
+  segments.forEach((seg, i) => {
+    if (i > 0 || opts.backButton) {
+      html += `<span class="breadcrumb-sep">${sep}</span>`;
+    }
+    if (i < segments.length - 1) {
+      html += `<button type="button" class="breadcrumb-item" data-bc-idx="${i}">${escapeHtml(seg.label)}</button>`;
+    } else {
+      html += `<span class="breadcrumb-current">${escapeHtml(seg.label)}</span>`;
+    }
+  });
+  container.innerHTML = html;
+  if (opts.backButton) {
+    const back = container.querySelector('[data-bc-back]');
+    if (back) back.addEventListener('click', opts.backButton.onClick);
+  }
+  container.querySelectorAll('.breadcrumb-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.bcIdx);
+      if (typeof onSegmentClick === 'function') onSegmentClick(segments[idx], idx);
+    });
+  });
+}
+
+// Render an audit-tag badge
+// variantMap: value -> css class (e.g., { DRAFT: 'tag-open' })
+// labelMap (optional): value -> display label
+function badge(value, variantMap, labelMap) {
+  if (value === null || value === undefined || value === '') return '';
+  const cls = (variantMap && variantMap[value]) || 'tag-open';
+  const label = (labelMap && labelMap[value]) != null ? labelMap[value] : value;
+  return `<span class="audit-tag ${cls}">${escapeHtml(label)}</span>`;
+}
+
 // Toast notifications
 (function () {
   let container;

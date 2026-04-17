@@ -59,14 +59,6 @@
     return 'risk-cell--green';
   }
 
-  function riskLevel(score) {
-    if (score >= 12) return 'Nicht akzeptabel';
-    if (score >= 4)  return 'Akzeptabel';
-    return 'Gering oder kein Risiko';
-  }
-
-  window.riskLevel = riskLevel;
-
   /* ---- public factory ---- */
   window.createRiskMatrix = function (container, opts) {
     opts = opts || {};
