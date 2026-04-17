@@ -161,13 +161,13 @@
     navPath.forEach((seg, idx) => {
       if (idx > 0) html += ' <span class="breadcrumb-sep">/</span> ';
       if (idx < navPath.length - 1) {
-        html += `<a href="#" class="breadcrumb-link" data-nav-idx="${idx}">${escapeHtml(seg.name)}</a>`;
+        html += `<button type="button" class="breadcrumb-item" data-nav-idx="${idx}">${escapeHtml(seg.name)}</button>`;
       } else {
         html += `<span class="breadcrumb-current">${escapeHtml(seg.name)}</span>`;
       }
     });
     breadcrumbEl.innerHTML = html;
-    breadcrumbEl.querySelectorAll('.breadcrumb-link').forEach(link => {
+    breadcrumbEl.querySelectorAll('.breadcrumb-item').forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
         const idx = parseInt(link.dataset.navIdx);
