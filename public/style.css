@@ -629,7 +629,7 @@ dialog.dialog-wide {
 }
 
 .breadcrumb-item {
-  color: var(--primary);
+  color: var(--text-muted);
   cursor: pointer;
   font-weight: 500;
   border: none;
@@ -642,6 +642,7 @@ dialog.dialog-wide {
 
 .breadcrumb-item:hover {
   background: var(--primary-tint);
+  color: var(--primary);
   text-decoration: underline;
 }
 
