@@ -973,7 +973,7 @@
       } else {
         html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
           <colgroup>
-            <col style="width:36px"><col style="width:30px"><col style="width:11%"><col style="width:25%"><col style="width:90px"><col style="width:10%"><col style="width:auto"><col style="width:36px">
+            <col style="width:36px"><col style="width:30px"><col style="width:11%"><col style="width:25%"><col style="width:110px"><col style="width:10%"><col style="width:auto"><col style="width:56px">
           </colgroup>
           <thead><tr>
             <th>#</th><th>A</th><th>Regulation</th><th>Compliance Check</th><th>Bewertung</th><th>Dok. Ref.</th><th>Kommentar</th><th></th>

@@ -905,6 +905,7 @@ dialog.dialog-wide {
   text-transform: uppercase;
   letter-spacing: .03em;
   background: var(--bg);
+  white-space: nowrap;
 }
 
 .lines-table tbody tr:hover {
@@ -915,6 +916,8 @@ dialog.dialog-wide {
   opacity: 0;
   transition: opacity var(--transition);
   white-space: nowrap;
+  padding: 4px 6px;
+  text-align: right;
 }
 
 .lines-table tbody tr:hover .line-actions {
