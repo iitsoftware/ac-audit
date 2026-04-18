@@ -655,8 +655,8 @@
             <th>Ort</th>
             <th>Geplant</th>
             <th>Durchgef\u00fchrt</th>
-            <th></th>
             <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-lines" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte Themenbereiche als PDF exportieren">${ICON_SHARE}</button></span></th>
+            <th></th>
           </tr>
         </thead>
         <tbody>`;
@@ -681,10 +681,10 @@
           <td>${escapeHtml(line.location || '')}</td>
           <td>${escapeHtml(line.planned_window)}</td>
           <td>${escapeHtml(endDateDisplay)}</td>
+          <td class="col-select"><input type="checkbox" class="line-select-cb" data-line-id="${line.id}"></td>
           <td class="line-actions">
             <button class="pane-action-btn danger" data-action="delete-line" data-id="${line.id}" title="L\u00f6schen">&#128465;</button>
           </td>
-          <td class="col-select"><input type="checkbox" class="line-select-cb" data-line-id="${line.id}"></td>
         </tr>`;
       });
       html += `</tbody></table></div>`;
