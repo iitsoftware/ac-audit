@@ -3,7 +3,7 @@ const { formatDateDE } = require('../services/audit-log');
 const { createPdfDoc } = require('./common');
 
 // ── Internal: render audit plan PDF content ─────────────────
-function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed }) {
+function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed, titleLabel }) {
   let headerY = 50;
   if (logoRow && logoRow.logo) {
     try {
@@ -21,8 +21,8 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
   doc.text(subLine, 50, headerY);
   headerY += 40;
 
-  const titleLabel = isClosed ? 'Durchgeführte Audits' : 'Geplante Audits';
-  const title = `Auditplan ${plan.year} - ${titleLabel}`;
+  const label = titleLabel || (isClosed ? 'Durchgeführte Audits' : 'Geplante Audits');
+  const title = `Auditplan ${plan.year} - ${label}`;
   doc.fontSize(14).font('Helvetica-Bold').text(title, 50, headerY);
   headerY += 20;
   doc.fontSize(10).font('Helvetica').text(`Rev. ${plan.revision || 0}`, 50, headerY);
@@ -503,7 +503,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
 }
 
 // Generates audit plan PDF as a Buffer (for email attachment etc.)
-function generateAuditPlanPdfBuffer(planId, type, filter) {
+function generateAuditPlanPdfBuffer(planId, type, filter, titleLabel) {
   return new Promise((resolve, reject) => {
     const isClosed = type === 'closed';
     const plan = stmts.getAuditPlan.get(planId);
@@ -522,7 +522,7 @@ function generateAuditPlanPdfBuffer(planId, type, filter) {
     doc.on('data', chunk => chunks.push(chunk));
     doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), plan, dept, company }));
     doc.on('error', reject);
-    _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed });
+    _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed, titleLabel });
     doc.end();
   });
 }
