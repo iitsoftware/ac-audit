@@ -318,7 +318,8 @@ router.get('/api/audit-plans/:id/pdf', (req, res) => {
   const logoRow = stmts.getCompanyLogo.get(company.id);
   let lines = stmts.getAuditPlanLinesByPlan.all(plan.id);
   const filter = req.query.filter;
-  if (filter === 'planned') {
+  // type=all always includes every line — the planned filter must not apply
+  if (filter === 'planned' && !isAll) {
     lines = lines.filter(l => l.planned_window && l.planned_window.trim());
   }
   if (isClosed) {
