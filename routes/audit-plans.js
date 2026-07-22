@@ -300,10 +300,11 @@ router.post('/api/departments/:departmentId/import-audit-plan',
 // Audit Plan PDF Export
 router.get('/api/audit-plans/:id/pdf', (req, res) => {
   const type = req.query.type || 'open';
-  if (type !== 'open' && type !== 'closed') {
-    return res.status(400).json({ error: 'type must be open or closed' });
+  if (type !== 'open' && type !== 'closed' && type !== 'all') {
+    return res.status(400).json({ error: 'type must be open, closed or all' });
   }
   const isClosed = type === 'closed';
+  const isAll = type === 'all';
 
   const plan = stmts.getAuditPlan.get(req.params.id);
   if (!plan) return res.status(404).json({ error: 'Audit plan not found' });
@@ -326,12 +327,12 @@ router.get('/api/audit-plans/:id/pdf', (req, res) => {
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
 
-  const suffix = isClosed ? 'Durchgefuehrte' : 'Geplante';
+  const suffix = isClosed ? 'Durchgefuehrte' : (isAll ? 'Alle' : 'Geplante');
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `attachment; filename="Auditplan_${plan.year}_${suffix}.pdf"`);
   doc.pipe(res);
 
-  _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed });
+  _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed, titleLabel: isAll ? 'Alle Audits' : undefined });
   doc.end();
 });
 
@@ -339,15 +340,16 @@ router.get('/api/audit-plans/:id/pdf', (req, res) => {
 router.post('/api/audit-plans/:id/send-email', async (req, res) => {
   const { to, type, authority } = req.body;
   if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
-  if (type !== 'open' && type !== 'closed') return res.status(400).json({ error: 'type must be open or closed' });
+  if (type !== 'open' && type !== 'closed' && type !== 'all') return res.status(400).json({ error: 'type must be open, closed or all' });
 
   try {
+    const isAll = type === 'all';
     const filter = type === 'open' ? 'planned' : undefined;
-    const { buffer, plan, dept, company } = await generateAuditPlanPdfBuffer(req.params.id, type, filter);
+    const { buffer, plan, dept, company } = await generateAuditPlanPdfBuffer(req.params.id, type, filter, isAll ? 'Alle Audits' : undefined);
     const qm = getQmForDepartment(company.id, dept.id);
     const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     const isClosed = type === 'closed';
-    const suffix = isClosed ? 'Durchgeführte' : 'Geplante';
+    const suffix = isClosed ? 'Durchgeführte' : (isAll ? 'Alle' : 'Geplante');
     const filename = `Auditplan_${plan.year}_${suffix.replace(/ü/g, 'ue')}_Audits.pdf`;
     let subject, text;
     if (authority) {

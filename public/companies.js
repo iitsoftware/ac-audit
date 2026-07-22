@@ -837,6 +837,7 @@
     const pdfExportBtn = document.getElementById('btn-pdf-export');
     if (pdfExportBtn) {
       pdfExportBtn.addEventListener('click', () => {
+        document.getElementById('pdf-export-all-audits').checked = false;
         document.getElementById('pdf-export-dialog').showModal();
       });
     }
@@ -1379,6 +1380,9 @@
   const pdfEmailInput = document.getElementById('pdf-export-email-to');
   const pdfEmailSendBtn = document.getElementById('pdf-export-email-send');
   let pdfEmailType = 'open';
+  // 'Alle Audits' checkbox switches the Geplante-Audits actions from type=open to type=all
+  const openExportType = () =>
+    document.getElementById('pdf-export-all-audits').checked ? 'all' : 'open';
 
   document.getElementById('pdf-export-cancel').addEventListener('click', () => {
     pdfEmailSection.style.display = 'none';
@@ -1387,7 +1391,11 @@
 
   // Download PDF
   document.getElementById('pdf-export-open-download').addEventListener('click', () => {
-    if (currentPlan) window.open(`/api/audit-plans/${currentPlan.id}/pdf?type=open&filter=planned`, '_blank');
+    if (currentPlan) {
+      const type = openExportType();
+      const query = type === 'all' ? 'type=all' : 'type=open&filter=planned';
+      window.open(`/api/audit-plans/${currentPlan.id}/pdf?${query}`, '_blank');
+    }
     pdfExportDialog.close();
   });
   document.getElementById('pdf-export-closed-download').addEventListener('click', () => {
@@ -1413,7 +1421,7 @@
       toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   }
-  document.getElementById('pdf-export-open-authority').addEventListener('click', () => sendToAuthority('open'));
+  document.getElementById('pdf-export-open-authority').addEventListener('click', () => sendToAuthority(openExportType()));
   document.getElementById('pdf-export-closed-authority').addEventListener('click', () => sendToAuthority('closed'));
 
   // Send via email
@@ -1424,7 +1432,7 @@
     pdfEmailSendBtn.disabled = true;
     pdfEmailInput.focus();
   }
-  document.getElementById('pdf-export-open-email').addEventListener('click', () => showEmailInput('open'));
+  document.getElementById('pdf-export-open-email').addEventListener('click', () => showEmailInput(openExportType()));
   document.getElementById('pdf-export-closed-email').addEventListener('click', () => showEmailInput('closed'));
 
   pdfEmailInput.addEventListener('input', () => {
