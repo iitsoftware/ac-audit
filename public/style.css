@@ -3083,3 +3083,9 @@ dialog.dialog-lg { max-width: 600px; }
   padding-inline: 8px;
 }
 
+/* ── Safety: SPI rows flagged as findings ────────────────── */
+/* Low specificity on purpose: .ci-row-clickable:hover must still win */
+tr.row-finding { background: var(--danger-light); }
+
+.text-muted { color: var(--text-muted); }
+

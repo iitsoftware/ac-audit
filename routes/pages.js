@@ -31,6 +31,10 @@ router.get('/change', (req, res) => {
   renderPage(res, 'change', { activePage: 'change', pageScript: 'change.js' });
 });
 
+router.get('/safety', (req, res) => {
+  renderPage(res, 'safety', { activePage: 'safety', pageScript: 'safety.js' });
+});
+
 router.get('/settings', (req, res) => {
   renderPage(res, 'settings', { activePage: 'settings', pageScript: 'settings.js' });
 });
