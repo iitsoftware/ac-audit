@@ -1,7 +1,10 @@
 const express = require('express');
 const { db, stmts } = require('../db');
 const { logAction } = require('../services/audit-log');
-const { restoreAuditPlan, restoreAuditPlanLine, restoreCapItem } = require('../services/trash');
+const {
+  restoreAuditPlan, restoreAuditPlanLine, restoreCapItem,
+  restoreSmsMeeting, restoreSafetyObjective, restoreSpiEvaluation,
+} = require('../services/trash');
 
 const router = express.Router();
 
@@ -32,6 +35,12 @@ router.post('/api/trash/:id/restore', (req, res) => {
   } else if (item.entity_type === 'cap_item') {
     const checkItem = db.prepare('SELECT id FROM audit_checklist_item WHERE id = ?').get(item.parent_id);
     if (!checkItem) return res.status(409).json({ error: 'Prüfpunkt existiert nicht mehr. Wiederherstellung nicht möglich.' });
+  } else if (item.entity_type === 'sms_meeting' || item.entity_type === 'safety_objective') {
+    const dept = stmts.getDepartment.get(item.parent_id);
+    if (!dept) return res.status(409).json({ error: 'Abteilung existiert nicht mehr. Wiederherstellung nicht möglich.' });
+  } else if (item.entity_type === 'spi_evaluation') {
+    const objective = stmts.getSafetyObjective.get(item.parent_id);
+    if (!objective) return res.status(409).json({ error: 'Safety-Ziel existiert nicht mehr. Wiederherstellung nicht möglich.' });
   }
 
   try {
@@ -42,6 +51,12 @@ router.post('/api/trash/:id/restore', (req, res) => {
         restoreAuditPlanLine(snapshot);
       } else if (item.entity_type === 'cap_item') {
         restoreCapItem(snapshot);
+      } else if (item.entity_type === 'sms_meeting') {
+        restoreSmsMeeting(snapshot);
+      } else if (item.entity_type === 'safety_objective') {
+        restoreSafetyObjective(snapshot);
+      } else if (item.entity_type === 'spi_evaluation') {
+        restoreSpiEvaluation(snapshot);
       }
       stmts.deleteTrashItem.run(req.params.id);
     });

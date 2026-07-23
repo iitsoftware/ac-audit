@@ -650,6 +650,12 @@ const stmts = {
   deleteSpiEvaluation: db.prepare(
     'DELETE FROM spi_evaluation WHERE id = ?'
   ),
+  getSpiEvaluationRaw: db.prepare(
+    'SELECT * FROM spi_evaluation WHERE id = ?'
+  ),
+  getSpiEvaluationsByObjectiveRaw: db.prepare(
+    'SELECT * FROM spi_evaluation WHERE safety_objective_id = ? ORDER BY eval_date, created_at'
+  ),
   getOpenSpiFindingsByDepartment: db.prepare(
     `SELECT e.id, e.safety_objective_id, e.eval_date, e.spi_value, e.fulfilled, e.result, e.improvement,
             e.decided_at, e.closed_at, o.objective, o.spt
@@ -709,6 +715,18 @@ const stmts = {
   restoreAuditPlan: db.prepare(
     `INSERT INTO audit_plan (id, department_id, name, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  restoreSmsMeeting: db.prepare(
+    `INSERT INTO sms_meeting (id, department_id, meeting_type, meeting_date, participants, topics, results, actions, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  restoreSafetyObjective: db.prepare(
+    `INSERT INTO safety_objective (id, department_id, sort_order, objective, spt, interval_months, active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  restoreSpiEvaluation: db.prepare(
+    `INSERT INTO spi_evaluation (id, safety_objective_id, eval_date, spt_snapshot, interval_snapshot, spi_value, fulfilled, result, improvement, cause_analysis, measures, decision, decision_place, decided_at, closed_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
 };
 
