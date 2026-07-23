@@ -3083,9 +3083,37 @@ dialog.dialog-lg { max-width: 600px; }
   padding-inline: 8px;
 }
 
-/* ── Safety: SPI rows flagged as findings ────────────────── */
-/* Low specificity on purpose: .ci-row-clickable:hover must still win */
+/* ── Safety: SPI-Finding-Markierung ──────────────────────── */
+/* safety.js setzt row-finding als Alias von spi-finding-row —
+   beide Selektoren teilen die Regeln.
+   Low specificity on purpose: .ci-row-clickable:hover must still win */
+tr.spi-finding-row,
 tr.row-finding { background: var(--danger-light); }
+
+/* Farbunabhängiger Zusatz-Marker: roter Akzentbalken am Zeilenanfang */
+tr.spi-finding-row > td:first-child,
+tr.row-finding > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+
+/* Finding-Kennzeichen, Farbwelt wie .eval-L1/.tag-finding.
+   Kontrast: #991b1b auf #fee2e2 ≈ 6.8:1, dark #fca5a5 auf #450a0a ≈ 8.5:1 */
+.spi-finding-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  vertical-align: middle;
+  background: var(--danger-light);
+  color: var(--danger-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  tr.spi-finding-row,
+  tr.row-finding { background: var(--danger-light); }
+  .spi-finding-badge { background: var(--danger-light); color: var(--danger-text); }
+}
 
 .text-muted { color: var(--text-muted); }
 
