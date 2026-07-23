@@ -43,6 +43,7 @@ app.use(require('./routes/cap-items'));
 app.use(require('./routes/change-requests'));
 app.use(require('./routes/change-tasks'));
 app.use(require('./routes/risk-analysis'));
+app.use(require('./routes/safety'));
 app.use(require('./routes/logs'));
 app.use(require('./routes/trash'));
 app.use(require('./routes/health'));
