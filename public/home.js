@@ -3,12 +3,16 @@
 (async function () {
   const tileAudit = document.getElementById('tile-audit');
   const tileChange = document.getElementById('tile-change');
+  const tileSafety = document.getElementById('tile-safety');
   const auditStats = document.getElementById('audit-stats');
   const changeStats = document.getElementById('change-stats');
+  const safetyStats = document.getElementById('safety-stats');
   const capContainer = document.getElementById('cap-table-container');
+  const spiContainer = document.getElementById('spi-table-container');
   const filterBar = document.getElementById('home-cap-filters');
   let activeFilter = null;
   let allCapItems = [];
+  let allSpiFindings = [];
 
   const tagDefs = [
     { key: 'O',  label: 'OBSERVATION', css: 'tag-observation' },
@@ -20,6 +24,7 @@
   // Navigate on tile clicks
   tileAudit.addEventListener('click', () => { window.location.href = '/companies'; });
   tileChange.addEventListener('click', () => { window.location.href = '/change'; });
+  tileSafety.addEventListener('click', () => { window.location.href = '/safety'; });
 
   // Filter button clicks
   filterBar.addEventListener('click', (e) => {
@@ -39,7 +44,9 @@
     const data = await fetchJSON('/api/home/stats');
     const audit = data.modules.audit;
     const change = data.modules.change || {};
+    const safety = data.modules.safety || {};
     allCapItems = data.capItems;
+    allSpiFindings = data.spiFindings || [];
 
     // Render audit tile stats
     const overdueClass = audit.overdueCaps > 0 ? ' home-tile__stat--danger' : '';
@@ -56,11 +63,20 @@
         `<span class="home-tile__stat home-tile__stat--muted">${change.totalChanges || 0} Changes gesamt</span>`;
     }
 
+    // Render safety tile stats
+    if (safetyStats) {
+      const findingsClass = safety.openFindings > 0 ? ' home-tile__stat--danger' : '';
+      safetyStats.innerHTML =
+        `<span class="home-tile__stat${findingsClass}">${safety.openFindings || 0} offene SPI-Findings</span>`;
+    }
+
     renderFilterBar();
     renderCapTable();
+    renderSpiTable();
 
   } catch (err) {
     capContainer.innerHTML = `<p class="home-cap-empty">Fehler beim Laden: ${escapeHtml(err.message)}</p>`;
+    spiContainer.innerHTML = `<p class="home-cap-empty">Fehler beim Laden: ${escapeHtml(err.message)}</p>`;
   }
 
   function renderFilterBar() {
@@ -169,6 +185,60 @@
           localStorage.setItem('ac-audit-nav-state', JSON.stringify(navState));
           window.location.href = '/companies';
         }
+      });
+    });
+  }
+
+  function renderSpiTable() {
+    if (allSpiFindings.length === 0) {
+      spiContainer.innerHTML = '<p class="home-cap-empty">Keine offenen SPI-Findings</p>';
+      return;
+    }
+
+    let html = `<div class="home-cap-table-wrap"><table class="home-cap-table">
+      <thead><tr>
+        <th>Firma</th>
+        <th>Abteilung</th>
+        <th>Safety Objective</th>
+        <th>SPI-Wert</th>
+        <th>Bewertung</th>
+        <th>Grund</th>
+      </tr></thead><tbody>`;
+
+    for (const f of allSpiFindings) {
+      const reasons = [];
+      if (f.fulfilled === 0) reasons.push('Nicht erfüllt');
+      if (f.result === 'NEGATIV') reasons.push('Negativ');
+      if (f.improvement === 1) reasons.push('Verbesserung');
+      const objective = f.objective && f.objective.length > 80
+        ? escapeHtml(f.objective.slice(0, 80)) + '&hellip;'
+        : escapeHtml(f.objective || '');
+
+      html += `<tr data-spi-id="${f.id}" style="cursor:pointer">
+        <td>${escapeHtml(f.companyName)}</td>
+        <td>${escapeHtml(f.departmentName)}</td>
+        <td class="home-cap-desc">${objective}</td>
+        <td>${escapeHtml(f.spiValue || '')}</td>
+        <td>${formatDateDE(f.evalDate)}</td>
+        <td><span class="home-cap-badge home-cap-badge--overdue">${escapeHtml(reasons.join(', '))}</span></td>
+      </tr>`;
+    }
+
+    html += '</tbody></table></div>';
+    spiContainer.innerHTML = html;
+
+    // Click handler for rows — deep-link into safety module (SPI tab)
+    spiContainer.querySelectorAll('tr[data-spi-id]').forEach(row => {
+      makeRowClickable(row, () => {
+        const finding = allSpiFindings.find(f => f.id === row.dataset.spiId);
+        if (!finding) return;
+        const navState = {
+          selectedId: finding.companyId,
+          currentDeptId: finding.departmentId,
+          activeTab: 'spi',
+        };
+        localStorage.setItem('ac-safety-nav-state', JSON.stringify(navState));
+        window.location.href = '/safety';
       });
     });
   }
