@@ -576,6 +576,100 @@ const stmts = {
     'SELECT COUNT(*) AS cnt FROM risk_item WHERE risk_analysis_id = ?'
   ),
 
+  // ── Safety Module (Hub) ───────────────────────────────────
+  // SMS Meetings (Management Review / SRB)
+  getSmsMeetingsByDepartment: db.prepare(
+    `SELECT id, department_id, meeting_type, meeting_date, participants, topics, results, actions, created_at, updated_at
+     FROM sms_meeting WHERE department_id = ? ORDER BY meeting_date DESC, created_at DESC`
+  ),
+  getSmsMeeting: db.prepare(
+    'SELECT * FROM sms_meeting WHERE id = ?'
+  ),
+  createSmsMeeting: db.prepare(
+    `INSERT INTO sms_meeting (id, department_id, meeting_type, meeting_date, participants, topics, results, actions)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateSmsMeeting: db.prepare(
+    `UPDATE sms_meeting SET meeting_type = ?, meeting_date = ?, participants = ?, topics = ?, results = ?, actions = ?,
+            updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteSmsMeeting: db.prepare(
+    'DELETE FROM sms_meeting WHERE id = ?'
+  ),
+
+  // Safety Objectives (SPI definitions)
+  getSafetyObjectivesByDepartment: db.prepare(
+    `SELECT id, department_id, sort_order, objective, spt, interval_months, active, created_at, updated_at
+     FROM safety_objective WHERE department_id = ? ORDER BY sort_order, created_at`
+  ),
+  getSafetyObjective: db.prepare(
+    'SELECT * FROM safety_objective WHERE id = ?'
+  ),
+  createSafetyObjective: db.prepare(
+    `INSERT INTO safety_objective (id, department_id, sort_order, objective, spt, interval_months, active)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateSafetyObjective: db.prepare(
+    `UPDATE safety_objective SET sort_order = ?, objective = ?, spt = ?, interval_months = ?, active = ?,
+            updated_at = datetime('now') WHERE id = ?`
+  ),
+  updateSafetyObjectiveSortOrder: db.prepare(
+    `UPDATE safety_objective SET sort_order = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  getMaxSafetyObjectiveOrder: db.prepare(
+    'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM safety_objective WHERE department_id = ?'
+  ),
+  deleteSafetyObjective: db.prepare(
+    'DELETE FROM safety_objective WHERE id = ?'
+  ),
+
+  // SPI Evaluations — finding status is derived, not stored:
+  // is_finding = fulfilled = 0 OR result = 'NEGATIV' OR improvement = 1; open while closed_at is empty
+  getSpiEvaluationsByObjective: db.prepare(
+    `SELECT id, safety_objective_id, eval_date, spt_snapshot, interval_snapshot, spi_value, fulfilled, result,
+            improvement, cause_analysis, measures, decision, decision_place, decided_at, closed_at,
+            CASE WHEN fulfilled = 0 OR result = 'NEGATIV' OR improvement = 1 THEN 1 ELSE 0 END AS is_finding,
+            created_at, updated_at
+     FROM spi_evaluation WHERE safety_objective_id = ? ORDER BY eval_date DESC, created_at DESC`
+  ),
+  getSpiEvaluation: db.prepare(
+    `SELECT *,
+            CASE WHEN fulfilled = 0 OR result = 'NEGATIV' OR improvement = 1 THEN 1 ELSE 0 END AS is_finding
+     FROM spi_evaluation WHERE id = ?`
+  ),
+  createSpiEvaluation: db.prepare(
+    `INSERT INTO spi_evaluation (id, safety_objective_id, eval_date, spt_snapshot, interval_snapshot, spi_value,
+            fulfilled, result, improvement, cause_analysis, measures, decision, decision_place, decided_at, closed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateSpiEvaluation: db.prepare(
+    `UPDATE spi_evaluation SET eval_date = ?, spt_snapshot = ?, interval_snapshot = ?, spi_value = ?,
+            fulfilled = ?, result = ?, improvement = ?, cause_analysis = ?, measures = ?, decision = ?,
+            decision_place = ?, decided_at = ?, closed_at = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteSpiEvaluation: db.prepare(
+    'DELETE FROM spi_evaluation WHERE id = ?'
+  ),
+  getOpenSpiFindingsByDepartment: db.prepare(
+    `SELECT e.id, e.safety_objective_id, e.eval_date, e.spi_value, e.fulfilled, e.result, e.improvement,
+            e.decided_at, e.closed_at, o.objective, o.spt
+     FROM spi_evaluation e
+     JOIN safety_objective o ON o.id = e.safety_objective_id
+     WHERE o.department_id = ?
+       AND (e.fulfilled = 0 OR e.result = 'NEGATIV' OR e.improvement = 1)
+       AND (e.closed_at IS NULL OR e.closed_at = '')
+     ORDER BY e.eval_date DESC`
+  ),
+  getSpiFindingCountsByObjective: db.prepare(
+    `SELECT safety_objective_id,
+            COUNT(*) AS eval_count,
+            SUM(CASE WHEN (fulfilled = 0 OR result = 'NEGATIV' OR improvement = 1)
+                      AND (closed_at IS NULL OR closed_at = '') THEN 1 ELSE 0 END) AS open_finding_count
+     FROM spi_evaluation
+     WHERE safety_objective_id IN (SELECT id FROM safety_objective WHERE department_id = ?)
+     GROUP BY safety_objective_id`
+  ),
+
   // Trash
   getTrashItems: db.prepare(
     'SELECT id, entity_type, entity_id, entity_name, company_name, department_name, parent_id, parent_type, deleted_at FROM trash_item ORDER BY deleted_at DESC LIMIT ? OFFSET ?'

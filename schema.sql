@@ -260,6 +260,55 @@ CREATE TABLE IF NOT EXISTS risk_item (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- ── Safety Module (Hub) ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS sms_meeting (
+  id TEXT PRIMARY KEY,
+  department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
+  meeting_type TEXT DEFAULT 'MANAGEMENT_REVIEW',
+  meeting_date TEXT,
+  participants TEXT DEFAULT '',
+  topics TEXT DEFAULT '',
+  results TEXT DEFAULT '',
+  actions TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS safety_objective (
+  id TEXT PRIMARY KEY,
+  department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
+  sort_order INTEGER DEFAULT 0,
+  objective TEXT DEFAULT '',
+  spt TEXT DEFAULT '',
+  interval_months INTEGER DEFAULT 12,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Finding status is derived, not stored: is_finding = fulfilled = 0 OR
+-- result = 'NEGATIV' OR improvement = 1; open as long as closed_at is empty
+-- (same pattern as CAP status derived from completion_date).
+CREATE TABLE IF NOT EXISTS spi_evaluation (
+  id TEXT PRIMARY KEY,
+  safety_objective_id TEXT NOT NULL REFERENCES safety_objective(id) ON DELETE CASCADE,
+  eval_date TEXT,
+  spt_snapshot TEXT DEFAULT '',
+  interval_snapshot INTEGER,
+  spi_value TEXT DEFAULT '',
+  fulfilled INTEGER DEFAULT 1,
+  result TEXT DEFAULT 'POSITIV',
+  improvement INTEGER DEFAULT 0,
+  cause_analysis TEXT DEFAULT '',
+  measures TEXT DEFAULT '',
+  decision TEXT DEFAULT '',
+  decision_place TEXT DEFAULT '',
+  decided_at TEXT,
+  closed_at TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS trash_item (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
