@@ -3115,5 +3115,22 @@ tr.row-finding > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
   .spi-finding-badge { background: var(--danger-light); color: var(--danger-text); }
 }
 
+/* ── Safety: Meeting-Detail-Kopfzeile ────────────────────── */
+/* Zurück-Button links, Titel daneben; flex:1 auf dem Titel
+   schiebt den PDF-Button nach rechts — auch wenn er per
+   display:none fehlt, bleibt das Layout stabil */
+.meeting-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.meeting-detail-header h2 {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 700;
+}
+
 .text-muted { color: var(--text-muted); }
 
