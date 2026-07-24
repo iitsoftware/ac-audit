@@ -34,6 +34,7 @@
   const contentEl = document.getElementById('safety-content');
   const deptEmptyEl = document.getElementById('safety-dept-empty');
   const tabsWrapEl = document.getElementById('safety-tabs-wrap');
+  const meetingDetailEl = document.getElementById('meeting-detail');
 
   // ── Helpers ──────────────────────────────────────────────
   const yesNo = (v) => (v ? 'ja' : 'nein');
@@ -60,6 +61,7 @@
     contentEl.style.display = 'block';
     deptEmptyEl.style.display = '';
     tabsWrapEl.style.display = 'none';
+    meetingDetailEl.style.display = 'none'; // stale detail form must not survive a company switch
     try { departments = await fetchJSON(`/api/companies/${selectedId}/departments`); }
     catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); departments = []; }
     deptTabBar.style.display = 'flex';
@@ -74,6 +76,7 @@
     saveNav();
     renderDeptTabs(departments, currentDeptId, deptTabsEl, selectDepartment);
     deptEmptyEl.style.display = 'none';
+    meetingDetailEl.style.display = 'none'; // stale detail form must not survive a department switch
     tabsWrapEl.style.display = 'block';
     await loadDeptData();
   }
@@ -155,7 +158,7 @@
       makeRowClickable(row, (e) => {
         if (e.target.closest('button')) return;
         const meeting = meetings.find(m => m.id === row.dataset.id);
-        if (meeting) openMeetingDialog(meeting);
+        if (meeting) openMeetingDetail(meeting);
       });
     });
     container.querySelectorAll('[data-action="pdf"]').forEach(btn => {
@@ -177,9 +180,9 @@
     });
   }
 
-  function openMeetingDialog(meeting) {
+  function openMeetingDetail(meeting) {
     const isEdit = !!meeting;
-    document.getElementById('meeting-dialog-title').textContent = isEdit ? 'Meeting bearbeiten' : 'Meeting hinzufügen';
+    document.getElementById('meeting-detail-title').textContent = isEdit ? 'Meeting bearbeiten' : 'Meeting hinzufügen';
     document.getElementById('meeting-form-id').value = isEdit ? meeting.id : '';
     document.getElementById('meeting-form-type').value = isEdit ? (meeting.meeting_type || 'MANAGEMENT_REVIEW') : 'MANAGEMENT_REVIEW';
     document.getElementById('meeting-form-date').value = isEdit ? (formatDateDE(meeting.meeting_date) || '') : '';
@@ -187,11 +190,23 @@
     document.getElementById('meeting-form-topics').value = isEdit ? (meeting.topics || '') : '';
     document.getElementById('meeting-form-results').value = isEdit ? (meeting.results || '') : '';
     document.getElementById('meeting-form-actions').value = isEdit ? (meeting.actions || '') : '';
-    openDialog('meeting-dialog');
+    document.getElementById('meeting-detail-pdf').style.display = isEdit ? '' : 'none';
+    tabsWrapEl.style.display = 'none';
+    meetingDetailEl.style.display = 'block';
   }
 
-  document.getElementById('btn-add-meeting').addEventListener('click', () => openMeetingDialog(null));
-  document.getElementById('meeting-btn-cancel').addEventListener('click', () => closeDialog('meeting-dialog'));
+  function closeMeetingDetail() {
+    meetingDetailEl.style.display = 'none';
+    tabsWrapEl.style.display = 'block';
+  }
+
+  document.getElementById('btn-add-meeting').addEventListener('click', () => openMeetingDetail(null));
+  document.getElementById('meeting-detail-back').addEventListener('click', closeMeetingDetail);
+  document.getElementById('meeting-btn-cancel').addEventListener('click', closeMeetingDetail);
+  document.getElementById('meeting-detail-pdf').addEventListener('click', () => {
+    const id = document.getElementById('meeting-form-id').value;
+    if (id) window.open(`/api/sms-meetings/${id}/pdf`);
+  });
   document.getElementById('meeting-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const dateIso = parseDateDE(document.getElementById('meeting-form-date').value);
@@ -208,7 +223,7 @@
     try {
       if (id) await fetchJSON(`/api/sms-meetings/${id}`, { method: 'PUT', body });
       else await fetchJSON(`/api/departments/${currentDeptId}/sms-meetings`, { method: 'POST', body });
-      closeDialog('meeting-dialog');
+      closeMeetingDetail();
       toast('Meeting gespeichert');
       await loadDeptData();
     } catch (err) {
