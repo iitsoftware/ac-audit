@@ -61,51 +61,56 @@
       </div>
 
     </div>
+
+    <!-- Meeting Full-Page Detail (Add / Edit) -->
+    <div id="meeting-detail" style="display:none">
+      <div class="pane-content-header">
+        <button type="button" class="btn btn-secondary" id="meeting-detail-back">Zur&uuml;ck</button>
+        <h2 id="meeting-detail-title">Meeting hinzuf&uuml;gen</h2>
+        <button type="button" class="btn btn-secondary" id="meeting-detail-pdf" style="display:none">PDF</button>
+      </div>
+      <form id="meeting-form">
+        <div class="audit-section">
+          <input type="hidden" id="meeting-form-id">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="meeting-form-type">Typ</label>
+              <select id="meeting-form-type">
+                <option value="MANAGEMENT_REVIEW">Management Review</option>
+                <option value="SRB">SRB (Safety Review Board)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="meeting-form-date">Datum</label>
+              <input type="text" id="meeting-form-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-participants">Teilnehmer</label>
+            <textarea id="meeting-form-participants" rows="4"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-topics">Thematik</label>
+            <textarea id="meeting-form-topics" rows="6"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-results">Ergebnisse</label>
+            <textarea id="meeting-form-results" rows="6"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-actions">Ma&szlig;nahmen</label>
+            <textarea id="meeting-form-actions" rows="6"></textarea>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button type="button" class="btn btn-secondary" id="meeting-btn-cancel">Abbrechen</button>
+          <button type="submit" class="btn btn-primary" id="meeting-btn-save">Speichern</button>
+        </div>
+      </form>
+    </div>
+
   </div>
 </main>
-
-<!-- Meeting Add / Edit dialog -->
-<dialog id="meeting-dialog" aria-labelledby="meeting-dialog-title">
-  <div class="dialog-header" id="meeting-dialog-title">Meeting hinzuf&uuml;gen</div>
-  <form id="meeting-form" method="dialog">
-    <div class="dialog-body">
-      <input type="hidden" id="meeting-form-id">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="meeting-form-type">Typ</label>
-          <select id="meeting-form-type">
-            <option value="MANAGEMENT_REVIEW">Management Review</option>
-            <option value="SRB">SRB (Safety Review Board)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="meeting-form-date">Datum</label>
-          <input type="text" id="meeting-form-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
-        </div>
-      </div>
-      <div class="form-group">
-        <label for="meeting-form-participants">Teilnehmer</label>
-        <textarea id="meeting-form-participants" rows="2"></textarea>
-      </div>
-      <div class="form-group">
-        <label for="meeting-form-topics">Thematik</label>
-        <textarea id="meeting-form-topics" rows="3"></textarea>
-      </div>
-      <div class="form-group">
-        <label for="meeting-form-results">Ergebnisse</label>
-        <textarea id="meeting-form-results" rows="3"></textarea>
-      </div>
-      <div class="form-group">
-        <label for="meeting-form-actions">Ma&szlig;nahmen</label>
-        <textarea id="meeting-form-actions" rows="3"></textarea>
-      </div>
-    </div>
-    <div class="dialog-footer">
-      <button type="button" class="btn btn-secondary" id="meeting-btn-cancel">Abbrechen</button>
-      <button type="submit" class="btn btn-primary" id="meeting-btn-save">Speichern</button>
-    </div>
-  </form>
-</dialog>
 
 <!-- Safety Objective Add / Edit dialog -->
 <dialog id="objective-dialog" aria-labelledby="objective-dialog-title">
