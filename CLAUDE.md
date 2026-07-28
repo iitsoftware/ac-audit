@@ -142,7 +142,14 @@ Company + Department (shared)
        └── RiskAnalysis (id, change_request_id, title, version, version_date, author, safety_manager, signed_at, overall_initial/residual)
             ├── RiskAnalysisHistory (id, risk_analysis_id, version, version_date, author, reason)
             └── RiskItem (id, risk_analysis_id, sort_order, risk_type, description, consequence, initial_probability/severity/score/level, responsible_person, mitigation_topic, treatment, implementation_date, residual_probability/severity/score/level)
+
+Department (AC-SMS)
+  └── SafetyYear (id, department_id, year) — navigation root, unique per (department_id, year)
+       └── SmsMeeting (id, safety_year_id, department_id, meeting_date, location, participants, participants_excused, meeting_no, topics, general_result, positives, negatives, improvements, remarks, outlook) — CM-025 SRB meeting minutes
 ```
+
+`sms_meeting.department_id` is denormalized on purpose: trash snapshot, PDF header
+and audit-log entry all need the department without walking through `safety_year`.
 
 ## API Endpoints
 
@@ -306,6 +313,19 @@ Company + Department (shared)
 - `POST /api/risk-analysis/:id/send-email` — Send risk analysis PDF via email
 - `POST /api/change-requests/:id/send-email` — Send change request PDF via email
 
+### AC-SMS: Safety Years & SRB Meetings
+- `GET /api/departments/:departmentId/safety-years` — List years for department (sorted year DESC, incl. `meeting_count`)
+- `POST /api/departments/:departmentId/safety-years` — Create year (409 if the year already exists for the department)
+- `PUT /api/safety-years/:id` — Update year (409 on collision with an existing year)
+- `DELETE /api/safety-years/:id` — Delete year (CASCADE to its meetings, snapshot to trash)
+- `GET /api/safety-years/:yearId/sms-meetings` — List SRB meetings in the year
+- `POST /api/safety-years/:yearId/sms-meetings` — Create SRB meeting (CM-025 fields)
+- `GET /api/sms-meetings/:id` — Single SRB meeting
+- `PUT /api/sms-meetings/:id` — Update SRB meeting (partial: omitted fields keep their value)
+- `DELETE /api/sms-meetings/:id` — Delete SRB meeting (snapshot to trash)
+- `GET /api/sms-meetings/:id/pdf` — CM-025 SRB meeting PDF (2 pages)
+- `POST /api/sms-meetings/:id/send-email` — Send meeting PDF via email (body: to, authority?)
+
 ### Other
 - `GET /health` — Health check
 
@@ -343,6 +363,8 @@ Company + Department (shared)
 - Trash: DELETE handlers snapshot entity tree (incl. BLOBs as base64) to `trash_item` table before CASCADE delete. Restore re-inserts with original UUIDs in a transaction. Auto-cleanup of expired items (configurable `trash_retention_days`, default 30)
 - Docker: `DATA_DIR` env configures DB + backup location (default `/data` in container). Single volume mount for all persistent data
 - Share button blink: `has-selection` class on `.select-header` triggers CSS blink animation when checkboxes are selected
+- AC-SMS PDFs (`pdf/safety.js`) pass the footer label `CM-025, SRB Meeting, Rev. 1, 28.08.2024` to `addPdfFooter()` — the LBA form reference of the SRB meeting minutes
+- AC-SMS navigation mirrors AC-Audit: Firma → Abteilung → year tiles (`.plan-tile`, reusing the audit-plan tile styles) → meeting detail. Tile state: `plan-tile-done` once the year has meetings, `plan-tile-wip` while it is empty
 
 ## Accessibility
 
@@ -363,7 +385,14 @@ Company + Department (shared)
 
 ## Database Tables
 
-company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log, trash_item, change_request, change_task, risk_analysis, risk_analysis_history, risk_item
+company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log, trash_item, change_request, change_task, risk_analysis, risk_analysis_history, risk_item, safety_year, sms_meeting
+
+`safety_objective` and `spi_evaluation` are **no longer part of the schema** — the
+CM-025 rework replaced them with `safety_year` + `sms_meeting`. Nothing drops them,
+so existing databases keep their tables and rows; `migrations.js` still recreates
+them on fresh databases only because `db.js` prepares statements against them.
+Both are scheduled for removal in a later refactor — delete the migration block
+together with the last consumer.
 
 ## Email Routing
 
