@@ -50,17 +50,6 @@ function snapshotSafetyYear(yearId) {
   return year;
 }
 
-function snapshotSpiEvaluation(evalId) {
-  return stmts.getSpiEvaluationRaw.get(evalId) || null;
-}
-
-function snapshotSafetyObjective(objectiveId) {
-  const objective = stmts.getSafetyObjective.get(objectiveId);
-  if (!objective) return null;
-  objective.spi_evaluations = stmts.getSpiEvaluationsByObjectiveRaw.all(objectiveId);
-  return objective;
-}
-
 // ── Restore helpers (re-insert with original UUIDs) ──
 
 function restoreCapItem(cap) {
@@ -136,12 +125,14 @@ function restoreAuditPlan(plan) {
   }
 }
 
+// Snapshots taken before the CM-025 rework lack the newer columns; better-sqlite3
+// rejects undefined bindings, so every CM-025 field falls back to its schema default.
 function restoreSmsMeeting(meeting) {
   stmts.restoreSmsMeeting.run(
-    meeting.id, meeting.safety_year_id, meeting.department_id, meeting.meeting_date,
-    meeting.location, meeting.participants, meeting.participants_excused, meeting.meeting_no,
-    meeting.topics, meeting.general_result, meeting.positives, meeting.negatives,
-    meeting.improvements, meeting.remarks, meeting.outlook,
+    meeting.id, meeting.safety_year_id || null, meeting.department_id, meeting.meeting_date || null,
+    meeting.location || '', meeting.participants || '', meeting.participants_excused || '', meeting.meeting_no || '',
+    meeting.topics || '', meeting.general_result || '', meeting.positives || '', meeting.negatives || '',
+    meeting.improvements || '', meeting.remarks || '', meeting.outlook || '',
     meeting.created_at, meeting.updated_at
   );
 }
@@ -153,30 +144,6 @@ function restoreSafetyYear(year) {
   if (year.meetings) {
     for (const meeting of year.meetings) {
       restoreSmsMeeting(meeting);
-    }
-  }
-}
-
-function restoreSpiEvaluation(evaluation) {
-  stmts.restoreSpiEvaluation.run(
-    evaluation.id, evaluation.safety_objective_id, evaluation.eval_date,
-    evaluation.spt_snapshot, evaluation.interval_snapshot, evaluation.spi_value,
-    evaluation.fulfilled, evaluation.result, evaluation.improvement,
-    evaluation.cause_analysis, evaluation.measures, evaluation.decision,
-    evaluation.decision_place, evaluation.decided_at, evaluation.closed_at,
-    evaluation.created_at, evaluation.updated_at
-  );
-}
-
-function restoreSafetyObjective(objective) {
-  stmts.restoreSafetyObjective.run(
-    objective.id, objective.department_id, objective.sort_order, objective.objective,
-    objective.spt, objective.interval_months, objective.active,
-    objective.created_at, objective.updated_at
-  );
-  if (objective.spi_evaluations) {
-    for (const evaluation of objective.spi_evaluations) {
-      restoreSpiEvaluation(evaluation);
     }
   }
 }
@@ -201,15 +168,11 @@ module.exports = {
   snapshotAuditPlan,
   snapshotSmsMeeting,
   snapshotSafetyYear,
-  snapshotSafetyObjective,
-  snapshotSpiEvaluation,
   restoreCapItem,
   restoreChecklistItem,
   restoreAuditPlanLine,
   restoreAuditPlan,
   restoreSmsMeeting,
   restoreSafetyYear,
-  restoreSafetyObjective,
-  restoreSpiEvaluation,
   startTrashCleanupScheduler,
 };

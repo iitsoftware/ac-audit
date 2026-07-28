@@ -3,8 +3,12 @@ const { db, stmts } = require('../db');
 const { logAction } = require('../services/audit-log');
 const {
   restoreAuditPlan, restoreAuditPlanLine, restoreCapItem,
-  restoreSmsMeeting, restoreSafetyObjective, restoreSpiEvaluation,
+  restoreSmsMeeting, restoreSafetyYear,
 } = require('../services/trash');
+
+// safety_objective/spi_evaluation were dropped with the CM-025 rework; snapshots of
+// them may still sit in an old trash table but can no longer be restored.
+const OBSOLETE_ENTITY_TYPES = ['safety_objective', 'spi_evaluation'];
 
 const router = express.Router();
 
@@ -23,6 +27,10 @@ router.post('/api/trash/:id/restore', (req, res) => {
   const item = stmts.getTrashItem.get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Trash item not found' });
 
+  if (OBSOLETE_ENTITY_TYPES.includes(item.entity_type)) {
+    return res.status(409).json({ error: 'Dieser Eintrag stammt aus einer älteren Safety-Version und kann nicht mehr wiederhergestellt werden.' });
+  }
+
   const snapshot = JSON.parse(item.snapshot);
 
   // Check parent existence
@@ -35,12 +43,18 @@ router.post('/api/trash/:id/restore', (req, res) => {
   } else if (item.entity_type === 'cap_item') {
     const checkItem = db.prepare('SELECT id FROM audit_checklist_item WHERE id = ?').get(item.parent_id);
     if (!checkItem) return res.status(409).json({ error: 'Prüfpunkt existiert nicht mehr. Wiederherstellung nicht möglich.' });
-  } else if (item.entity_type === 'sms_meeting' || item.entity_type === 'safety_objective') {
+  } else if (item.entity_type === 'safety_year') {
     const dept = stmts.getDepartment.get(item.parent_id);
     if (!dept) return res.status(409).json({ error: 'Abteilung existiert nicht mehr. Wiederherstellung nicht möglich.' });
-  } else if (item.entity_type === 'spi_evaluation') {
-    const objective = stmts.getSafetyObjective.get(item.parent_id);
-    if (!objective) return res.status(409).json({ error: 'Safety-Ziel existiert nicht mehr. Wiederherstellung nicht möglich.' });
+  } else if (item.entity_type === 'sms_meeting') {
+    // CM-025 meetings hang off a safety_year; snapshots from before that off the department.
+    if (item.parent_type === 'safety_year') {
+      const year = stmts.getSafetyYear.get(item.parent_id);
+      if (!year) return res.status(409).json({ error: 'Safety-Jahr existiert nicht mehr. Wiederherstellung nicht möglich.' });
+    } else {
+      const dept = stmts.getDepartment.get(item.parent_id);
+      if (!dept) return res.status(409).json({ error: 'Abteilung existiert nicht mehr. Wiederherstellung nicht möglich.' });
+    }
   }
 
   try {
@@ -51,12 +65,10 @@ router.post('/api/trash/:id/restore', (req, res) => {
         restoreAuditPlanLine(snapshot);
       } else if (item.entity_type === 'cap_item') {
         restoreCapItem(snapshot);
+      } else if (item.entity_type === 'safety_year') {
+        restoreSafetyYear(snapshot);
       } else if (item.entity_type === 'sms_meeting') {
         restoreSmsMeeting(snapshot);
-      } else if (item.entity_type === 'safety_objective') {
-        restoreSafetyObjective(snapshot);
-      } else if (item.entity_type === 'spi_evaluation') {
-        restoreSpiEvaluation(snapshot);
       }
       stmts.deleteTrashItem.run(req.params.id);
     });
