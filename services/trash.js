@@ -43,6 +43,13 @@ function snapshotSmsMeeting(meetingId) {
   return stmts.getSmsMeeting.get(meetingId) || null;
 }
 
+function snapshotSafetyYear(yearId) {
+  const year = stmts.getSafetyYear.get(yearId);
+  if (!year) return null;
+  year.meetings = stmts.getSmsMeetingsByYearRaw.all(yearId);
+  return year;
+}
+
 function snapshotSpiEvaluation(evalId) {
   return stmts.getSpiEvaluationRaw.get(evalId) || null;
 }
@@ -131,10 +138,23 @@ function restoreAuditPlan(plan) {
 
 function restoreSmsMeeting(meeting) {
   stmts.restoreSmsMeeting.run(
-    meeting.id, meeting.department_id, meeting.meeting_type, meeting.meeting_date,
-    meeting.participants, meeting.topics, meeting.results, meeting.actions,
+    meeting.id, meeting.safety_year_id, meeting.department_id, meeting.meeting_date,
+    meeting.location, meeting.participants, meeting.participants_excused, meeting.meeting_no,
+    meeting.topics, meeting.general_result, meeting.positives, meeting.negatives,
+    meeting.improvements, meeting.remarks, meeting.outlook,
     meeting.created_at, meeting.updated_at
   );
+}
+
+function restoreSafetyYear(year) {
+  stmts.restoreSafetyYear.run(
+    year.id, year.department_id, year.year, year.created_at, year.updated_at
+  );
+  if (year.meetings) {
+    for (const meeting of year.meetings) {
+      restoreSmsMeeting(meeting);
+    }
+  }
 }
 
 function restoreSpiEvaluation(evaluation) {
@@ -180,6 +200,7 @@ module.exports = {
   snapshotAuditPlanLine,
   snapshotAuditPlan,
   snapshotSmsMeeting,
+  snapshotSafetyYear,
   snapshotSafetyObjective,
   snapshotSpiEvaluation,
   restoreCapItem,
@@ -187,6 +208,7 @@ module.exports = {
   restoreAuditPlanLine,
   restoreAuditPlan,
   restoreSmsMeeting,
+  restoreSafetyYear,
   restoreSafetyObjective,
   restoreSpiEvaluation,
   startTrashCleanupScheduler,
