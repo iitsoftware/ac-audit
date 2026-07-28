@@ -216,10 +216,13 @@
     }
     let html = `<div class="lines-table-wrap"><table class="lines-table">
       <thead><tr>
-        <th style="width:120px">Nr.</th><th style="width:110px">Datum</th><th style="width:140px">Ort</th><th>Teilnehmer</th><th>Themen</th><th style="width:100px"></th>
+        <th style="width:50px">Lfd.</th><th style="width:90px">SRB Nr.</th><th style="width:110px">Datum</th><th style="width:140px">Ort</th><th>Teilnehmer</th><th>Themen</th><th style="width:100px"></th>
       </tr></thead><tbody>`;
-    meetings.forEach(m => {
+    // Lfd. = laufende Nummer innerhalb des Jahres, abgeleitet aus der
+    // chronologischen Reihenfolge — nicht gespeichert, daher lückenlos 1..n.
+    meetings.forEach((m, i) => {
       html += `<tr class="ci-row-clickable" data-id="${m.id}">
+        <td>${i + 1}</td>
         <td>${escapeHtml(m.meeting_no || '')}</td>
         <td>${escapeHtml(formatDateDE(m.meeting_date))}</td>
         <td class="wrap-cell">${escapeHtml(m.location || '')}</td>
