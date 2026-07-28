@@ -2,7 +2,9 @@ const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
 const { createPdfDoc, addPdfFooter } = require('./common');
 
-const FOOTER_LABEL = 'CM-025, SRB Meeting, Rev. 1, 28.08.2024';
+// LBA-Formularreferenz + App-Hinweis in einem Label: addPdfFooter() ersetzt mit
+// `label` den Default 'Erstellt mit ac-audit', deshalb beides hier zusammengefasst.
+const FOOTER_LABEL = 'CM-025, SRB Meeting, Rev. 1, 28.08.2024  |  Erstellt mit ac-sms';
 const PROTOCOL_COLOR = '#1f4e79';
 const PAGE_BOTTOM = 740;
 

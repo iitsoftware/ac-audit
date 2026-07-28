@@ -363,7 +363,7 @@ and audit-log entry all need the department without walking through `safety_year
 - Trash: DELETE handlers snapshot entity tree (incl. BLOBs as base64) to `trash_item` table before CASCADE delete. Restore re-inserts with original UUIDs in a transaction. Auto-cleanup of expired items (configurable `trash_retention_days`, default 30)
 - Docker: `DATA_DIR` env configures DB + backup location (default `/data` in container). Single volume mount for all persistent data
 - Share button blink: `has-selection` class on `.select-header` triggers CSS blink animation when checkboxes are selected
-- AC-SMS PDFs (`pdf/safety.js`) pass the footer label `CM-025, SRB Meeting, Rev. 1, 28.08.2024` to `addPdfFooter()` — the LBA form reference of the SRB meeting minutes
+- AC-SMS PDFs (`pdf/safety.js`) pass the footer label `CM-025, SRB Meeting, Rev. 1, 28.08.2024  |  Erstellt mit ac-sms` to `addPdfFooter()` — the LBA form reference of the SRB meeting minutes plus the app hint. `label` *replaces* the `addPdfFooter()` default `Erstellt mit ac-audit`, so both parts have to live in the one string (AC-Change does the same with `label: 'Erstellt mit ac-change'`)
 - AC-SMS navigation mirrors AC-Audit: Firma → Abteilung → year tiles (`.plan-tile`, reusing the audit-plan tile styles) → meeting detail. Tile state: `plan-tile-done` once the year has meetings, `plan-tile-wip` while it is empty
 
 ## Accessibility
