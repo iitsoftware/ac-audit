@@ -577,103 +577,53 @@ const stmts = {
   ),
 
   // ── Safety Module (Hub) ───────────────────────────────────
-  // SMS Meetings (Management Review / SRB)
-  getSmsMeetingsByDepartment: db.prepare(
-    `SELECT id, department_id, meeting_type, meeting_date, participants, topics, results, actions, created_at, updated_at
-     FROM sms_meeting WHERE department_id = ? ORDER BY meeting_date DESC, created_at DESC`
+  // Safety Years — navigation root of AC-SMS (Firma → Abteilung → Jahr → Meeting)
+  getSafetyYearsByDepartment: db.prepare(
+    `SELECT y.*, (SELECT COUNT(*) FROM sms_meeting m WHERE m.safety_year_id = y.id) AS meeting_count
+     FROM safety_year y WHERE y.department_id = ? ORDER BY y.year DESC`
+  ),
+  getSafetyYear: db.prepare(
+    'SELECT * FROM safety_year WHERE id = ?'
+  ),
+  getSafetyYearByDeptAndYear: db.prepare(
+    'SELECT * FROM safety_year WHERE department_id = ? AND year = ?'
+  ),
+  createSafetyYear: db.prepare(
+    'INSERT INTO safety_year (id, department_id, year) VALUES (?, ?, ?)'
+  ),
+  updateSafetyYear: db.prepare(
+    `UPDATE safety_year SET year = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteSafetyYear: db.prepare(
+    'DELETE FROM safety_year WHERE id = ?'
+  ),
+
+  // SMS Meetings (CM-025 Sitzungsprotokoll)
+  getSmsMeetingsByYear: db.prepare(
+    `SELECT id, safety_year_id, department_id, meeting_date, location, participants, participants_excused,
+            meeting_no, topics, general_result, positives, negatives, improvements, remarks, outlook,
+            created_at, updated_at
+     FROM sms_meeting WHERE safety_year_id = ? ORDER BY meeting_no, meeting_date`
+  ),
+  getSmsMeetingsByYearRaw: db.prepare(
+    'SELECT * FROM sms_meeting WHERE safety_year_id = ? ORDER BY meeting_no, meeting_date'
   ),
   getSmsMeeting: db.prepare(
     'SELECT * FROM sms_meeting WHERE id = ?'
   ),
   createSmsMeeting: db.prepare(
-    `INSERT INTO sms_meeting (id, department_id, meeting_type, meeting_date, participants, topics, results, actions)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO sms_meeting (id, safety_year_id, department_id, meeting_date, location, participants,
+            participants_excused, meeting_no, topics, general_result, positives, negatives, improvements,
+            remarks, outlook)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   updateSmsMeeting: db.prepare(
-    `UPDATE sms_meeting SET meeting_type = ?, meeting_date = ?, participants = ?, topics = ?, results = ?, actions = ?,
-            updated_at = datetime('now') WHERE id = ?`
+    `UPDATE sms_meeting SET meeting_date = ?, location = ?, participants = ?, participants_excused = ?,
+            meeting_no = ?, topics = ?, general_result = ?, positives = ?, negatives = ?, improvements = ?,
+            remarks = ?, outlook = ?, updated_at = datetime('now') WHERE id = ?`
   ),
   deleteSmsMeeting: db.prepare(
     'DELETE FROM sms_meeting WHERE id = ?'
-  ),
-
-  // Safety Objectives (SPI definitions)
-  getSafetyObjectivesByDepartment: db.prepare(
-    `SELECT id, department_id, sort_order, objective, spt, interval_months, active, created_at, updated_at
-     FROM safety_objective WHERE department_id = ? ORDER BY sort_order, created_at`
-  ),
-  getSafetyObjective: db.prepare(
-    'SELECT * FROM safety_objective WHERE id = ?'
-  ),
-  createSafetyObjective: db.prepare(
-    `INSERT INTO safety_objective (id, department_id, sort_order, objective, spt, interval_months, active)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ),
-  updateSafetyObjective: db.prepare(
-    `UPDATE safety_objective SET sort_order = ?, objective = ?, spt = ?, interval_months = ?, active = ?,
-            updated_at = datetime('now') WHERE id = ?`
-  ),
-  updateSafetyObjectiveSortOrder: db.prepare(
-    `UPDATE safety_objective SET sort_order = ?, updated_at = datetime('now') WHERE id = ?`
-  ),
-  getMaxSafetyObjectiveOrder: db.prepare(
-    'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM safety_objective WHERE department_id = ?'
-  ),
-  deleteSafetyObjective: db.prepare(
-    'DELETE FROM safety_objective WHERE id = ?'
-  ),
-
-  // SPI Evaluations — finding status is derived, not stored:
-  // is_finding = fulfilled = 0 OR result = 'NEGATIV' OR improvement = 1; open while closed_at is empty
-  getSpiEvaluationsByObjective: db.prepare(
-    `SELECT id, safety_objective_id, eval_date, spt_snapshot, interval_snapshot, spi_value, fulfilled, result,
-            improvement, cause_analysis, measures, decision, decision_place, decided_at, closed_at,
-            CASE WHEN fulfilled = 0 OR result = 'NEGATIV' OR improvement = 1 THEN 1 ELSE 0 END AS is_finding,
-            created_at, updated_at
-     FROM spi_evaluation WHERE safety_objective_id = ? ORDER BY eval_date DESC, created_at DESC`
-  ),
-  getSpiEvaluation: db.prepare(
-    `SELECT *,
-            CASE WHEN fulfilled = 0 OR result = 'NEGATIV' OR improvement = 1 THEN 1 ELSE 0 END AS is_finding
-     FROM spi_evaluation WHERE id = ?`
-  ),
-  createSpiEvaluation: db.prepare(
-    `INSERT INTO spi_evaluation (id, safety_objective_id, eval_date, spt_snapshot, interval_snapshot, spi_value,
-            fulfilled, result, improvement, cause_analysis, measures, decision, decision_place, decided_at, closed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ),
-  updateSpiEvaluation: db.prepare(
-    `UPDATE spi_evaluation SET eval_date = ?, spt_snapshot = ?, interval_snapshot = ?, spi_value = ?,
-            fulfilled = ?, result = ?, improvement = ?, cause_analysis = ?, measures = ?, decision = ?,
-            decision_place = ?, decided_at = ?, closed_at = ?, updated_at = datetime('now') WHERE id = ?`
-  ),
-  deleteSpiEvaluation: db.prepare(
-    'DELETE FROM spi_evaluation WHERE id = ?'
-  ),
-  getSpiEvaluationRaw: db.prepare(
-    'SELECT * FROM spi_evaluation WHERE id = ?'
-  ),
-  getSpiEvaluationsByObjectiveRaw: db.prepare(
-    'SELECT * FROM spi_evaluation WHERE safety_objective_id = ? ORDER BY eval_date, created_at'
-  ),
-  getOpenSpiFindingsByDepartment: db.prepare(
-    `SELECT e.id, e.safety_objective_id, e.eval_date, e.spi_value, e.fulfilled, e.result, e.improvement,
-            e.decided_at, e.closed_at, o.objective, o.spt
-     FROM spi_evaluation e
-     JOIN safety_objective o ON o.id = e.safety_objective_id
-     WHERE o.department_id = ?
-       AND (e.fulfilled = 0 OR e.result = 'NEGATIV' OR e.improvement = 1)
-       AND (e.closed_at IS NULL OR e.closed_at = '')
-     ORDER BY e.eval_date DESC`
-  ),
-  getSpiFindingCountsByObjective: db.prepare(
-    `SELECT safety_objective_id,
-            COUNT(*) AS eval_count,
-            SUM(CASE WHEN (fulfilled = 0 OR result = 'NEGATIV' OR improvement = 1)
-                      AND (closed_at IS NULL OR closed_at = '') THEN 1 ELSE 0 END) AS open_finding_count
-     FROM spi_evaluation
-     WHERE safety_objective_id IN (SELECT id FROM safety_objective WHERE department_id = ?)
-     GROUP BY safety_objective_id`
   ),
 
   // Trash
@@ -717,16 +667,12 @@ const stmts = {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   restoreSmsMeeting: db.prepare(
-    `INSERT INTO sms_meeting (id, department_id, meeting_type, meeting_date, participants, topics, results, actions, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ),
-  restoreSafetyObjective: db.prepare(
-    `INSERT INTO safety_objective (id, department_id, sort_order, objective, spt, interval_months, active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ),
-  restoreSpiEvaluation: db.prepare(
-    `INSERT INTO spi_evaluation (id, safety_objective_id, eval_date, spt_snapshot, interval_snapshot, spi_value, fulfilled, result, improvement, cause_analysis, measures, decision, decision_place, decided_at, closed_at, created_at, updated_at)
+    `INSERT INTO sms_meeting (id, safety_year_id, department_id, meeting_date, location, participants, participants_excused, meeting_no, topics, general_result, positives, negatives, improvements, remarks, outlook, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  restoreSafetyYear: db.prepare(
+    `INSERT INTO safety_year (id, department_id, year, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`
   ),
 };
 
