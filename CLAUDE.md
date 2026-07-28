@@ -365,6 +365,7 @@ and audit-log entry all need the department without walking through `safety_year
 - Share button blink: `has-selection` class on `.select-header` triggers CSS blink animation when checkboxes are selected
 - AC-SMS PDFs (`pdf/safety.js`) pass the footer label `CM-025, SRB Meeting, Rev. 1, 28.08.2024  |  Erstellt mit ac-sms` to `addPdfFooter()` — the LBA form reference of the SRB meeting minutes plus the app hint. `label` *replaces* the `addPdfFooter()` default `Erstellt mit ac-audit`, so both parts have to live in the one string (AC-Change does the same with `label: 'Erstellt mit ac-change'`)
 - AC-SMS navigation mirrors AC-Audit: Firma → Abteilung → year tiles (`.plan-tile`, reusing the audit-plan tile styles) → meeting detail. Tile state: `plan-tile-done` once the year has meetings, `plan-tile-wip` while it is empty
+- The SRB-meeting table of a safety year shows a **derived** running number (`Lfd.` = index+1 of the chronologically sorted list, `public/safety.js`) next to the free-text `SRB Nr.` (`meeting_no`) from the CM-025 form. The `ORDER BY meeting_date, created_at` of the `sms_meeting` list statements in `db.js` carries that numbering — it is never stored, so `Lfd.` stays gapless 1..n and renumbers when a meeting is inserted or deleted
 
 ## Accessibility
 
