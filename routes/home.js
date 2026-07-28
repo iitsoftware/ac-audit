@@ -99,23 +99,17 @@ router.get('/api/home/stats', (req, res) => {
       });
     }
 
-    // Open SPI findings across all departments, enriched with company/department
-    // context. is_finding = fulfilled=0 OR result='NEGATIV' OR improvement=1;
-    // open while closed_at is empty (derived, not stored — same as CAP status).
-    const spiFindings = db.prepare(
-      `SELECT e.id, e.safety_objective_id AS safetyObjectiveId, e.eval_date AS evalDate,
-              e.spi_value AS spiValue, e.fulfilled, e.result, e.improvement,
-              o.objective, o.spt,
-              d.id AS departmentId, d.name AS departmentName,
-              c.id AS companyId, c.name AS companyName
-       FROM spi_evaluation e
-       JOIN safety_objective o ON o.id = e.safety_objective_id
-       JOIN department d ON d.id = o.department_id
-       JOIN company c ON c.id = d.company_id
-       WHERE (e.fulfilled = 0 OR e.result = 'NEGATIV' OR e.improvement = 1)
-         AND (e.closed_at IS NULL OR e.closed_at = '')
-       ORDER BY e.eval_date DESC, e.created_at DESC`
-    ).all();
+    // SRB meetings across all departments. The safety year — not the meeting
+    // date — decides which calendar year a meeting belongs to, so join through
+    // safety_year instead of parsing meeting_date.
+    const currentYear = new Date().getFullYear();
+    const meetingsThisYear = db.prepare(
+      `SELECT COUNT(*) AS cnt
+       FROM sms_meeting m
+       JOIN safety_year y ON y.id = m.safety_year_id
+       WHERE y.year = ?`
+    ).get(currentYear).cnt;
+    const totalMeetings = db.prepare('SELECT COUNT(*) AS cnt FROM sms_meeting').get().cnt;
 
     res.json({
       modules: {
@@ -131,11 +125,11 @@ router.get('/api/home/stats', (req, res) => {
           totalTasks,
         },
         safety: {
-          openFindings: spiFindings.length,
+          meetingsThisYear,
+          totalMeetings,
         },
       },
       capItems,
-      spiFindings,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
