@@ -599,14 +599,19 @@ const stmts = {
   ),
 
   // SMS Meetings (CM-025 Sitzungsprotokoll)
+  // Chronologisch sortiert: meeting_date ist ISO, lexikographisch = chronologisch;
+  // created_at bricht Gleichstände bei zwei Protokollen am selben Tag. meeting_no
+  // taugt nicht als Sortierschlüssel — TEXT-Freitext aus dem CM-025-Formular
+  // ("10" vor "2", leere Werte vorne). Diese Reihenfolge ist die Basis der
+  // laufenden Nummer innerhalb des Jahres.
   getSmsMeetingsByYear: db.prepare(
     `SELECT id, safety_year_id, department_id, meeting_date, location, participants, participants_excused,
             meeting_no, topics, general_result, positives, negatives, improvements, remarks, outlook,
             created_at, updated_at
-     FROM sms_meeting WHERE safety_year_id = ? ORDER BY meeting_no, meeting_date`
+     FROM sms_meeting WHERE safety_year_id = ? ORDER BY meeting_date, created_at`
   ),
   getSmsMeetingsByYearRaw: db.prepare(
-    'SELECT * FROM sms_meeting WHERE safety_year_id = ? ORDER BY meeting_no, meeting_date'
+    'SELECT * FROM sms_meeting WHERE safety_year_id = ? ORDER BY meeting_date, created_at'
   ),
   getSmsMeeting: db.prepare(
     'SELECT * FROM sms_meeting WHERE id = ?'
