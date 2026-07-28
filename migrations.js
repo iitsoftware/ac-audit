@@ -206,6 +206,118 @@ function runMigrations(db) {
     db.exec('DROP TABLE IF EXISTS audit');
   } catch { /* ignore */ }
 
+  // Migration: bring sms_meeting into CM-025 form (for existing DBs).
+  const smsMeetingMigrations = [
+    { name: 'safety_year_id', sql: 'ALTER TABLE sms_meeting ADD COLUMN safety_year_id TEXT REFERENCES safety_year(id) ON DELETE CASCADE' },
+    { name: 'location', sql: "ALTER TABLE sms_meeting ADD COLUMN location TEXT DEFAULT ''" },
+    { name: 'participants_excused', sql: "ALTER TABLE sms_meeting ADD COLUMN participants_excused TEXT DEFAULT ''" },
+    { name: 'meeting_no', sql: "ALTER TABLE sms_meeting ADD COLUMN meeting_no TEXT DEFAULT ''" },
+    { name: 'general_result', sql: "ALTER TABLE sms_meeting ADD COLUMN general_result TEXT DEFAULT ''" },
+    { name: 'positives', sql: "ALTER TABLE sms_meeting ADD COLUMN positives TEXT DEFAULT ''" },
+    { name: 'negatives', sql: "ALTER TABLE sms_meeting ADD COLUMN negatives TEXT DEFAULT ''" },
+    { name: 'improvements', sql: "ALTER TABLE sms_meeting ADD COLUMN improvements TEXT DEFAULT ''" },
+    { name: 'remarks', sql: "ALTER TABLE sms_meeting ADD COLUMN remarks TEXT DEFAULT ''" },
+    { name: 'outlook', sql: "ALTER TABLE sms_meeting ADD COLUMN outlook TEXT DEFAULT ''" },
+  ];
+
+  for (const col of smsMeetingMigrations) {
+    try {
+      db.prepare(`SELECT ${col.name} FROM sms_meeting LIMIT 1`).get();
+    } catch {
+      try { db.exec(col.sql); } catch { /* already exists */ }
+    }
+  }
+
+  // meeting_type, results and actions are legacy columns: schema.sql no longer
+  // creates them, they survive on existing databases only. They all carry
+  // defaults, so INSERTs without them work. Kept alive on fresh databases too
+  // for as long as db.js still prepares statements naming them — prepare() is
+  // eager, so a missing column crashes the boot rather than the one route.
+  // Delete this block together with the last consumer of the three columns.
+  const smsMeetingLegacyColumns = [
+    { name: 'meeting_type', sql: "ALTER TABLE sms_meeting ADD COLUMN meeting_type TEXT DEFAULT 'MANAGEMENT_REVIEW'" },
+    { name: 'results', sql: "ALTER TABLE sms_meeting ADD COLUMN results TEXT DEFAULT ''" },
+    { name: 'actions', sql: "ALTER TABLE sms_meeting ADD COLUMN actions TEXT DEFAULT ''" },
+  ];
+
+  for (const col of smsMeetingLegacyColumns) {
+    try {
+      db.prepare(`SELECT ${col.name} FROM sms_meeting LIMIT 1`).get();
+    } catch {
+      try { db.exec(col.sql); } catch { /* already exists */ }
+    }
+  }
+
+  // safety_objective and spi_evaluation are legacy tables: schema.sql no longer
+  // creates them and nothing drops them, so existing databases keep their rows.
+  // Recreated here on fresh databases only for as long as db.js still prepares
+  // statements against them. Delete this block together with the last consumer.
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS safety_objective (
+        id TEXT PRIMARY KEY,
+        department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
+        sort_order INTEGER DEFAULT 0,
+        objective TEXT DEFAULT '',
+        spt TEXT DEFAULT '',
+        interval_months INTEGER DEFAULT 12,
+        active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS spi_evaluation (
+        id TEXT PRIMARY KEY,
+        safety_objective_id TEXT NOT NULL REFERENCES safety_objective(id) ON DELETE CASCADE,
+        eval_date TEXT,
+        spt_snapshot TEXT DEFAULT '',
+        interval_snapshot INTEGER,
+        spi_value TEXT DEFAULT '',
+        fulfilled INTEGER DEFAULT 1,
+        result TEXT DEFAULT 'POSITIV',
+        improvement INTEGER DEFAULT 0,
+        cause_analysis TEXT DEFAULT '',
+        measures TEXT DEFAULT '',
+        decision TEXT DEFAULT '',
+        decision_place TEXT DEFAULT '',
+        decided_at TEXT,
+        closed_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  } catch { /* already present */ }
+
+  // Backfill: attach every unlinked meeting to the safety_year of its meeting
+  // date (falling back to created_at). Idempotent — a second start finds nothing.
+  try {
+    const unlinked = db.prepare(
+      `SELECT id, department_id,
+              CAST(strftime('%Y', COALESCE(NULLIF(meeting_date, ''), created_at)) AS INTEGER) AS year
+       FROM sms_meeting
+       WHERE safety_year_id IS NULL OR safety_year_id = ''`
+    ).all().filter((m) => m.year);
+
+    if (unlinked.length > 0) {
+      const { v4: uuidv4 } = require('uuid');
+      const insertYear = db.prepare(
+        'INSERT OR IGNORE INTO safety_year (id, department_id, year) VALUES (?, ?, ?)'
+      );
+      const findYear = db.prepare(
+        'SELECT id FROM safety_year WHERE department_id = ? AND year = ?'
+      );
+      const linkMeeting = db.prepare('UPDATE sms_meeting SET safety_year_id = ? WHERE id = ?');
+      const backfill = db.transaction(() => {
+        for (const meeting of unlinked) {
+          insertYear.run(uuidv4(), meeting.department_id, meeting.year);
+          const year = findYear.get(meeting.department_id, meeting.year);
+          if (year) linkMeeting.run(year.id, meeting.id);
+        }
+      });
+      backfill();
+      console.log(`Safety migration: linked ${unlinked.length} SMS meeting(s) to a safety year`);
+    }
+  } catch { /* sms_meeting/safety_year not available yet */ }
+
   // Migration: create CAP items for existing checklist items with O/L1/L2/L3 that have no CAP yet
   try {
     const missing = db.prepare(

@@ -261,50 +261,35 @@ CREATE TABLE IF NOT EXISTS risk_item (
 );
 
 -- ── Safety Module (Hub) ─────────────────────────────────────
+-- One safety year per department — the navigation root of AC-SMS.
+CREATE TABLE IF NOT EXISTS safety_year (
+  id TEXT PRIMARY KEY,
+  department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
+  year INTEGER NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_safety_year_dept_year ON safety_year(department_id, year);
+
+-- SMS meeting minutes in CM-025 form. department_id stays denormalized:
+-- the trash snapshot, the PDF header and the audit-log entry all need the
+-- department without walking through safety_year.
 CREATE TABLE IF NOT EXISTS sms_meeting (
   id TEXT PRIMARY KEY,
+  safety_year_id TEXT REFERENCES safety_year(id) ON DELETE CASCADE,
   department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
-  meeting_type TEXT DEFAULT 'MANAGEMENT_REVIEW',
   meeting_date TEXT,
+  location TEXT DEFAULT '',
   participants TEXT DEFAULT '',
+  participants_excused TEXT DEFAULT '',
+  meeting_no TEXT DEFAULT '',
   topics TEXT DEFAULT '',
-  results TEXT DEFAULT '',
-  actions TEXT DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS safety_objective (
-  id TEXT PRIMARY KEY,
-  department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
-  sort_order INTEGER DEFAULT 0,
-  objective TEXT DEFAULT '',
-  spt TEXT DEFAULT '',
-  interval_months INTEGER DEFAULT 12,
-  active INTEGER DEFAULT 1,
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
-);
-
--- Finding status is derived, not stored: is_finding = fulfilled = 0 OR
--- result = 'NEGATIV' OR improvement = 1; open as long as closed_at is empty
--- (same pattern as CAP status derived from completion_date).
-CREATE TABLE IF NOT EXISTS spi_evaluation (
-  id TEXT PRIMARY KEY,
-  safety_objective_id TEXT NOT NULL REFERENCES safety_objective(id) ON DELETE CASCADE,
-  eval_date TEXT,
-  spt_snapshot TEXT DEFAULT '',
-  interval_snapshot INTEGER,
-  spi_value TEXT DEFAULT '',
-  fulfilled INTEGER DEFAULT 1,
-  result TEXT DEFAULT 'POSITIV',
-  improvement INTEGER DEFAULT 0,
-  cause_analysis TEXT DEFAULT '',
-  measures TEXT DEFAULT '',
-  decision TEXT DEFAULT '',
-  decision_place TEXT DEFAULT '',
-  decided_at TEXT,
-  closed_at TEXT,
+  general_result TEXT DEFAULT '',
+  positives TEXT DEFAULT '',
+  negatives TEXT DEFAULT '',
+  improvements TEXT DEFAULT '',
+  remarks TEXT DEFAULT '',
+  outlook TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
