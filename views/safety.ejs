@@ -13,56 +13,32 @@
   <div class="empty-state" id="empty-state">Firma ausw&auml;hlen</div>
   <div id="safety-content" style="display:none">
     <div class="empty-state-inline" id="safety-dept-empty">Abteilung ausw&auml;hlen</div>
-    <div id="safety-tabs-wrap" style="display:none">
 
-      <div class="settings-tabs" role="tablist" aria-label="Safety Bereiche" id="safety-tab-bar">
-        <button type="button" class="settings-tab active" id="tab-btn-meetings" data-tab="meetings" role="tab" aria-selected="true" aria-controls="tab-meetings">Meetings</button>
-        <button type="button" class="settings-tab" id="tab-btn-objectives" data-tab="objectives" role="tab" aria-selected="false" aria-controls="tab-objectives">Safety Objectives</button>
-        <button type="button" class="settings-tab" id="tab-btn-spi" data-tab="spi" role="tab" aria-selected="false" aria-controls="tab-spi">SPI Bewertung</button>
+    <!-- Level 1: Jahre (Kachel-Grid) -->
+    <div id="safety-years" style="display:none">
+      <div class="audit-section-header">
+        <h3>Jahre</h3>
+        <button type="button" class="btn-icon" id="btn-add-year" title="Jahr hinzuf&uuml;gen">+</button>
       </div>
-
-      <!-- Tab 1: Meetings -->
-      <div class="settings-tab-content active" id="tab-meetings" role="tabpanel" aria-labelledby="tab-btn-meetings">
-        <div class="audit-section">
-          <div class="audit-section-header">
-            <h3>Meetings</h3>
-            <button type="button" class="btn-icon" id="btn-add-meeting" title="Meeting hinzuf&uuml;gen">+</button>
-          </div>
-          <div id="meetings-table"></div>
-        </div>
-      </div>
-
-      <!-- Tab 2: Safety Objectives -->
-      <div class="settings-tab-content" id="tab-objectives" role="tabpanel" aria-labelledby="tab-btn-objectives">
-        <div class="audit-section">
-          <div class="audit-section-header">
-            <h3>Safety Objectives</h3>
-            <button type="button" class="btn-icon" id="btn-add-objective" title="Safety Objective hinzuf&uuml;gen">+</button>
-          </div>
-          <div id="objectives-table"></div>
-        </div>
-      </div>
-
-      <!-- Tab 3: SPI Bewertung -->
-      <div class="settings-tab-content" id="tab-spi" role="tabpanel" aria-labelledby="tab-btn-spi">
-        <div class="audit-section">
-          <div class="audit-section-header">
-            <h3>Bewertungen</h3>
-            <button type="button" class="btn-icon" id="btn-add-spi" title="Bewertung hinzuf&uuml;gen">+</button>
-          </div>
-          <div id="spi-table"></div>
-        </div>
-        <div class="audit-section">
-          <div class="audit-section-header">
-            <h3>Offene SPI-Findings</h3>
-          </div>
-          <div id="spi-findings-table"></div>
-        </div>
-      </div>
-
+      <div class="plan-tile-grid" id="years-grid"></div>
     </div>
 
-    <!-- Meeting Full-Page Detail (Add / Edit) -->
+    <!-- Level 2: Jahres-Detail (SRB Meetings des Jahres) -->
+    <div id="year-detail" style="display:none">
+      <div class="meeting-detail-header">
+        <button type="button" class="btn btn-secondary" id="year-detail-back">Zur&uuml;ck</button>
+        <h2 id="year-detail-title">SRB Meetings</h2>
+      </div>
+      <div class="audit-section">
+        <div class="audit-section-header">
+          <h3>SRB Meetings</h3>
+          <button type="button" class="btn-icon" id="btn-add-meeting" title="Meeting hinzuf&uuml;gen">+</button>
+        </div>
+        <div id="meetings-table"></div>
+      </div>
+    </div>
+
+    <!-- Level 3: Meeting Full-Page Detail (Add / Edit) — CM-025 -->
     <div id="meeting-detail" style="display:none">
       <div class="meeting-detail-header">
         <button type="button" class="btn btn-secondary" id="meeting-detail-back">Zur&uuml;ck</button>
@@ -74,32 +50,57 @@
           <input type="hidden" id="meeting-form-id">
           <div class="form-row">
             <div class="form-group">
-              <label for="meeting-form-type">Typ</label>
-              <select id="meeting-form-type">
-                <option value="MANAGEMENT_REVIEW">Management Review</option>
-                <option value="SRB">SRB (Safety Review Board)</option>
-              </select>
-            </div>
-            <div class="form-group">
               <label for="meeting-form-date">Datum</label>
               <input type="text" id="meeting-form-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
             </div>
+            <div class="form-group">
+              <label for="meeting-form-location">Ort</label>
+              <input type="text" id="meeting-form-location">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-meeting-no">SRB MEETING NO</label>
+            <input type="text" id="meeting-form-meeting-no">
           </div>
           <div class="form-group">
             <label for="meeting-form-participants">Teilnehmer</label>
             <textarea id="meeting-form-participants" rows="4"></textarea>
           </div>
           <div class="form-group">
-            <label for="meeting-form-topics">Thematik</label>
+            <label for="meeting-form-participants-excused">Teilnehmer entschuldigt</label>
+            <textarea id="meeting-form-participants-excused" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-topics">THEMEN</label>
             <textarea id="meeting-form-topics" rows="6"></textarea>
           </div>
+
+          <hr class="form-divider">
+
           <div class="form-group">
-            <label for="meeting-form-results">Ergebnisse</label>
-            <textarea id="meeting-form-results" rows="6"></textarea>
+            <label for="meeting-form-general-result">Allgemeines Ergebnis</label>
+            <textarea id="meeting-form-general-result" rows="6"></textarea>
           </div>
           <div class="form-group">
-            <label for="meeting-form-actions">Ma&szlig;nahmen</label>
-            <textarea id="meeting-form-actions" rows="6"></textarea>
+            <label for="meeting-form-positives">Positives</label>
+            <textarea id="meeting-form-positives" rows="6"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-negatives">Negatives</label>
+            <textarea id="meeting-form-negatives" rows="6"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-improvements">Verbesserungen</label>
+            <textarea id="meeting-form-improvements" rows="6"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="meeting-form-remarks">Bemerkungen</label>
+            <textarea id="meeting-form-remarks" rows="6"></textarea>
+          </div>
+          <div class="form-group">
+            <!-- Jahreszahl wird beim &Ouml;ffnen des Meetings aus dem gew&auml;hlten Jahr + 1 gesetzt -->
+            <label for="meeting-form-outlook">Vorschau <span id="meeting-form-outlook-year"></span> (objectives, targets usw.)</label>
+            <textarea id="meeting-form-outlook" rows="6"></textarea>
           </div>
         </div>
         <div class="dialog-footer">
@@ -112,110 +113,20 @@
   </div>
 </main>
 
-<!-- Safety Objective Add / Edit dialog -->
-<dialog id="objective-dialog" aria-labelledby="objective-dialog-title">
-  <div class="dialog-header" id="objective-dialog-title">Safety Objective hinzuf&uuml;gen</div>
-  <form id="objective-form" method="dialog">
+<!-- Jahr Add / Edit dialog -->
+<dialog id="year-dialog" aria-labelledby="year-dialog-title">
+  <div class="dialog-header" id="year-dialog-title">Jahr hinzuf&uuml;gen</div>
+  <form id="year-form" method="dialog">
     <div class="dialog-body">
-      <input type="hidden" id="objective-form-id">
+      <input type="hidden" id="year-form-id">
       <div class="form-group">
-        <label for="objective-form-objective">Ziel *</label>
-        <textarea id="objective-form-objective" rows="2" required></textarea>
-      </div>
-      <div class="form-group">
-        <label for="objective-form-spt">SPT (Safety Performance Target)</label>
-        <input type="text" id="objective-form-spt" placeholder="z.B. max. 2 Ereignisse pro Jahr">
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="objective-form-interval">Intervall (Monate)</label>
-          <input type="number" id="objective-form-interval" min="1" step="1" value="12">
-        </div>
-        <div class="form-group">
-          <label for="objective-form-active">Aktiv</label>
-          <input type="checkbox" id="objective-form-active" checked>
-        </div>
+        <label for="year-form-year">Jahr *</label>
+        <input type="number" id="year-form-year" required min="2000" max="2099" value="<%= new Date().getFullYear() %>">
       </div>
     </div>
     <div class="dialog-footer">
-      <button type="button" class="btn btn-secondary" id="objective-btn-cancel">Abbrechen</button>
-      <button type="submit" class="btn btn-primary" id="objective-btn-save">Speichern</button>
-    </div>
-  </form>
-</dialog>
-
-<!-- SPI Evaluation Add / Edit dialog -->
-<dialog id="spi-dialog" aria-labelledby="spi-dialog-title">
-  <div class="dialog-header" id="spi-dialog-title">SPI Bewertung hinzuf&uuml;gen</div>
-  <form id="spi-form" method="dialog">
-    <div class="dialog-body">
-      <input type="hidden" id="spi-form-id">
-      <div class="form-group">
-        <label for="spi-form-objective">Safety Objective *</label>
-        <select id="spi-form-objective" required></select>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="spi-form-date">Datum</label>
-          <input type="text" id="spi-form-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
-        </div>
-        <div class="form-group">
-          <label for="spi-form-value">SPI (Ist-Wert)</label>
-          <input type="text" id="spi-form-value" placeholder="z.B. 3 Ereignisse">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="spi-form-fulfilled">Erf&uuml;llt</label>
-          <select id="spi-form-fulfilled">
-            <option value="1">ja</option>
-            <option value="0">nein</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="spi-form-result">Ergebnis</label>
-          <select id="spi-form-result">
-            <option value="POSITIV">positiv</option>
-            <option value="NEGATIV">negativ</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="spi-form-improvement">Verbesserung notwendig</label>
-          <select id="spi-form-improvement">
-            <option value="0">nein</option>
-            <option value="1">ja</option>
-          </select>
-        </div>
-      </div>
-      <div id="spi-form-negative" style="display:none">
-        <hr class="form-divider">
-        <div class="form-group">
-          <label for="spi-form-cause">Ursachenanalyse</label>
-          <textarea id="spi-form-cause" rows="3"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="spi-form-measures">Ma&szlig;nahmen</label>
-          <textarea id="spi-form-measures" rows="3"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="spi-form-decision">Entscheidung</label>
-          <textarea id="spi-form-decision" rows="2"></textarea>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="spi-form-decision-place">Ort der Entscheidung</label>
-            <input type="text" id="spi-form-decision-place" placeholder="z.B. Management Review">
-          </div>
-          <div class="form-group">
-            <label for="spi-form-decided-at">Entschieden am</label>
-            <input type="text" id="spi-form-decided-at" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="dialog-footer">
-      <button type="button" class="btn btn-secondary" id="spi-btn-cancel">Abbrechen</button>
-      <button type="submit" class="btn btn-primary" id="spi-btn-save">Speichern</button>
+      <button type="button" class="btn btn-secondary" id="year-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="year-btn-save">Speichern</button>
     </div>
   </form>
 </dialog>
