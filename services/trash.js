@@ -43,10 +43,25 @@ function snapshotSmsMeeting(meetingId) {
   return stmts.getSmsMeeting.get(meetingId) || null;
 }
 
+// Ein Ziel nimmt seine Bewertungen mit — sie hängen per ON DELETE CASCADE am Ziel
+// und wären ohne den Snapshot beim Wiederherstellen verloren.
+function snapshotSafetyObjective(objectiveId) {
+  const objective = stmts.getSafetyObjective.get(objectiveId);
+  if (!objective) return null;
+  objective.evaluations = stmts.getSpiEvaluationsByObjectiveRaw.all(objectiveId);
+  return objective;
+}
+
 function snapshotSafetyYear(yearId) {
   const year = stmts.getSafetyYear.get(yearId);
   if (!year) return null;
   year.meetings = stmts.getSmsMeetingsByYearRaw.all(yearId);
+  // Der Zielkatalog hängt am Jahr und kaskadiert mit ihm — also gehört er in den
+  // Snapshot, sonst käme ein wiederhergestelltes Jahr ohne seine Ziele zurück.
+  year.objectives = stmts.getSafetyObjectivesByYearRaw.all(yearId).map(o => {
+    o.evaluations = stmts.getSpiEvaluationsByObjectiveRaw.all(o.id);
+    return o;
+  });
   return year;
 }
 
@@ -137,6 +152,33 @@ function restoreSmsMeeting(meeting) {
   );
 }
 
+function restoreSpiEvaluation(evaluation) {
+  stmts.restoreSpiEvaluation.run(
+    evaluation.id, evaluation.safety_objective_id, evaluation.safety_year_id, evaluation.department_id,
+    evaluation.eval_date || null, evaluation.spi_value || '', evaluation.result_text || '',
+    evaluation.rating || '', evaluation.cause_analysis || '', evaluation.measures || '',
+    evaluation.decision || '', evaluation.decision_place || '', evaluation.decided_at || null,
+    evaluation.copy_to || '', evaluation.objective_snapshot || null, evaluation.spt_snapshot || null,
+    evaluation.interval_snapshot === undefined ? null : evaluation.interval_snapshot,
+    evaluation.created_at, evaluation.updated_at
+  );
+}
+
+function restoreSafetyObjective(objective) {
+  stmts.restoreSafetyObjective.run(
+    objective.id, objective.safety_year_id, objective.department_id, objective.sort_order || 0,
+    objective.title || '', objective.objective || '', objective.spt || '', objective.spt_direction || '',
+    objective.spt_value === undefined ? null : objective.spt_value, objective.spi_description || '',
+    objective.interval_months || 12, objective.active === 0 ? 0 : 1,
+    objective.created_at, objective.updated_at
+  );
+  if (objective.evaluations) {
+    for (const evaluation of objective.evaluations) {
+      restoreSpiEvaluation(evaluation);
+    }
+  }
+}
+
 function restoreSafetyYear(year) {
   stmts.restoreSafetyYear.run(
     year.id, year.department_id, year.year, year.created_at, year.updated_at
@@ -144,6 +186,13 @@ function restoreSafetyYear(year) {
   if (year.meetings) {
     for (const meeting of year.meetings) {
       restoreSmsMeeting(meeting);
+    }
+  }
+  // Snapshots von vor dem CM-006-Katalog kennen das Feld nicht — dann gibt es
+  // schlicht keinen Katalog wiederherzustellen.
+  if (year.objectives) {
+    for (const objective of year.objectives) {
+      restoreSafetyObjective(objective);
     }
   }
 }
@@ -167,12 +216,15 @@ module.exports = {
   snapshotAuditPlanLine,
   snapshotAuditPlan,
   snapshotSmsMeeting,
+  snapshotSafetyObjective,
   snapshotSafetyYear,
   restoreCapItem,
   restoreChecklistItem,
   restoreAuditPlanLine,
   restoreAuditPlan,
   restoreSmsMeeting,
+  restoreSpiEvaluation,
+  restoreSafetyObjective,
   restoreSafetyYear,
   startTrashCleanupScheduler,
 };

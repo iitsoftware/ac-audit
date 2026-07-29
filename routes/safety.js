@@ -1,9 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { stmts } = require('../db');
+const { db, stmts } = require('../db');
 const { logAction, formatDateDE } = require('../services/audit-log');
 const { getQmForDepartment, buildAuthoritySalutation, sendDocumentEmail } = require('../services/email');
-const { snapshotSafetyYear, snapshotSmsMeeting } = require('../services/trash');
+const { snapshotSafetyYear, snapshotSmsMeeting, snapshotSafetyObjective } = require('../services/trash');
+const { seedObjectivesForYear } = require('../services/safety-defaults');
 const { generateSmsMeetingPdfBuffer } = require('../pdf/safety');
 
 const router = express.Router();
@@ -25,6 +26,18 @@ function meetingLabel(meeting) {
   return no ? `${prefix} – ${date}` : `${prefix} ${date}`;
 }
 
+// Ein Sicherheitsjahr entsteht nie ohne Zielkatalog: Anlegen und Seeding laufen in
+// EINER Transaktion, ein Fehler beim Seeding rollt also auch das Jahr zurück.
+// Ohne `source` gewinnt der Vorjahreskatalog, sonst greift der eingebaute Standard —
+// das ist genau das Default-Verhalten von seedObjectivesForYear().
+const createSafetyYearWithCatalog = db.transaction((id, departmentId, year) => {
+  stmts.createSafetyYear.run(id, departmentId, year);
+  return seedObjectivesForYear(id);
+});
+
+// Quellen-Bezeichnung für Log-Detail und API-Antwort.
+const SEED_SOURCE_LABELS = { previous: 'Vorjahreskatalog', default: 'Standardkatalog' };
+
 // ── Safety Years (navigation root: Firma → Abteilung → Jahr) ──
 
 router.get('/api/departments/:departmentId/safety-years', (req, res) => {
@@ -42,8 +55,11 @@ router.post('/api/departments/:departmentId/safety-years', (req, res) => {
     return res.status(409).json({ error: `Jahr ${year} existiert bereits für diese Abteilung` });
   }
   const id = uuidv4();
-  stmts.createSafetyYear.run(id, req.params.departmentId, year);
-  logAction('Safety-Jahr erstellt', 'safety_year', id, String(year), '', company ? company.name : '', dept.name);
+  const seeded = createSafetyYearWithCatalog(id, req.params.departmentId, year);
+  const detail = seeded.created
+    ? `Katalog: ${seeded.created} Ziele aus ${SEED_SOURCE_LABELS[seeded.source]}`
+    : '';
+  logAction('Safety-Jahr erstellt', 'safety_year', id, String(year), detail, company ? company.name : '', dept.name);
   res.status(201).json(stmts.getSafetyYear.get(id));
 });
 
@@ -190,6 +206,148 @@ router.post('/api/sms-meetings/:id/send-email', async (req, res) => {
   } catch (e) {
     res.status(e.statusCode || 500).json({ error: e.message });
   }
+});
+
+// ── Sicherheitszielkatalog (CM-006 Objectives) ───────────
+
+// Der Titel ist die CM-006-Spalte "Objective" und im Dialog Pflichtfeld — er ist
+// damit auch das Label für Log-Einträge und Papierkorb.
+function objectiveLabel(objective) {
+  return (objective.title || '').trim() || 'Sicherheitsziel';
+}
+
+// spt_value ist REAL und optional: leer/ungültig heißt "kein maschinenlesbares
+// Ziel", also NULL — dann schlägt das Frontend schlicht kein Rating vor.
+function normalizeSptValue(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeIntervalMonths(value) {
+  const num = parseInt(value, 10);
+  return Number.isFinite(num) && num > 0 ? num : 12;
+}
+
+router.get('/api/safety-years/:yearId/objectives', (req, res) => {
+  const year = stmts.getSafetyYear.get(req.params.yearId);
+  if (!year) return res.status(404).json({ error: 'Safety year not found' });
+  res.json(stmts.getSafetyObjectivesByYear.all(req.params.yearId));
+});
+
+router.post('/api/safety-years/:yearId/objectives', (req, res) => {
+  const year = stmts.getSafetyYear.get(req.params.yearId);
+  if (!year) return res.status(404).json({ error: 'Safety year not found' });
+  const { dept, company } = deptContext(year.department_id);
+  const b = req.body;
+  const title = (b.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'Titel ist erforderlich' });
+  // Neue Ziele hängen sich unten an den Katalog; die Reihenfolge selbst pflegt
+  // der Nutzer über die Reorder-Route.
+  const existing = stmts.getSafetyObjectivesByYearRaw.all(req.params.yearId);
+  const sortOrder = existing.reduce((max, o) => Math.max(max, o.sort_order || 0), -1) + 1;
+  const id = uuidv4();
+  stmts.createSafetyObjective.run(
+    id, req.params.yearId, year.department_id, sortOrder, title,
+    b.objective || '', b.spt || '', b.spt_direction || '', normalizeSptValue(b.spt_value),
+    b.spi_description || '', normalizeIntervalMonths(b.interval_months),
+    (b.active === undefined || Number(b.active)) ? 1 : 0 // neue Ziele sind aktiv
+  );
+  logAction('Sicherheitsziel erstellt', 'safety_objective', id, title, `Jahr: ${year.year}`,
+    company ? company.name : '', dept ? dept.name : '');
+  res.status(201).json(stmts.getSafetyObjective.get(id));
+});
+
+router.post('/api/safety-years/:yearId/seed-objectives', (req, res) => {
+  const year = stmts.getSafetyYear.get(req.params.yearId);
+  if (!year) return res.status(404).json({ error: 'Safety year not found' });
+  const { source } = req.body || {};
+  if (source !== undefined && source !== 'previous' && source !== 'default') {
+    return res.status(400).json({ error: "source muss 'previous' oder 'default' sein" });
+  }
+  // seedObjectivesForYear ist idempotent und würde einen gefüllten Katalog still
+  // unangetastet lassen — hier ist das Nachladen aber ein ausdrücklicher Wunsch,
+  // also wird der Konflikt gemeldet statt "0 Ziele übernommen" zu quittieren.
+  if (stmts.getSafetyObjectivesByYearRaw.all(req.params.yearId).length) {
+    return res.status(409).json({ error: 'Der Zielkatalog dieses Jahres ist nicht leer' });
+  }
+  const { dept, company } = deptContext(year.department_id);
+  const seeded = seedObjectivesForYear(req.params.yearId, source);
+  if (!seeded.created) {
+    return res.status(409).json({ error: 'Kein Vorjahreskatalog vorhanden' });
+  }
+  logAction('Sicherheitszielkatalog übernommen', 'safety_year', req.params.yearId, String(year.year),
+    `${seeded.created} Ziele aus ${SEED_SOURCE_LABELS[seeded.source]}`,
+    company ? company.name : '', dept ? dept.name : '');
+  res.status(201).json({ created: seeded.created, source: seeded.source });
+});
+
+router.patch('/api/safety-years/:yearId/objectives/reorder', (req, res) => {
+  const year = stmts.getSafetyYear.get(req.params.yearId);
+  if (!year) return res.status(404).json({ error: 'Safety year not found' });
+  const { ids } = req.body; // array of objective IDs in desired order
+  if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array of IDs' });
+  // Nur Ziele DIESES Jahres werden umsortiert — eine fremde ID im Array darf den
+  // Katalog eines anderen Jahres nicht umschreiben.
+  const own = new Set(stmts.getSafetyObjectivesByYearRaw.all(req.params.yearId).map(o => o.id));
+  const reorder = db.transaction(() => {
+    ids.filter(id => own.has(id)).forEach((id, idx) => {
+      stmts.updateSafetyObjectiveSortOrder.run(idx, id);
+    });
+  });
+  reorder();
+  const { dept, company } = deptContext(year.department_id);
+  logAction('Sicherheitszielkatalog sortiert', 'safety_year', req.params.yearId, String(year.year), '',
+    company ? company.name : '', dept ? dept.name : '');
+  res.json(stmts.getSafetyObjectivesByYear.all(req.params.yearId));
+});
+
+router.get('/api/safety-objectives/:id', (req, res) => {
+  const objective = stmts.getSafetyObjective.get(req.params.id);
+  if (!objective) return res.status(404).json({ error: 'Safety objective not found' });
+  res.json(objective);
+});
+
+// Partiell wie PUT /api/sms-meetings/:id — ausgelassene Felder behalten ihren Wert.
+router.put('/api/safety-objectives/:id', (req, res) => {
+  const existing = stmts.getSafetyObjective.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Safety objective not found' });
+  const b = req.body;
+  const title = b.title !== undefined ? (b.title || '').trim() : existing.title;
+  if (!title) return res.status(400).json({ error: 'Titel ist erforderlich' });
+  stmts.updateSafetyObjective.run(
+    title,
+    b.objective !== undefined ? b.objective : existing.objective,
+    b.spt !== undefined ? b.spt : existing.spt,
+    b.spt_direction !== undefined ? b.spt_direction : existing.spt_direction,
+    b.spt_value !== undefined ? normalizeSptValue(b.spt_value) : existing.spt_value,
+    b.spi_description !== undefined ? b.spi_description : existing.spi_description,
+    b.interval_months !== undefined ? normalizeIntervalMonths(b.interval_months) : existing.interval_months,
+    b.active !== undefined ? (Number(b.active) ? 1 : 0) : existing.active,
+    req.params.id
+  );
+  const objective = stmts.getSafetyObjective.get(req.params.id);
+  const { dept, company } = deptContext(objective.department_id);
+  logAction('Sicherheitsziel geändert', 'safety_objective', req.params.id, objectiveLabel(objective), '',
+    company ? company.name : '', dept ? dept.name : '');
+  res.json(objective);
+});
+
+router.delete('/api/safety-objectives/:id', (req, res) => {
+  const existing = stmts.getSafetyObjective.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Safety objective not found' });
+  const { dept, company } = deptContext(existing.department_id);
+  try {
+    const snapshot = snapshotSafetyObjective(req.params.id);
+    if (snapshot) {
+      stmts.createTrashItem.run(uuidv4(), 'safety_objective', req.params.id, objectiveLabel(existing),
+        company ? company.name : '', dept ? dept.name : '', existing.safety_year_id, 'safety_year', JSON.stringify(snapshot));
+    }
+  } catch (e) { console.error('Trash snapshot failed:', e.message); }
+  stmts.deleteSafetyObjective.run(req.params.id); // evaluations cascade
+  logAction('Sicherheitsziel gelöscht', 'safety_objective', req.params.id, objectiveLabel(existing), '',
+    company ? company.name : '', dept ? dept.name : '');
+  res.status(204).end();
 });
 
 module.exports = router;

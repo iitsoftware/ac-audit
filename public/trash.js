@@ -12,9 +12,9 @@
     cap_item: 'CAP',
     safety_year: 'Safety-Jahr',
     sms_meeting: 'SRB-Protokoll',
-    // safety_objective/spi_evaluation stehen in routes/trash.js auf OBSOLETE_ENTITY_TYPES —
-    // die Altbestände im Papierkorb sollen trotzdem lesbar bleiben statt den Tabellennamen zu zeigen.
     safety_objective: 'Sicherheitsziel',
+    // spi_evaluation steht in routes/trash.js auf OBSOLETE_ENTITY_TYPES — die Altbestände
+    // im Papierkorb sollen trotzdem lesbar bleiben statt den Tabellennamen zu zeigen.
     spi_evaluation: 'SPI-Bewertung'
   };
 

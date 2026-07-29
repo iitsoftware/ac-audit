@@ -3,12 +3,13 @@ const { db, stmts } = require('../db');
 const { logAction } = require('../services/audit-log');
 const {
   restoreAuditPlan, restoreAuditPlanLine, restoreCapItem,
-  restoreSmsMeeting, restoreSafetyYear,
+  restoreSmsMeeting, restoreSafetyYear, restoreSafetyObjective,
 } = require('../services/trash');
 
-// safety_objective/spi_evaluation were dropped with the CM-025 rework; snapshots of
-// them may still sit in the trash table but have no restore helper any more.
-const OBSOLETE_ENTITY_TYPES = ['safety_objective', 'spi_evaluation'];
+// spi_evaluation is never trashed on its own — evaluations ride along in their
+// objective's snapshot. Standalone snapshots only exist from before the CM-025
+// rework and have no table to go back into.
+const OBSOLETE_ENTITY_TYPES = ['spi_evaluation'];
 
 // Restore helper per entity type. Looked up before the transaction runs so an
 // unknown type is rejected instead of silently dropping its snapshot.
@@ -17,6 +18,7 @@ const RESTORERS = {
   audit_plan_line: restoreAuditPlanLine,
   cap_item: restoreCapItem,
   safety_year: restoreSafetyYear,
+  safety_objective: restoreSafetyObjective,
   sms_meeting: restoreSmsMeeting,
 };
 
@@ -58,6 +60,14 @@ router.post('/api/trash/:id/restore', (req, res) => {
   } else if (item.entity_type === 'cap_item') {
     const checkItem = db.prepare('SELECT id FROM audit_checklist_item WHERE id = ?').get(item.parent_id);
     if (!checkItem) return res.status(409).json({ error: 'Prüfpunkt existiert nicht mehr. Wiederherstellung nicht möglich.' });
+  } else if (item.entity_type === 'safety_objective') {
+    // The department-scoped predecessor of the catalogue was dropped with the
+    // CM-006 rework; its snapshots are told apart by the missing safety_year_id.
+    if (!snapshot.safety_year_id) {
+      return res.status(409).json({ error: 'Veralteter Eintrag aus der früheren Zielverwaltung. Wiederherstellung nicht möglich.' });
+    }
+    const year = stmts.getSafetyYear.get(item.parent_id);
+    if (!year) return res.status(409).json({ error: 'Safety-Jahr existiert nicht mehr. Wiederherstellung nicht möglich.' });
   } else if (item.entity_type === 'sms_meeting') {
     // CM-025 meetings hang off a safety_year; snapshots from before that off the department.
     if (item.parent_type === 'safety_year') {
