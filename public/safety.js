@@ -274,7 +274,13 @@
     document.getElementById('meeting-form-meeting-no').value = isEdit ? (meeting.meeting_no || '') : '';
     document.getElementById('meeting-form-participants').value = isEdit ? (meeting.participants || '') : '';
     document.getElementById('meeting-form-participants-excused').value = isEdit ? (meeting.participants_excused || '') : '';
-    document.getElementById('meeting-form-topics').value = isEdit ? (meeting.topics || '') : '';
+    // Neues Protokoll startet mit den SRB-Standard-Themen aus dem versteckten
+    // Textarea — eine einmalige Kopie, die der Anwender vor dem Speichern noch
+    // ändern oder leeren kann. Bestehende Protokolle behalten ihre Themen, eine
+    // spätere Änderung des Defaults schreibt sie also nicht um.
+    document.getElementById('meeting-form-topics').value = isEdit
+      ? (meeting.topics || '')
+      : (document.getElementById('srb-default-topics')?.value || '');
     document.getElementById('meeting-form-general-result').value = isEdit ? (meeting.general_result || '') : '';
     document.getElementById('meeting-form-positives').value = isEdit ? (meeting.positives || '') : '';
     document.getElementById('meeting-form-negatives').value = isEdit ? (meeting.negatives || '') : '';
