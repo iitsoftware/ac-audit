@@ -5,6 +5,7 @@
     <button class="settings-tab active" data-tab="global" role="tab" aria-selected="true" aria-controls="tab-global">Global</button>
     <button class="settings-tab" data-tab="audit" role="tab" aria-selected="false" aria-controls="tab-audit">AC-Audit</button>
     <button class="settings-tab" data-tab="change" role="tab" aria-selected="false" aria-controls="tab-change">AC-Change</button>
+    <button class="settings-tab" data-tab="sms" role="tab" aria-selected="false" aria-controls="tab-sms">AC-SMS</button>
   </div>
 
   <!-- Global -->
@@ -200,6 +201,22 @@
             <input type="email" id="change-test-email-to" placeholder="empfaenger@example.com">
           </div>
           <button class="btn btn-secondary" id="change-test-email-send" disabled>Test senden</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AC-SMS -->
+  <div class="settings-tab-content" id="tab-sms" role="tabpanel">
+    <div class="settings-grid">
+      <div class="settings-tile">
+        <h2>SRB Meeting</h2>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 12px">Wird beim Anlegen eines neuen Protokolls in das Feld THEMEN kopiert. Leer lassen, um die eingebauten Standard-Themen zu verwenden.</p>
+        <div class="settings-form" id="sms-topics-form">
+          <div class="form-group">
+            <label for="sms-default-topics">Standard-Themen</label>
+            <textarea id="sms-default-topics" rows="12"></textarea>
+          </div>
         </div>
       </div>
     </div>
