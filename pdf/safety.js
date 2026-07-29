@@ -7,6 +7,9 @@ const { createPdfDoc, addPdfFooter } = require('./common');
 // `label` den Default 'Erstellt mit ac-audit', deshalb beides hier zusammengefasst.
 const FOOTER_LABEL = 'CM-025, SRB Meeting, Rev. 1, 28.08.2024  |  Erstellt mit ac-sms';
 const FOOTER_LABEL_SPI = 'CM-006, Ergebnisse SPI, Rev. 0, 28.08.2024  |  Erstellt mit ac-sms';
+// Die Zielkatalog-Tabelle stammt aus dem MOE-Anhang, nicht aus einem LBA-Formular —
+// deshalb steht hier der Dokumenttitel statt einer Formularreferenz.
+const FOOTER_LABEL_OBJECTIVES = 'Sicherheitsziele / Safety Objectives  |  Erstellt mit ac-sms';
 const PROTOCOL_COLOR = '#1f4e79';
 const PAGE_BOTTOM = 740;
 
@@ -323,6 +326,99 @@ function renderSpiEvaluationPdf(doc, { ev, obj, year, dept, company, logoRow, qm
   return form.getY();
 }
 
+// ── MOE-Anhang 'Sicherheitsziele / Safety Objectives' ──
+
+// Der Sicherheitszielkatalog als Dokument: genau die MOE-Anhangtabelle (Ausgabe 3
+// Rev. 2, S. 162–163) mit ihren fünf Spalten. Die im Handbuch leeren Spalten SPI
+// und "Datum der Feststellung" sind hier GEFÜLLT — aus der jeweils jüngsten
+// Bewertung des Ziels, die getSafetyObjectivesByYear als last_spi_value /
+// last_eval_date mitliefert (kein N+1-Read im Generator).
+function renderSafetyObjectivesPdf(doc, { objectives, year, dept, company, logoRow, startY }) {
+  const header = { company, dept, logoRow, title: 'Sicherheitsziele / Safety Objectives' };
+  let y = drawHeader(doc, header, startY);
+
+  const contentW = 595.28 - 100;
+  // Breiten wie im MOE: die Zielspalte dominiert, die vier Auswertungsspalten
+  // bleiben schmal; die letzte füllt den Rest, damit die Tabelle exakt schließt.
+  const cols = [
+    { label: 'Sicherheitsziele / Safety Objectives', w: 215 },
+    { label: 'SPT', w: 95 },
+    { label: 'Intervall', w: 45 },
+    { label: 'SPI', w: 50 },
+    { label: 'Datum der Feststellung', w: 0 }
+  ];
+  cols[cols.length - 1].w = contentW - cols.reduce((sum, c) => sum + c.w, 0);
+
+  // Safety Year über der Tabelle — der Titel selbst bleibt der MOE-Wortlaut.
+  if (year && year.year) {
+    doc.fontSize(9).font('Helvetica').fillColor('#000000').text(`Safety Year ${year.year}`, 50, y);
+    y += 20;
+  }
+
+  doc.strokeColor('#d0d0d0').lineWidth(0.5);
+
+  // Kopfzeile — wird auf jeder Folgeseite wiederholt (im MOE stehen Ziel 11–12
+  // auf S. 163 unter derselben Überschriftenzeile).
+  const drawHeadRow = () => {
+    doc.fontSize(8).font('Helvetica-Bold');
+    const headH = Math.max(18, ...cols.map(c => doc.heightOfString(c.label, { width: c.w - 8 }) + 8));
+    doc.rect(50, y, contentW, headH).fill('#e8e8e8');
+    doc.fillColor('#000000').fontSize(8).font('Helvetica-Bold');
+    let x = 50;
+    for (const col of cols) {
+      doc.rect(x, y, col.w, headH).stroke();
+      doc.text(col.label, x + 4, y + 4, { width: col.w - 8 });
+      x += col.w;
+    }
+    y += headH;
+  };
+  drawHeadRow();
+
+  // Deaktivierte Ziele bleiben in der Liste — der Katalog des Jahres wird gedruckt,
+  // wie er ist — sind aber als solche markiert statt still verschwiegen.
+  const rowsData = (objectives || []).map(o => {
+    // objective ist der MOE-Volltext; title ist nur das Kurzlabel der Tabellen-
+    // ansicht im Frontend und springt hier nur ein, wenn der Volltext fehlt.
+    const objText = (o.objective || o.title || '') + (o.active === 0 ? '  (inaktiv)' : '');
+    return [
+      objText,
+      o.spt || '',
+      o.interval_months == null ? '' : String(o.interval_months),
+      o.last_spi_value == null ? '' : String(o.last_spi_value),
+      formatDateDE(o.last_eval_date)
+    ];
+  });
+
+  doc.fontSize(8).font('Helvetica');
+  for (const cells of rowsData) {
+    const rowH = Math.max(20, ...cols.map((c, i) => doc.heightOfString(cells[i], { width: c.w - 8 }) + 8));
+    if (y + rowH > PAGE_BOTTOM) {
+      doc.addPage();
+      doc.strokeColor('#d0d0d0').lineWidth(0.5);
+      y = drawHeader(doc, header, 50);
+      drawHeadRow();
+      doc.fontSize(8).font('Helvetica');
+    }
+    let x = 50;
+    for (let i = 0; i < cols.length; i++) {
+      doc.rect(x, y, cols[i].w, rowH).stroke();
+      doc.fillColor('#000000').text(cells[i], x + 4, y + 4, { width: cols[i].w - 8 });
+      x += cols[i].w;
+    }
+    y += rowH;
+  }
+
+  // Leerer Katalog: eine sprechende Zeile statt einer nackten Kopfzeile.
+  if (rowsData.length === 0) {
+    doc.rect(50, y, contentW, 20).stroke();
+    doc.fillColor('#666666').text('Kein Sicherheitsziel im Katalog.', 54, y + 5, { width: contentW - 8 });
+    doc.fillColor('#000000');
+    y += 20;
+  }
+
+  return y;
+}
+
 // ── Buffer generator (analog pdf/cap.js) ──
 
 function generateSmsMeetingPdfBuffer(id) {
@@ -381,10 +477,35 @@ function generateSpiEvaluationPdfBuffer(id) {
   return generateSpiEvaluationsPdfBuffer([id]);
 }
 
+// Katalog-PDF eines Sicherheitsjahres. Die Abteilung kommt aus dem Jahr, nicht aus
+// den Zielen: der Katalog darf leer sein und muss trotzdem einen Kopf bekommen.
+function generateSafetyObjectivesPdfBuffer(yearId) {
+  return new Promise((resolve, reject) => {
+    const year = stmts.getSafetyYear.get(yearId);
+    if (!year) return reject(new Error('Safety year not found'));
+    const objectives = stmts.getSafetyObjectivesByYear.all(yearId);
+    const dept = stmts.getDepartment.get(year.department_id);
+    const company = stmts.getCompany.get(dept.company_id);
+    const logoRow = stmts.getCompanyLogo.get(company.id);
+
+    const doc = createPdfDoc({ margin: 50 });
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('error', reject);
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), dept, company }));
+
+    renderSafetyObjectivesPdf(doc, { objectives, year, dept, company, logoRow, startY: 50 });
+    addPdfFooter(doc, { label: FOOTER_LABEL_OBJECTIVES });
+    doc.end();
+  });
+}
+
 module.exports = {
   renderSrbMeetingPdf,
   generateSmsMeetingPdfBuffer,
   renderSpiEvaluationPdf,
   generateSpiEvaluationPdfBuffer,
-  generateSpiEvaluationsPdfBuffer
+  generateSpiEvaluationsPdfBuffer,
+  renderSafetyObjectivesPdf,
+  generateSafetyObjectivesPdfBuffer
 };
