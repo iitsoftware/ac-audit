@@ -85,6 +85,7 @@ ac-audit/
 │   ├── backup.js          # SQLite Online Backup API + startBackupScheduler
 │   ├── notifications.js   # CAP deadline notifications + startNotifyScheduler
 │   ├── log-cleanup.js     # Audit-log retention scheduler
+│   ├── safety-defaults.js # DEFAULT_SRB_TOPICS + getSrbDefaultTopics() (AC-SMS Standard-Themen)
 │   └── form2.js           # EASA Form 2 PDF filling (pdf-lib)
 ├── pdf/
 │   ├── common.js          # createPdfDoc({ landscape, margin }) + addPdfFooter
@@ -365,7 +366,8 @@ and audit-log entry all need the department without walking through `safety_year
 - Share button blink: `has-selection` class on `.select-header` triggers CSS blink animation when checkboxes are selected
 - AC-SMS PDFs (`pdf/safety.js`) pass the footer label `CM-025, SRB Meeting, Rev. 1, 28.08.2024  |  Erstellt mit ac-sms` to `addPdfFooter()` — the LBA form reference of the SRB meeting minutes plus the app hint. `label` *replaces* the `addPdfFooter()` default `Erstellt mit ac-audit`, so both parts have to live in the one string (AC-Change does the same with `label: 'Erstellt mit ac-change'`)
 - AC-SMS navigation mirrors AC-Audit: Firma → Abteilung → year tiles (`.plan-tile`, reusing the audit-plan tile styles) → meeting detail. Tile state: `plan-tile-done` once the year has meetings, `plan-tile-wip` while it is empty
-- The SRB-meeting table of a safety year shows a **derived** running number (`Lfd.` = index+1 of the chronologically sorted list, `public/safety.js`) next to the free-text `SRB Nr.` (`meeting_no`) from the CM-025 form. The `ORDER BY meeting_date, created_at` of the `sms_meeting` list statements in `db.js` carries that numbering — it is never stored, so `Lfd.` stays gapless 1..n and renumbers when a meeting is inserted or deleted
+- The SRB-meeting table of a safety year shows a **derived** running number (`Lfd.` = index+1 of the chronologically sorted list, `public/safety.js`) next to the free-text `SRB Nr.` (`meeting_no`) from the CM-025 form. The `ORDER BY meeting_date, created_at` of the `sms_meeting` list statements in `db.js` carries that numbering — it is never stored, so `Lfd.` stays gapless 1..n and renumbers when a meeting is inserted or deleted. The columns are `Lfd. | SRB Nr. | Datum | Ort | Teilnehmer` — the former `Themen` column was dropped: the standard agenda now prefills every protocol, so the cell was the same wall of text in every row
+- AC-SMS SRB standard topics: the setting `sms_default_topics` overrides the built-in fallback `DEFAULT_SRB_TOPICS` in `services/safety-defaults.js` (edited on the AC-SMS settings tab). `getSrbDefaultTopics()` resolves the two and the `/safety` route in `routes/pages.js` passes the result as the EJS local `srbDefaultTopics` into a hidden textarea (`#srb-default-topics`, `views/safety.ejs`); `public/safety.js` copies that value into the THEMEN field when a **new** protocol is opened. The copy is a snapshot — a later change of the default never rewrites existing protocols. An empty setting means "use the built-in topics", which is why there is no reset button
 
 ## Accessibility
 
@@ -400,7 +402,7 @@ together with the last consumer.
 - AC-Audit emails use `smtp_*` settings (from: ac-audit@...), title: "Compliance Monitoring Manager"
 - AC-Change emails use `change_smtp_*` settings (from: ac-change@...), title: "Safety Manager"
 - All outgoing emails set `replyTo` to the QM email of the department
-- Settings split into tabs: Global (backup), AC-Audit (CAP, notifications, SMTP), AC-Change (SMTP)
+- Settings split into tabs: Global (backup), AC-Audit (CAP, notifications, SMTP), AC-Change (SMTP), AC-SMS (SRB-Standard-Themen)
 
 ## EASA Form 2 Templates
 
