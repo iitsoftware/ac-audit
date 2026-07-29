@@ -636,12 +636,15 @@ const stmts = {
   // kopiert den Vorjahreskatalog, danach sind die Jahre gegeneinander eingefroren.
   // Diese Liste IST die MOE-Anhangtabelle — die letzte Bewertung je Ziel liefert
   // die gefüllten SPI- und Datumsspalten, damit das Frontend keinen N+1-Read braucht.
+  // last_evaluation_id gehört dazu: die Mehrfachauswahl der Katalogtabelle schickt
+  // genau diese IDs an GET /api/spi-evaluations/pdf (Jahrespaket fürs SRB).
   // "Letzte" = jüngster Datensatz über COALESCE(eval_date, created_at) DESC. Ein frisch
   // angelegter Entwurf ohne eval_date zählt dabei mit seinem created_at und verdrängt
   // ältere Bewertungen — die Zeile zeigt bewusst den aktuellen Bearbeitungsstand (dann
   // eben mit leeren SPI-Spalten), eval_count daneben die Gesamtzahl der Bewertungen.
   getSafetyObjectivesByYear: db.prepare(
     `SELECT o.*,
+            e.id          AS last_evaluation_id,
             e.eval_date   AS last_eval_date,
             e.spi_value   AS last_spi_value,
             e.result_text AS last_result_text,
