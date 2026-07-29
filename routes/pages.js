@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const ejs = require('ejs');
+const { getSrbDefaultTopics } = require('../services/safety-defaults');
 
 const router = express.Router();
 
@@ -32,7 +33,11 @@ router.get('/change', (req, res) => {
 });
 
 router.get('/safety', (req, res) => {
-  renderPage(res, 'safety', { activePage: 'safety', pageScript: 'safety.js' });
+  renderPage(res, 'safety', {
+    activePage: 'safety',
+    pageScript: 'safety.js',
+    srbDefaultTopics: getSrbDefaultTopics(),
+  });
 });
 
 router.get('/settings', (req, res) => {

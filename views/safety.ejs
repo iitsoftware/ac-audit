@@ -108,6 +108,12 @@
           <button type="submit" class="btn btn-primary" id="meeting-btn-save">Speichern</button>
         </div>
       </form>
+
+      <!-- Standard-Themen aus den Einstellungen; werden beim Anlegen eines neuen
+           Protokolls in das THEMEN-Feld kopiert und sind dort frei editierbar.
+           Bewusst ein Textarea und kein <script>-Block: <%%= %> escaped den Inhalt
+           korrekt f&uuml;r den Textarea-Kontext und erh&auml;lt die Zeilenumbr&uuml;che verbatim. -->
+      <textarea id="srb-default-topics" hidden><%= srbDefaultTopics %></textarea>
     </div>
 
   </div>
