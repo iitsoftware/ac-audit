@@ -449,6 +449,13 @@ Deleting a single evaluation snapshots it on its own (parent
 `safety_objective`) — `snapshotSpiEvaluation()` reads the **raw** row, since the
 `COALESCE` columns of `getSpiEvaluation` would hand an unsigned draft the
 current catalogue as its snapshot and freeze a document nobody signed.
+Restore writes the three `*_snapshot` columns back verbatim and never re-derives
+them from the catalogue, so `restoreSpiEvaluation()` guards them with
+`=== undefined` instead of `||`: an empty `spt_snapshot` is a valid freeze (`spt`
+is optional in the catalogue), and collapsing it to NULL would let the `COALESCE`
+of `getSpiEvaluation` print today's target on a document signed without one.
+Only a snapshot predating those columns yields `undefined` — which better-sqlite3
+rejects as a binding, hence the explicit NULL.
 
 ## Email Routing
 

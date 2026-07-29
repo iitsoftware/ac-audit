@@ -160,13 +160,22 @@ function restoreSmsMeeting(meeting) {
   );
 }
 
+// Die drei *_snapshot-Spalten gehen unverändert zurück in die Zeile — sie sind der
+// eingefrorene Wortlaut der Unterschrift und werden beim Wiederherstellen NICHT neu
+// aus dem Katalog abgeleitet. Deshalb hier `=== undefined` statt `||`: ein leerer
+// spt_snapshot ist ein gültiger Snapshot (spt ist im Katalog optional), und ein
+// `|| null` würde ihn zu NULL machen — worauf das COALESCE von getSpiEvaluation
+// wieder den *aktuellen* Katalogstand einsetzt. Nur ein Snapshot von vor diesen
+// Spalten liefert undefined, und undefined lehnt better-sqlite3 als Bindung ab.
 function restoreSpiEvaluation(evaluation) {
   stmts.restoreSpiEvaluation.run(
     evaluation.id, evaluation.safety_objective_id, evaluation.safety_year_id, evaluation.department_id,
     evaluation.eval_date || null, evaluation.spi_value || '', evaluation.result_text || '',
     evaluation.rating || '', evaluation.cause_analysis || '', evaluation.measures || '',
     evaluation.decision || '', evaluation.decision_place || '', evaluation.decided_at || null,
-    evaluation.copy_to || '', evaluation.objective_snapshot || null, evaluation.spt_snapshot || null,
+    evaluation.copy_to || '',
+    evaluation.objective_snapshot === undefined ? null : evaluation.objective_snapshot,
+    evaluation.spt_snapshot === undefined ? null : evaluation.spt_snapshot,
     evaluation.interval_snapshot === undefined ? null : evaluation.interval_snapshot,
     evaluation.created_at, evaluation.updated_at
   );
