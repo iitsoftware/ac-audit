@@ -353,6 +353,19 @@ form carries "Erfüllt", "Nicht erfüllt" and bare numbers like "-2" in that col
 - `PUT /api/safety-objectives/:id` — Update objective (partial: omitted fields keep their value)
 - `DELETE /api/safety-objectives/:id` — Delete objective (CASCADE to its SPI evaluations, snapshot to trash)
 
+### AC-SMS: SPI-Bewertungen (CM-006 Evaluations)
+- `GET /api/safety-objectives/:id/spi-evaluations` — Evaluations of one objective, chronological
+- `POST /api/safety-objectives/:id/spi-evaluations` — Create evaluation; `safety_year_id` and `department_id` are taken from the objective (denormalized), snapshots stay NULL
+- `GET /api/spi-evaluations/:id` — Single evaluation incl. the effective `eff_objective` / `eff_spt` / `eff_interval` (`COALESCE(snapshot, catalogue)`)
+- `PUT /api/spi-evaluations/:id` — Update (partial: omitted fields keep their value). Setting `decided_at` on a record that had none freezes `objective_snapshot` / `spt_snapshot` / `interval_snapshot` **once** — the signature makes the document reprint identically even after a later catalogue edit; a further save never rewrites them
+- `DELETE /api/spi-evaluations/:id` — Delete evaluation (snapshot to trash, parent `safety_objective`)
+
+`result_text` is free text and `rating` (`'' | 'POSITIV' | 'NEGATIV'`) is set by
+hand — neither is derived or overwritten server-side. The original CM-006 forms
+are inconsistent (`-2`, `Nicht erfüllt`, and `Erfüllt` + `Positiv` at SPT 20 /
+SPI 0), so any automatic rule would be factually wrong. `spt_direction` /
+`spt_value` only feed the frontend's rating *proposal*.
+
 ### Other
 - `GET /health` — Health check
 
@@ -425,14 +438,17 @@ them), so a **pre-schema** block at the top of `runMigrations()` drops the pair
 whenever `safety_objective` lacks `safety_year_id`; nothing is carried over.
 The drop has to run before `db.exec(schema)` because `CREATE TABLE IF NOT EXISTS`
 leaves an existing table untouched — it would never reshape the legacy pair.
-`routes/trash.js` still keeps `OBSOLETE_ENTITY_TYPES` for the *snapshots* of the
-old entities that may still sit in `trash_item`; they have no restore helper.
-Only `spi_evaluation` is left in that list — evaluations are never trashed on
-their own, they ride along in their objective's snapshot. A `safety_objective`
-snapshot is told apart by shape instead: the department-scoped predecessor has
-no `safety_year_id` and is rejected, the CM-006 row restores with its
-evaluations. A `safety_year` snapshot carries its catalogue for the same reason
-(the objectives cascade with the year).
+`routes/trash.js` has a restore helper for every AC-SMS type, so it no longer
+keeps an obsolete-type list. Snapshots of the *predecessors* that may still sit
+in `trash_item` are told apart by **shape** instead: neither the old
+`safety_objective` nor the old `spi_evaluation` knew `safety_year_id`, so a
+snapshot without that field is rejected with 409 and only the CM-006 rows
+restore. A `safety_objective` snapshot carries its evaluations and a
+`safety_year` snapshot its whole catalogue, because both cascade on delete.
+Deleting a single evaluation snapshots it on its own (parent
+`safety_objective`) — `snapshotSpiEvaluation()` reads the **raw** row, since the
+`COALESCE` columns of `getSpiEvaluation` would hand an unsigned draft the
+current catalogue as its snapshot and freeze a document nobody signed.
 
 ## Email Routing
 

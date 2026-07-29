@@ -3,7 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { db, stmts } = require('../db');
 const { logAction, formatDateDE } = require('../services/audit-log');
 const { getQmForDepartment, buildAuthoritySalutation, sendDocumentEmail } = require('../services/email');
-const { snapshotSafetyYear, snapshotSmsMeeting, snapshotSafetyObjective } = require('../services/trash');
+const { snapshotSafetyYear, snapshotSmsMeeting, snapshotSafetyObjective, snapshotSpiEvaluation } = require('../services/trash');
 const { seedObjectivesForYear } = require('../services/safety-defaults');
 const { generateSmsMeetingPdfBuffer } = require('../pdf/safety');
 
@@ -346,6 +346,130 @@ router.delete('/api/safety-objectives/:id', (req, res) => {
   } catch (e) { console.error('Trash snapshot failed:', e.message); }
   stmts.deleteSafetyObjective.run(req.params.id); // evaluations cascade
   logAction('Sicherheitsziel gelöscht', 'safety_objective', req.params.id, objectiveLabel(existing), '',
+    company ? company.name : '', dept ? dept.name : '');
+  res.status(204).end();
+});
+
+// ── SPI-Bewertungen (CM-006 Formular) ────────────────────
+
+// Eine Bewertung trägt keinen eigenen Namen — Log-Eintrag und Papierkorb brauchen
+// aber einen. Das Ziel benennt die Sache, das Bewertungsdatum unterscheidet die
+// mehreren Bewertungen desselben Ziels im selben Jahr. Nach der Unterschrift zählt
+// dabei der eingefrorene Wortlaut, den getSpiEvaluation als eff_objective liefert.
+function evaluationLabel(evaluation) {
+  const title = (evaluation.eff_objective || '').trim() || 'SPI-Bewertung';
+  const date = formatDateDE(evaluation.eval_date);
+  return date ? `${title} – ${date}` : title;
+}
+
+// eval_date und decided_at sind nullable TEXT, das Frontend leert sie aber als ''.
+// Nur echtes NULL fällt im ORDER BY der Listen auf created_at zurück und gilt als
+// "noch nicht unterschrieben" — '' wäre beides nicht.
+function normalizeDate(value) {
+  return value ? value : null;
+}
+
+// Die Unterschrift friert das Dokument ein: ab jetzt druckt es identisch nach,
+// auch wenn der Jahreskatalog danach noch korrigiert wird. Nur beim Übergang
+// leer -> gesetzt, damit ein späteres Speichern die Snapshots nicht überschreibt.
+// Ohne `previous` (POST) startet ein Entwurf ohne Snapshots; wird eine Bewertung
+// direkt unterschrieben angelegt, friert sie sofort ein — sonst hinge ein
+// unterschriebenes Dokument doch wieder am lebenden Katalog.
+// Rückgabe in der Spaltenreihenfolge von createSpiEvaluation/updateSpiEvaluation:
+// objective_snapshot, spt_snapshot, interval_snapshot.
+function signingSnapshots(objective, decidedAt, previous = {}) {
+  const signing = !previous.decided_at && !!decidedAt;
+  if (signing) return [objective.title, objective.spt, objective.interval_months];
+  return [
+    previous.objective_snapshot !== undefined ? previous.objective_snapshot : null,
+    previous.spt_snapshot !== undefined ? previous.spt_snapshot : null,
+    previous.interval_snapshot !== undefined ? previous.interval_snapshot : null,
+  ];
+}
+
+router.get('/api/safety-objectives/:id/spi-evaluations', (req, res) => {
+  const objective = stmts.getSafetyObjective.get(req.params.id);
+  if (!objective) return res.status(404).json({ error: 'Safety objective not found' });
+  res.json(stmts.getSpiEvaluationsByObjective.all(req.params.id));
+});
+
+router.post('/api/safety-objectives/:id/spi-evaluations', (req, res) => {
+  const objective = stmts.getSafetyObjective.get(req.params.id);
+  if (!objective) return res.status(404).json({ error: 'Safety objective not found' });
+  const { dept, company } = deptContext(objective.department_id);
+  const b = req.body;
+  const decidedAt = normalizeDate(b.decided_at);
+  const id = uuidv4();
+  // safety_year_id und department_id kommen aus dem Ziel: beide sind denormalisiert,
+  // damit Jahres-PDF, Papierkorb-Snapshot und Log-Eintrag ohne Join auskommen.
+  // result_text und rating werden übernommen wie eingegeben — die Original-PDFs
+  // führen "Erfüllt", "Nicht erfüllt" und blanke Zahlen wie "-2" nebeneinander und
+  // bewerten SPT 20 / SPI 0 auch schon mal als "Positiv"; eine Serverautomatik
+  // wäre hier fachlich falsch.
+  stmts.createSpiEvaluation.run(
+    id, objective.id, objective.safety_year_id, objective.department_id,
+    normalizeDate(b.eval_date), b.spi_value || '', b.result_text || '', b.rating || '',
+    b.cause_analysis || '', b.measures || '', b.decision || '', b.decision_place || '',
+    decidedAt, b.copy_to || '',
+    ...signingSnapshots(objective, decidedAt)
+  );
+  const evaluation = stmts.getSpiEvaluation.get(id);
+  logAction('SPI-Bewertung erstellt', 'spi_evaluation', id, evaluationLabel(evaluation), '',
+    company ? company.name : '', dept ? dept.name : '');
+  res.status(201).json(evaluation);
+});
+
+router.get('/api/spi-evaluations/:id', (req, res) => {
+  const evaluation = stmts.getSpiEvaluation.get(req.params.id);
+  if (!evaluation) return res.status(404).json({ error: 'SPI evaluation not found' });
+  res.json(evaluation);
+});
+
+// Partiell wie PUT /api/sms-meetings/:id — ausgelassene Felder behalten ihren Wert.
+router.put('/api/spi-evaluations/:id', (req, res) => {
+  const existing = stmts.getSpiEvaluation.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'SPI evaluation not found' });
+  // Der JOIN in getSpiEvaluation garantiert das Ziel — ohne es gäbe es die Zeile nicht.
+  const objective = stmts.getSafetyObjective.get(existing.safety_objective_id);
+  const b = req.body;
+  const decidedAt = b.decided_at !== undefined ? normalizeDate(b.decided_at) : existing.decided_at;
+  stmts.updateSpiEvaluation.run(
+    b.eval_date !== undefined ? normalizeDate(b.eval_date) : existing.eval_date,
+    b.spi_value !== undefined ? b.spi_value : existing.spi_value,
+    b.result_text !== undefined ? b.result_text : existing.result_text,
+    b.rating !== undefined ? b.rating : existing.rating,
+    b.cause_analysis !== undefined ? b.cause_analysis : existing.cause_analysis,
+    b.measures !== undefined ? b.measures : existing.measures,
+    b.decision !== undefined ? b.decision : existing.decision,
+    b.decision_place !== undefined ? b.decision_place : existing.decision_place,
+    decidedAt,
+    b.copy_to !== undefined ? b.copy_to : existing.copy_to,
+    ...signingSnapshots(objective, decidedAt, existing),
+    req.params.id
+  );
+  const evaluation = stmts.getSpiEvaluation.get(req.params.id);
+  const { dept, company } = deptContext(evaluation.department_id);
+  // Die Unterschrift ist der prüfrelevante Moment und steht deshalb im Log-Detail.
+  const detail = !existing.decided_at && decidedAt ? `Unterschrieben: ${formatDateDE(decidedAt)}` : '';
+  logAction('SPI-Bewertung geändert', 'spi_evaluation', req.params.id, evaluationLabel(evaluation), detail,
+    company ? company.name : '', dept ? dept.name : '');
+  res.json(evaluation);
+});
+
+router.delete('/api/spi-evaluations/:id', (req, res) => {
+  const existing = stmts.getSpiEvaluation.get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'SPI evaluation not found' });
+  const { dept, company } = deptContext(existing.department_id);
+  const label = evaluationLabel(existing);
+  try {
+    const snapshot = snapshotSpiEvaluation(req.params.id);
+    if (snapshot) {
+      stmts.createTrashItem.run(uuidv4(), 'spi_evaluation', req.params.id, label,
+        company ? company.name : '', dept ? dept.name : '', existing.safety_objective_id, 'safety_objective', JSON.stringify(snapshot));
+    }
+  } catch (e) { console.error('Trash snapshot failed:', e.message); }
+  stmts.deleteSpiEvaluation.run(req.params.id);
+  logAction('SPI-Bewertung gelöscht', 'spi_evaluation', req.params.id, label, '',
     company ? company.name : '', dept ? dept.name : '');
   res.status(204).end();
 });

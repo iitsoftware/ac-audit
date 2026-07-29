@@ -43,6 +43,14 @@ function snapshotSmsMeeting(meetingId) {
   return stmts.getSmsMeeting.get(meetingId) || null;
 }
 
+// Eine einzeln gelöschte Bewertung hat keine Kinder — die rohe Zeile reicht. Sie
+// muss roh sein: getSpiEvaluation liefert zusätzlich die COALESCE-Spalten, und ein
+// unsignierter Entwurf käme so mit dem Katalogstand als Snapshot zurück, also
+// eingefroren, obwohl ihn niemand unterschrieben hat.
+function snapshotSpiEvaluation(evaluationId) {
+  return stmts.getSpiEvaluationRaw.get(evaluationId) || null;
+}
+
 // Ein Ziel nimmt seine Bewertungen mit — sie hängen per ON DELETE CASCADE am Ziel
 // und wären ohne den Snapshot beim Wiederherstellen verloren.
 function snapshotSafetyObjective(objectiveId) {
@@ -216,6 +224,7 @@ module.exports = {
   snapshotAuditPlanLine,
   snapshotAuditPlan,
   snapshotSmsMeeting,
+  snapshotSpiEvaluation,
   snapshotSafetyObjective,
   snapshotSafetyYear,
   restoreCapItem,
