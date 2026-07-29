@@ -1,10 +1,12 @@
 const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
+const { getQmForDepartment } = require('../services/email');
 const { createPdfDoc, addPdfFooter } = require('./common');
 
 // LBA-Formularreferenz + App-Hinweis in einem Label: addPdfFooter() ersetzt mit
 // `label` den Default 'Erstellt mit ac-audit', deshalb beides hier zusammengefasst.
 const FOOTER_LABEL = 'CM-025, SRB Meeting, Rev. 1, 28.08.2024  |  Erstellt mit ac-sms';
+const FOOTER_LABEL_SPI = 'CM-006, Ergebnisse SPI, Rev. 0, 28.08.2024  |  Erstellt mit ac-sms';
 const PROTOCOL_COLOR = '#1f4e79';
 const PAGE_BOTTOM = 740;
 
@@ -219,6 +221,108 @@ function renderSrbMeetingPdf(doc, { meeting, year, dept, company, logoRow, start
   return form.getY();
 }
 
+// ── CM-006 'Ergebnisse SPI / Safety Performance Analysis' ──
+
+// One page per evaluation: header, the six-column result table with exactly one
+// data row, the two analysis blocks, the Safety-Manager decision and signature.
+function renderSpiEvaluationPdf(doc, { ev, obj, year, dept, company, logoRow, qm, startY }) {
+  const header = { company, dept, logoRow, title: 'Safety Performance Analysis' };
+  const form = makeFormHelpers(doc, drawHeader(doc, header, startY));
+  const { contentW, drawTextBlock } = form;
+
+  // The effective values arrive ready-made from getSpiEvaluation (COALESCE of
+  // snapshot and catalogue); the catalogue row `obj` is only a fallback for
+  // callers that hand in the raw row without the join.
+  const eff = (effectiveValue, catalogueKey) =>
+    effectiveValue != null ? effectiveValue : (obj ? obj[catalogueKey] : '');
+  const interval = eff(ev.eff_interval, 'interval_months');
+
+  // Year and evaluation date sit above the result table on the original form.
+  const subLine = [
+    year && year.year ? `Safety Year ${year.year}` : '',
+    ev.eval_date ? `Bewertung vom ${formatDateDE(ev.eval_date)}` : ''
+  ].filter(Boolean).join('  |  ');
+  if (subLine) {
+    doc.fontSize(9).font('Helvetica').fillColor('#000000').text(subLine, 50, form.getY());
+    form.setY(form.getY() + 20);
+  }
+
+  // ── Result table: grey header row plus EXACTLY ONE data row ──
+  // Interval stays the bare number as printed on the form (no 'Monate' suffix).
+  const cols = [
+    { label: 'Objective', value: eff(ev.eff_objective, 'title'), w: 120 },
+    { label: 'SPT', value: eff(ev.eff_spt, 'spt'), w: 100 },
+    { label: 'Intervall', value: interval == null ? '' : String(interval), w: 45 },
+    { label: 'SPI', value: ev.spi_value, w: 55 },
+    { label: 'Ergebnis', value: ev.result_text, w: 95 },
+    { label: 'Bewertung', value: ev.rating, w: 0 }
+  ];
+  cols[cols.length - 1].w = contentW - cols.reduce((sum, c) => sum + c.w, 0);
+
+  const cellText = c => (c.value == null ? '' : String(c.value));
+  const headH = 18;
+  doc.strokeColor('#d0d0d0').lineWidth(0.5);
+  let y = form.getY();
+
+  doc.rect(50, y, contentW, headH).fill('#e8e8e8');
+  doc.fillColor('#000000').fontSize(8).font('Helvetica-Bold');
+  let x = 50;
+  for (const col of cols) {
+    doc.rect(x, y, col.w, headH).stroke();
+    doc.text(col.label, x + 4, y + 5, { width: col.w - 8 });
+    x += col.w;
+  }
+  y += headH;
+
+  doc.font('Helvetica');
+  const rowH = Math.max(20, ...cols.map(c => doc.heightOfString(cellText(c), { width: c.w - 8 }) + 8));
+  x = 50;
+  for (const col of cols) {
+    doc.rect(x, y, col.w, rowH).stroke();
+    doc.text(cellText(col), x + 4, y + 4, { width: col.w - 8 });
+    x += col.w;
+  }
+  form.setY(y + rowH + 15);
+
+  // ── Cause, measures, decision ──
+  drawTextBlock('Was könnte zu diesem Ergebnis geführt haben? Was könnte die Ursache sein?', ev.cause_analysis, 90);
+  drawTextBlock('Welche Maßnahmen könnten zur Erreichung des Ziels führen? Beschaffung/Lösung', ev.measures, 90);
+  drawTextBlock('Der Safety Manager hat sich für folgende Maßnahme zur Verbesserung entschieden:', ev.decision, 70);
+
+  // ── Signature block (layout as in pdf/risk.js, place/date from the evaluation) ──
+  y = form.getY();
+  if (y + 130 > PAGE_BOTTOM) { doc.addPage(); y = drawHeader(doc, header, 50); }
+
+  const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
+  const placeDate = [ev.decision_place, formatDateDE(ev.decided_at)].filter(Boolean).join(', ');
+  doc.fontSize(9).font('Helvetica').fillColor('#000000').text(placeDate, 50, y);
+  y += 20;
+
+  // Signature image only on a signed evaluation: while decided_at is missing the
+  // record is a draft, so the line stays empty and can be signed by hand.
+  if (qm && ev.decided_at) {
+    const sigRow = stmts.getPersonSignature.get(qm.id);
+    if (sigRow && sigRow.signature) {
+      try { doc.image(sigRow.signature, 50, y, { height: 40 }); y += 45; } catch { /* skip */ }
+    }
+  }
+
+  doc.moveTo(50, y).lineTo(250, y).strokeColor('#000000').lineWidth(0.5).stroke();
+  y += 5;
+  doc.fontSize(9).font('Helvetica').text(qmName, 50, y);
+  y += 12;
+  doc.text('Safety Manager', 50, y);
+  y += 30;
+
+  // Distribution list as on the original form ('MM, ACC').
+  doc.fontSize(9).font('Helvetica-Bold').text('Kopie an:', 50, y);
+  doc.font('Helvetica').text(ev.copy_to || '', 110, y);
+  y += 14;
+
+  form.setY(y);
+  return form.getY();
+}
+
 // ── Buffer generator (analog pdf/cap.js) ──
 
 function generateSmsMeetingPdfBuffer(id) {
@@ -242,7 +346,45 @@ function generateSmsMeetingPdfBuffer(id) {
   });
 }
 
+// One page per evaluation — download and email share this generator.
+function generateSpiEvaluationsPdfBuffer(ids) {
+  return new Promise((resolve, reject) => {
+    if (!ids || ids.length === 0) return reject(new Error('No IDs provided'));
+    const doc = createPdfDoc({ margin: 50 });
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('error', reject);
+
+    let dept, company;
+    for (let idx = 0; idx < ids.length; idx++) {
+      const ev = stmts.getSpiEvaluation.get(ids[idx]);
+      if (!ev) continue;
+      const obj = stmts.getSafetyObjective.get(ev.safety_objective_id);
+      const year = stmts.getSafetyYear.get(ev.safety_year_id);
+      dept = stmts.getDepartment.get(ev.department_id);
+      company = stmts.getCompany.get(dept.company_id);
+      const logoRow = stmts.getCompanyLogo.get(company.id);
+      const qm = getQmForDepartment(company.id, dept.id);
+      if (idx > 0) doc.addPage();
+      renderSpiEvaluationPdf(doc, { ev, obj, year, dept, company, logoRow, qm, startY: 50 });
+    }
+    addPdfFooter(doc, { label: FOOTER_LABEL_SPI });
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), dept, company }));
+    doc.end();
+  });
+}
+
+// Single PDF through the same renderer; the up-front existence check yields a
+// speaking error like generateSmsMeetingPdfBuffer instead of an empty PDF.
+function generateSpiEvaluationPdfBuffer(id) {
+  if (!stmts.getSpiEvaluation.get(id)) return Promise.reject(new Error('SPI evaluation not found'));
+  return generateSpiEvaluationsPdfBuffer([id]);
+}
+
 module.exports = {
   renderSrbMeetingPdf,
-  generateSmsMeetingPdfBuffer
+  generateSmsMeetingPdfBuffer,
+  renderSpiEvaluationPdf,
+  generateSpiEvaluationPdfBuffer,
+  generateSpiEvaluationsPdfBuffer
 };
