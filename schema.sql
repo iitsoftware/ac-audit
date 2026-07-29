@@ -294,6 +294,69 @@ CREATE TABLE IF NOT EXISTS sms_meeting (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Safety objective catalogue in CM-006 form. The catalogue hangs off the
+-- safety year, not the department: a new year copies the previous year's
+-- catalogue, and both stay frozen against each other afterwards.
+-- department_id stays denormalized for the same reason as on sms_meeting —
+-- the year-package PDF, the trash snapshot, the PDF header and the audit-log
+-- entry all need the department without a join.
+CREATE TABLE IF NOT EXISTS safety_objective (
+  id TEXT PRIMARY KEY,
+  safety_year_id TEXT NOT NULL REFERENCES safety_year(id) ON DELETE CASCADE,
+  department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
+  sort_order INTEGER DEFAULT 0,
+  -- CM-006 column "Objective", the short label (e.g. "Gefahrenliste")
+  title TEXT DEFAULT '',
+  -- MOE full text ("Unser Ziel ist es, mind. 20 ermittelte Gefahren …")
+  objective TEXT DEFAULT '',
+  -- Safety Performance Target as printed ("Mindestens 20 Stck.")
+  spt TEXT DEFAULT '',
+  -- '' | 'MIN' | 'MAX' plus the numeric target — machine-readable half of spt,
+  -- used only to propose a rating in the frontend, never printed.
+  spt_direction TEXT DEFAULT '',
+  spt_value REAL,
+  spi_description TEXT DEFAULT '',
+  interval_months INTEGER DEFAULT 12,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_safety_objective_year ON safety_objective(safety_year_id, sort_order);
+
+-- SPI evaluation of one objective. Deliberately NOT unique per
+-- (safety_objective_id, safety_year_id): intervals shorter than 12 months and
+-- re-evaluations produce several evaluations per objective and year.
+-- The *_snapshot columns stay NULL until decided_at is set — signing the
+-- evaluation freezes the objective wording, the target and the interval as
+-- they were at that moment, so a later catalogue edit cannot rewrite history.
+CREATE TABLE IF NOT EXISTS spi_evaluation (
+  id TEXT PRIMARY KEY,
+  safety_objective_id TEXT NOT NULL REFERENCES safety_objective(id) ON DELETE CASCADE,
+  safety_year_id TEXT NOT NULL REFERENCES safety_year(id) ON DELETE CASCADE,
+  department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
+  eval_date TEXT,
+  -- measured value, printed verbatim
+  spi_value TEXT DEFAULT '',
+  -- CM-006 "Ergebnis" is free text: "Erfüllt", "-2" and "Nicht erfüllt" all
+  -- appear in the original form, so it is stored as typed.
+  result_text TEXT DEFAULT '',
+  -- '' | 'POSITIV' | 'NEGATIV'
+  rating TEXT DEFAULT '',
+  cause_analysis TEXT DEFAULT '',
+  measures TEXT DEFAULT '',
+  decision TEXT DEFAULT '',
+  decision_place TEXT DEFAULT '',
+  decided_at TEXT,
+  copy_to TEXT DEFAULT '',
+  objective_snapshot TEXT,
+  spt_snapshot TEXT,
+  interval_snapshot INTEGER,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_spi_evaluation_year ON spi_evaluation(safety_year_id);
+CREATE INDEX IF NOT EXISTS idx_spi_evaluation_objective ON spi_evaluation(safety_objective_id);
+
 CREATE TABLE IF NOT EXISTS trash_item (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,

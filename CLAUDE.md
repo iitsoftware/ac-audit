@@ -146,11 +146,28 @@ Company + Department (shared)
 
 Department (AC-SMS)
   └── SafetyYear (id, department_id, year) — navigation root, unique per (department_id, year)
-       └── SmsMeeting (id, safety_year_id, department_id, meeting_date, location, participants, participants_excused, meeting_no, topics, general_result, positives, negatives, improvements, remarks, outlook) — CM-025 SRB meeting minutes
+       ├── SmsMeeting (id, safety_year_id, department_id, meeting_date, location, participants, participants_excused, meeting_no, topics, general_result, positives, negatives, improvements, remarks, outlook) — CM-025 SRB meeting minutes
+       └── SafetyObjective (id, safety_year_id, department_id, sort_order, title, objective, spt, spt_direction, spt_value, spi_description, interval_months, active) — CM-006 objective catalogue
+            └── SpiEvaluation (id, safety_objective_id, safety_year_id, department_id, eval_date, spi_value, result_text, rating, cause_analysis, measures, decision, decision_place, decided_at, copy_to, objective_snapshot, spt_snapshot, interval_snapshot)
 ```
 
 `sms_meeting.department_id` is denormalized on purpose: trash snapshot, PDF header
 and audit-log entry all need the department without walking through `safety_year`.
+`safety_objective` and `spi_evaluation` carry both `safety_year_id` **and**
+`department_id` for the same reason — year-package PDF, trash snapshot, PDF header
+and audit-log entry each need the department without a join.
+
+The objective catalogue hangs off the **safety year**, not the department: a new
+year copies the previous year's catalogue and the years stay frozen against each
+other afterwards. `spi_evaluation` deliberately has **no** UNIQUE index on
+(safety_objective_id, safety_year_id) — intervals shorter than 12 months and
+re-evaluations produce several evaluations per objective and year. Its
+`*_snapshot` columns stay NULL until `decided_at` is set; signing an evaluation
+freezes objective wording, target and interval, so a later catalogue edit cannot
+rewrite a signed record. `spt` is the printed target text ("Mindestens 20 Stck.");
+`spt_direction`/`spt_value` are its machine-readable half, used only to propose a
+rating in the frontend. `result_text` is free text because the original CM-006
+form carries "Erfüllt", "Nicht erfüllt" and bare numbers like "-2" in that column.
 
 ## API Endpoints
 
@@ -388,14 +405,17 @@ and audit-log entry all need the department without walking through `safety_year
 
 ## Database Tables
 
-company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log, trash_item, change_request, change_task, risk_analysis, risk_analysis_history, risk_item, safety_year, sms_meeting
+company, department, audit_plan, audit_plan_line, audit_checklist_item, checklist_evidence_file, cap_item, cap_evidence_file, five_why, person, app_setting, audit_log, trash_item, change_request, change_task, risk_analysis, risk_analysis_history, risk_item, safety_year, sms_meeting, safety_objective, spi_evaluation
 
-`safety_objective` and `spi_evaluation` are **no longer part of the schema** — the
-CM-025 rework replaced them with `safety_year` + `sms_meeting`. Nothing drops them,
-so existing databases keep their tables and rows; `migrations.js` still recreates
-them on fresh databases only because `db.js` prepares statements against them.
-Both are scheduled for removal in a later refactor — delete the migration block
-together with the last consumer.
+`safety_objective` and `spi_evaluation` are back in `schema.sql` in CM-006 form —
+scoped to the safety year, not the department. The department-scoped predecessors
+had been dead code since the CM-025 rework (no route, no prepared statement read
+them), so a **pre-schema** block at the top of `runMigrations()` drops the pair
+whenever `safety_objective` lacks `safety_year_id`; nothing is carried over.
+The drop has to run before `db.exec(schema)` because `CREATE TABLE IF NOT EXISTS`
+leaves an existing table untouched — it would never reshape the legacy pair.
+`routes/trash.js` keeps `OBSOLETE_ENTITY_TYPES` for the *snapshots* of the old
+entities that may still sit in `trash_item`; they have no restore helper.
 
 ## Email Routing
 

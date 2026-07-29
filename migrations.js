@@ -2,6 +2,27 @@ const fs = require('fs');
 const path = require('path');
 
 function runMigrations(db) {
+  // Pre-schema migration: drop the legacy safety_objective/spi_evaluation pair.
+  // The old tables hung the catalogue off the department and were dead code
+  // since the CM-025 rework — no route, no prepared statement ever read them,
+  // so there is nothing to carry over. schema.sql now defines both in CM-006
+  // form against the safety year, and CREATE TABLE IF NOT EXISTS would leave
+  // an existing table untouched — hence the drop has to run first.
+  // spi_evaluation goes first: it references safety_objective.
+  try {
+    // Throws on a legacy table (no such column) and on a fresh database (no
+    // such table). Both end in the same DROP IF EXISTS, so one probe is enough.
+    db.prepare('SELECT safety_year_id FROM safety_objective LIMIT 1').get();
+  } catch {
+    try {
+      const dropLegacySafetyTables = db.transaction(() => {
+        db.exec('DROP TABLE IF EXISTS spi_evaluation');
+        db.exec('DROP TABLE IF EXISTS safety_objective');
+      });
+      dropLegacySafetyTables();
+    } catch { /* ignore */ }
+  }
+
   // Run schema
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
@@ -247,45 +268,6 @@ function runMigrations(db) {
       try { db.exec(col.sql); } catch { /* already exists */ }
     }
   }
-
-  // safety_objective and spi_evaluation are legacy tables: schema.sql no longer
-  // creates them and nothing drops them, so existing databases keep their rows.
-  // Recreated here on fresh databases only for as long as db.js still prepares
-  // statements against them. Delete this block together with the last consumer.
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS safety_objective (
-        id TEXT PRIMARY KEY,
-        department_id TEXT NOT NULL REFERENCES department(id) ON DELETE CASCADE,
-        sort_order INTEGER DEFAULT 0,
-        objective TEXT DEFAULT '',
-        spt TEXT DEFAULT '',
-        interval_months INTEGER DEFAULT 12,
-        active INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
-      CREATE TABLE IF NOT EXISTS spi_evaluation (
-        id TEXT PRIMARY KEY,
-        safety_objective_id TEXT NOT NULL REFERENCES safety_objective(id) ON DELETE CASCADE,
-        eval_date TEXT,
-        spt_snapshot TEXT DEFAULT '',
-        interval_snapshot INTEGER,
-        spi_value TEXT DEFAULT '',
-        fulfilled INTEGER DEFAULT 1,
-        result TEXT DEFAULT 'POSITIV',
-        improvement INTEGER DEFAULT 0,
-        cause_analysis TEXT DEFAULT '',
-        measures TEXT DEFAULT '',
-        decision TEXT DEFAULT '',
-        decision_place TEXT DEFAULT '',
-        decided_at TEXT,
-        closed_at TEXT,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
-    `);
-  } catch { /* already present */ }
 
   // Backfill: attach every unlinked meeting to the safety_year of its meeting
   // date (falling back to created_at). Idempotent — a second start finds nothing.
