@@ -60,7 +60,7 @@ ac-audit/
 │   └── load-resource.js   # loadResource(stmtKey, paramKey, msg) — 404 helper factory
 ├── routes/
 │   ├── auth.js            # /login (GET/POST), /logout
-│   ├── pages.js           # EJS-rendered page routes (/, /home, /companies, /change, /organization, /settings, /logs, /trash)
+│   ├── pages.js           # EJS-rendered page routes (/, /home, /companies, /change, /safety, /organization, /settings, /logs, /trash)
 │   ├── health.js          # /health
 │   ├── home.js            # /api/home/stats
 │   ├── companies.js       # Company CRUD + logo
@@ -73,6 +73,7 @@ ac-audit/
 │   ├── change-requests.js # Change request CRUD + Form 2 + import + PDF + email
 │   ├── change-tasks.js    # Change task CRUD
 │   ├── risk-analysis.js   # Risk analysis CRUD + items + history + PDF + email + import
+│   ├── safety.js          # AC-SMS: safety years + SRB meetings + objective catalogue + SPI evaluations, each with PDF + email
 │   ├── settings.js        # Settings CRUD + SMTP test
 │   ├── backup.js          # /api/backup/now + /api/backup/list
 │   ├── logs.js            # /api/logs
@@ -85,13 +86,14 @@ ac-audit/
 │   ├── backup.js          # SQLite Online Backup API + startBackupScheduler
 │   ├── notifications.js   # CAP deadline notifications + startNotifyScheduler
 │   ├── log-cleanup.js     # Audit-log retention scheduler
-│   ├── safety-defaults.js # DEFAULT_SRB_TOPICS + getSrbDefaultTopics() (AC-SMS Standard-Themen)
+│   ├── safety-defaults.js # DEFAULT_SRB_TOPICS + getSrbDefaultTopics() (AC-SMS Standard-Themen), DEFAULT_SAFETY_OBJECTIVES + seedObjectivesForYear() (CM-006 Zielkatalog)
 │   └── form2.js           # EASA Form 2 PDF filling (pdf-lib)
 ├── pdf/
 │   ├── common.js          # createPdfDoc({ landscape, margin }) + addPdfFooter
 │   ├── audit.js           # renderAuditPlanPdf, renderAuditLinePdf + buffer generators
 │   ├── cap.js             # renderCapItemPdf + generateCapItemsPdfBuffer
-│   └── risk.js            # renderRiskAnalysisPdf + buffer generator
+│   ├── risk.js            # renderRiskAnalysisPdf + buffer generator
+│   └── safety.js          # renderSrbMeetingPdf (CM-025), renderSpiEvaluationPdf (CM-006), renderSafetyObjectivesPdf (MOE-Anhangtabelle) + buffer generators (single + batch)
 ├── imports/
 │   ├── audit.js           # parseAuditChecklist (xlsx), parseAuditPlanDocx (docx)
 │   ├── change.js          # parseChangeTasks (xlsx/docx)
@@ -101,6 +103,7 @@ ac-audit/
 │   ├── app.js             # Shared: fetchJSON, escapeHtml, toast, date formatting, parseDateDE, saveNavState/loadNavState, renderCompanyTabs/renderDeptTabs, nav toggles, trash badge
 │   ├── companies.js       # Main frontend logic (2000+ lines)
 │   ├── change.js          # AC-Change frontend (change requests, tasks, risk analysis, Form 2)
+│   ├── safety.js          # AC-SMS frontend (safety years, SRB meetings, objective catalogue, SPI evaluations)
 │   ├── organization.js    # Organization management (companies, departments, persons)
 │   ├── risk-matrix.js     # Risk probability/severity matrix widget
 │   ├── home.js            # Home dashboard logic
@@ -109,8 +112,11 @@ ac-audit/
 │   └── logs.js            # Audit log page logic
 ├── views/
 │   ├── layout.ejs         # Base HTML shell (nav with toggle buttons, CSS, scripts)
+│   ├── partials/
+│   │   └── dialog.ejs     # Shared <dialog> shell (id, title, body, optional footer/formId)
 │   ├── companies.ejs      # Main page template (dialogs, file inputs)
 │   ├── change.ejs         # AC-Change page (change requests, tasks, risk, Form 2)
+│   ├── safety.ejs         # AC-SMS page (year tabs: SRB meetings + Sicherheitsziele & SPI)
 │   ├── organization.ejs   # Organization management page (companies, departments, persons)
 │   ├── home.ejs           # Home dashboard
 │   ├── settings.ejs       # Settings page (SMTP, backup, CAP deadlines, notifications)
@@ -423,6 +429,10 @@ SPI 0), so any automatic rule would be factually wrong. `spt_direction` /
 - The rating proposal in `#spi-form-rating-hint` (`Vorschlag: Negativ (SPI 0 < SPT min. 20)`) is computed **client-side only** and never writes — it neither sets the radios nor is it sent to the server. It needs `spt_direction`, `spt_value` and a strictly numeric `spi_value` (a German decimal comma is accepted, free text like "Erfüllt" is not), otherwise the hint stays empty. The original CM-006 forms rate SPT 20 / SPI 0 as "Erfüllt / Positiv", so the call belongs to the Safety Manager, not to an automatism
 - The evaluation panel opens on a row click with the objective's **newest** evaluation (the list endpoint sorts ascending, so it is the last element) and blank for the first one; the per-row `+` opens an additional evaluation, which is what intervals shorter than 12 months need. `#spi-form-context` mirrors the `COALESCE(snapshot, catalogue)` of `getSpiEvaluation` with `??` — only NULL falls back to the catalogue, an empty snapshot is a valid freeze
 - AC-SMS SRB standard topics: the setting `sms_default_topics` overrides the built-in fallback `DEFAULT_SRB_TOPICS` in `services/safety-defaults.js` (edited on the AC-SMS settings tab). `getSrbDefaultTopics()` resolves the two and the `/safety` route in `routes/pages.js` passes the result as the EJS local `srbDefaultTopics` into a hidden textarea (`#srb-default-topics`, `views/safety.ejs`); `public/safety.js` copies that value into the THEMEN field when a **new** protocol is opened. The copy is a snapshot — a later change of the default never rewrites existing protocols. An empty setting means "use the built-in topics", which is why there is no reset button
+- The objective catalogue is **copied per year**, not shared: `seedObjectivesForYear()` in `services/safety-defaults.js` fills a fresh year from the last year of the same department that has a catalogue, and only otherwise from the built-in `DEFAULT_SAFETY_OBJECTIVES`. It is a `db.transaction()` and idempotent — a non-empty catalogue is a no-op, so creating the year, the `#objectives-empty` bootstrap buttons and a retry all call the same function. An explicit `source: 'previous'` without a source year does **not** fall back to the default: the caller asked for a specific origin and gets a 409 instead of a silently foreign catalogue. Only catalogue fields travel, never evaluations. That is also why there is deliberately **no** settings override in the style of `sms_default_topics` — the living catalogue of the previous year is the real default, an app setting would compete with it and freeze the state of the day it was edited
+- Snapshot semantics of a CM-006 evaluation: `objective_snapshot` / `spt_snapshot` / `interval_snapshot` stay NULL as long as `decided_at` is NULL. Setting `decided_at` on a record that had none — on create as well as on update — freezes the objective wording, the SPT and the interval **once** (`signingSnapshots()` in `routes/safety.js`); every later save carries the three columns over verbatim, and clearing `decided_at` again does not release the freeze either. Everything that *reads* an evaluation — `getSpiEvaluation` (`eff_objective` / `eff_spt` / `eff_interval`), the CM-006 PDF, `#spi-form-context` — goes through `COALESCE(snapshot, catalogue)`, so a draft follows catalogue edits and a signed document reprints identically forever. NULL is the only trigger for the fallback: an empty snapshot is a valid freeze (`spt` is optional in the catalogue), which is why trash restore and the frontend guard with `=== undefined` / `??` instead of `||`
+- Derived, never stored, in the catalogue table: `Nr.` is the row index like the `Lfd.` of the SRB table, `Datum der Feststellung` is the `eval_date` of the **last** evaluation (`last_eval_date`), and the "fällig" badge is that date plus `interval_months` against today — an objective that was never evaluated is due as well, a deactivated one (`active = 0`) never is. Nothing of this has a column: numbering stays gapless across reorder and delete, a corrected evaluation date immediately moves the due date, and changing `interval_months` re-evaluates every row without a migration
+- `Ergebnis` (`result_text`) is free text and `Bewertung` (`rating`) is set by hand to `''` / `POSITIV` / `NEGATIV` — neither is derived or overwritten server-side, and the frontend proposal from `spt_direction` / `spt_value` only renders a hint, it never writes a field or reaches the server. Reason: the original CM-006 forms contradict each other (`-2` and `Nicht erfüllt` in the same column, `Erfüllt` + `Positiv` at SPT 20 / SPI 0), so every automatic rule would print something the Safety Manager did not decide
 
 ## Accessibility
 
