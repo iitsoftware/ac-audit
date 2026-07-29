@@ -213,4 +213,18 @@
     } catch (e) { toast(e?.message || 'Senden fehlgeschlagen', 'error'); }
     finally { notifyTestBtn.disabled = false; notifyTestBtn.textContent = origText; }
   });
+
+  // ── AC-SMS: SRB Standard-Themen ────────────────────────
+  // Leerer Wert ist gueltig und bedeutet "eingebaute Standard-Themen verwenden"
+  // (siehe getSrbDefaultTopics() in services/safety-defaults.js) — deshalb wird
+  // hier weder validiert noch der Default eingesetzt.
+  document.getElementById('sms-default-topics').value = settings.sms_default_topics || '';
+
+  async function saveSmsTopics() {
+    const data = { sms_default_topics: document.getElementById('sms-default-topics').value.trim() };
+    try { await fetchJSON('/api/settings', { method: 'PUT', body: data }); }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); }
+  }
+
+  document.querySelectorAll('#sms-topics-form textarea').forEach(el => el.addEventListener('blur', saveSmsTopics));
 })();
