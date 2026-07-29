@@ -32,6 +32,11 @@ router.get('/change', (req, res) => {
   renderPage(res, 'change', { activePage: 'change', pageScript: 'change.js' });
 });
 
+// Die SRB-Standard-Themen kommen bewusst als EJS-Local und nicht über
+// `GET /api/settings`: dieser Endpunkt liefert sämtliche Settings inklusive
+// `smtp_pass` aus, was auf der Safety-Seite nichts zu suchen hat.
+// Folge des serverseitigen Renderns: eine Änderung in den Einstellungen wird
+// erst nach einem Reload von /safety sichtbar — so gewollt.
 router.get('/safety', (req, res) => {
   renderPage(res, 'safety', {
     activePage: 'safety',
