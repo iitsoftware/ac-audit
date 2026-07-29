@@ -631,6 +631,112 @@ const stmts = {
     'DELETE FROM sms_meeting WHERE id = ?'
   ),
 
+  // Sicherheitszielkatalog (CM-006 Objectives)
+  // Der Katalog hängt am Sicherheitsjahr, nicht an der Abteilung: ein neues Jahr
+  // kopiert den Vorjahreskatalog, danach sind die Jahre gegeneinander eingefroren.
+  // Diese Liste IST die MOE-Anhangtabelle — die letzte Bewertung je Ziel liefert
+  // die gefüllten SPI- und Datumsspalten, damit das Frontend keinen N+1-Read braucht.
+  // "Letzte" = jüngster Datensatz über COALESCE(eval_date, created_at) DESC. Ein frisch
+  // angelegter Entwurf ohne eval_date zählt dabei mit seinem created_at und verdrängt
+  // ältere Bewertungen — die Zeile zeigt bewusst den aktuellen Bearbeitungsstand (dann
+  // eben mit leeren SPI-Spalten), eval_count daneben die Gesamtzahl der Bewertungen.
+  getSafetyObjectivesByYear: db.prepare(
+    `SELECT o.*,
+            e.eval_date   AS last_eval_date,
+            e.spi_value   AS last_spi_value,
+            e.result_text AS last_result_text,
+            e.rating      AS last_rating,
+            (SELECT COUNT(*) FROM spi_evaluation x WHERE x.safety_objective_id = o.id) AS eval_count
+     FROM safety_objective o
+     LEFT JOIN spi_evaluation e ON e.id = (
+       SELECT x.id FROM spi_evaluation x WHERE x.safety_objective_id = o.id
+       ORDER BY COALESCE(x.eval_date, x.created_at) DESC, x.created_at DESC LIMIT 1)
+     WHERE o.safety_year_id = ? ORDER BY o.sort_order, o.created_at`
+  ),
+  // Ohne Join — Jahreskopie und Trash-Snapshot brauchen die reinen Spalten.
+  getSafetyObjectivesByYearRaw: db.prepare(
+    'SELECT * FROM safety_objective WHERE safety_year_id = ? ORDER BY sort_order, created_at'
+  ),
+  getSafetyObjective: db.prepare(
+    'SELECT * FROM safety_objective WHERE id = ?'
+  ),
+  createSafetyObjective: db.prepare(
+    `INSERT INTO safety_objective (id, safety_year_id, department_id, sort_order, title, objective,
+            spt, spt_direction, spt_value, spi_description, interval_months, active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateSafetyObjective: db.prepare(
+    `UPDATE safety_objective SET title = ?, objective = ?, spt = ?, spt_direction = ?, spt_value = ?,
+            spi_description = ?, interval_months = ?, active = ?, updated_at = datetime('now')
+     WHERE id = ?`
+  ),
+  updateSafetyObjectiveSortOrder: db.prepare(
+    `UPDATE safety_objective SET sort_order = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteSafetyObjective: db.prepare(
+    'DELETE FROM safety_objective WHERE id = ?'
+  ),
+  // Letztes Jahr derselben Abteilung, das überhaupt einen Katalog hat — Quelle für
+  // "Katalog aus <Vorjahr> übernehmen". Nicht zwingend year - 1: Lücken sind erlaubt.
+  getPrevSafetyYearWithObjectives: db.prepare(
+    `SELECT * FROM safety_year
+     WHERE department_id = ? AND year < ?
+       AND EXISTS (SELECT 1 FROM safety_objective o WHERE o.safety_year_id = safety_year.id)
+     ORDER BY year DESC LIMIT 1`
+  ),
+
+  // SPI-Bewertungen (CM-006 Formular)
+  // Alle Listen sortieren COALESCE(eval_date, created_at), created_at — analog zum
+  // ORDER BY meeting_date, created_at der sms_meeting-Statements, damit eine im
+  // Frontend abgeleitete Nummerierung stabil bleibt. eval_date ist ISO, also
+  // lexikographisch = chronologisch; unsignierte Entwürfe ohne Datum fallen auf
+  // created_at zurück statt geschlossen vorne zu landen.
+  getSpiEvaluationsByObjective: db.prepare(
+    `SELECT * FROM spi_evaluation WHERE safety_objective_id = ?
+     ORDER BY COALESCE(eval_date, created_at), created_at`
+  ),
+  getSpiEvaluationsByYearRaw: db.prepare(
+    `SELECT * FROM spi_evaluation WHERE safety_year_id = ?
+     ORDER BY COALESCE(eval_date, created_at), created_at`
+  ),
+  getSpiEvaluationsByObjectiveRaw: db.prepare(
+    `SELECT * FROM spi_evaluation WHERE safety_objective_id = ?
+     ORDER BY COALESCE(eval_date, created_at), created_at`
+  ),
+  // Effektive Werte: nach der Unterschrift zählt der Snapshot, davor der aktuelle
+  // Katalogstand. Der Batch-PDF liest pro id einzeln über dieses Statement — wie
+  // pdf/cap.js es mit getCapItem tut; department/company hängt der Aufrufer selbst an.
+  getSpiEvaluation: db.prepare(
+    `SELECT e.*,
+            COALESCE(e.objective_snapshot, o.title)           AS eff_objective,
+            COALESCE(e.spt_snapshot, o.spt)                   AS eff_spt,
+            COALESCE(e.interval_snapshot, o.interval_months)  AS eff_interval,
+            o.objective, o.spi_description, o.spt_direction, o.spt_value, o.sort_order,
+            y.year
+     FROM spi_evaluation e
+     JOIN safety_objective o ON o.id = e.safety_objective_id
+     JOIN safety_year y ON y.id = e.safety_year_id
+     WHERE e.id = ?`
+  ),
+  getSpiEvaluationRaw: db.prepare(
+    'SELECT * FROM spi_evaluation WHERE id = ?'
+  ),
+  createSpiEvaluation: db.prepare(
+    `INSERT INTO spi_evaluation (id, safety_objective_id, safety_year_id, department_id, eval_date,
+            spi_value, result_text, rating, cause_analysis, measures, decision, decision_place,
+            decided_at, copy_to, objective_snapshot, spt_snapshot, interval_snapshot)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateSpiEvaluation: db.prepare(
+    `UPDATE spi_evaluation SET eval_date = ?, spi_value = ?, result_text = ?, rating = ?,
+            cause_analysis = ?, measures = ?, decision = ?, decision_place = ?, decided_at = ?,
+            copy_to = ?, objective_snapshot = ?, spt_snapshot = ?, interval_snapshot = ?,
+            updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteSpiEvaluation: db.prepare(
+    'DELETE FROM spi_evaluation WHERE id = ?'
+  ),
+
   // Trash
   getTrashItems: db.prepare(
     'SELECT id, entity_type, entity_id, entity_name, company_name, department_name, parent_id, parent_type, deleted_at FROM trash_item ORDER BY deleted_at DESC LIMIT ? OFFSET ?'
@@ -678,6 +784,14 @@ const stmts = {
   restoreSafetyYear: db.prepare(
     `INSERT INTO safety_year (id, department_id, year, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?)`
+  ),
+  restoreSafetyObjective: db.prepare(
+    `INSERT INTO safety_objective (id, safety_year_id, department_id, sort_order, title, objective, spt, spt_direction, spt_value, spi_description, interval_months, active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  restoreSpiEvaluation: db.prepare(
+    `INSERT INTO spi_evaluation (id, safety_objective_id, safety_year_id, department_id, eval_date, spi_value, result_text, rating, cause_analysis, measures, decision, decision_place, decided_at, copy_to, objective_snapshot, spt_snapshot, interval_snapshot, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
 };
 
