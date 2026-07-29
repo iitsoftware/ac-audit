@@ -575,6 +575,32 @@ dialog.dialog-wide {
 .form-input--auto { width: auto; }
 .form-input--mt { margin-top: 4px; }
 .form-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0 12px; }
+.form-hint { font-size: 12px; color: var(--text-muted); }
+
+/* Radio-Gruppe in einer Zeile (z.B. CM-006 Bewertung POSITIV/NEGATIV) */
+.radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+/* .form-group label ist spezifischer als eine blosse .radio-check-Regel und
+   wuerde sie zu display:block, fett und muted umfaerben — daher der
+   Nachfahren-Selektor. */
+.radio-row .radio-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin-bottom: 0;
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.radio-row .radio-check input[type="radio"] { cursor: pointer; }
 
 .form-group textarea {
   resize: vertical;
@@ -795,6 +821,14 @@ dialog.dialog-wide {
   font-size: 15px;
   padding: 40px 0;
   text-align: center;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 
@@ -1192,6 +1226,14 @@ dialog.dialog-wide {
 .audit-section-header h3 {
   font-size: 15px;
   font-weight: 700;
+}
+
+/* Rechte Button-Gruppe einer Abschnitts-Kopfzeile — haelt mehrere Aktionen
+   zusammen, damit space-between sie nicht auseinanderzieht. */
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* ── Inline Form Grid ───────────────────────────────────── */
@@ -2839,7 +2881,10 @@ dialog.dialog-wide {
 }
 
 .settings-tab {
+  display: inline-flex;
+  align-items: center;
   padding: 8px 20px;
+  min-height: 44px;
   font-size: 14px;
   font-weight: 600;
   background: none;

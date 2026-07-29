@@ -23,18 +23,65 @@
       <div class="plan-tile-grid" id="years-grid"></div>
     </div>
 
-    <!-- Level 2: Jahres-Detail (SRB Meetings des Jahres) -->
+    <!-- Level 2: Jahres-Detail (SRB Meetings + Sicherheitsziele des Jahres) -->
     <div id="year-detail" style="display:none">
       <div class="meeting-detail-header">
         <button type="button" class="btn btn-secondary" id="year-detail-back">Zur&uuml;ck</button>
         <h2 id="year-detail-title">SRB Meetings</h2>
       </div>
-      <div class="audit-section">
-        <div class="audit-section-header">
-          <h3>SRB Meetings</h3>
-          <button type="button" class="btn-icon" id="btn-add-meeting" title="Meeting hinzuf&uuml;gen">+</button>
+
+      <!-- Tab-Leiste des Jahres. Markup, Klassen und aria-selected-Toggle wie die
+           Einstellungs-Tabs in views/settings.ejs; der Toggle steht als kleines
+           Inline-Script am Ende dieser Datei. -->
+      <div class="settings-tabs" id="year-tabs" role="tablist" aria-label="Jahres-Detail">
+        <button type="button" class="settings-tab active" id="year-tab-meetings" data-tab="meetings" role="tab" aria-selected="true" aria-controls="year-panel-meetings">SRB Meetings</button>
+        <button type="button" class="settings-tab" id="year-tab-objectives" data-tab="objectives" role="tab" aria-selected="false" aria-controls="year-panel-objectives">Sicherheitsziele &amp; SPI</button>
+      </div>
+
+      <!-- Tab 1: SRB Meetings (CM-025) -->
+      <div class="settings-tab-content active" id="year-panel-meetings" role="tabpanel" aria-labelledby="year-tab-meetings">
+        <div class="audit-section">
+          <div class="audit-section-header">
+            <h3>SRB Meetings</h3>
+            <button type="button" class="btn-icon" id="btn-add-meeting" title="Meeting hinzuf&uuml;gen">+</button>
+          </div>
+          <div id="meetings-table"></div>
         </div>
-        <div id="meetings-table"></div>
+      </div>
+
+      <!-- Tab 2: Sicherheitsziele &amp; SPI (CM-006) -->
+      <div class="settings-tab-content" id="year-panel-objectives" role="tabpanel" aria-labelledby="year-tab-objectives">
+        <div class="audit-section">
+          <div class="audit-section-header">
+            <h3>Sicherheitsziele &amp; SPI</h3>
+            <div class="section-header-actions">
+              <!-- Mehrfachauswahl: die Zeilen-Checkboxen rendert public/safety.js in
+                   die Katalogtabelle, Select-all und Teilen-Button leben hier in der
+                   Kopfleiste des Abschnitts. .has-selection l&auml;sst den Teilen-Button
+                   blinken, sobald etwas ausgew&auml;hlt ist. -->
+              <span class="select-header" id="objectives-select-header">
+                <label><input type="checkbox" id="objectives-select-all" title="Alle ausw&auml;hlen"><span class="sr-only">Alle Ziele ausw&auml;hlen</span></label>
+                <button type="button" class="icon-btn select-share-btn" id="objectives-share" aria-label="Ausgew&auml;hlte Bewertungen als PDF exportieren"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 3 12 15"/><polyline points="8 7 12 3 16 7"/></svg></button>
+              </span>
+              <button type="button" class="btn btn-secondary" id="btn-objectives-pdf">Katalog-PDF</button>
+              <button type="button" class="btn-icon" id="btn-add-objective" title="Ziel hinzuf&uuml;gen">+</button>
+            </div>
+          </div>
+          <!-- Katalogtabelle — Bef&uuml;llung durch public/safety.js -->
+          <div id="objectives-table"></div>
+          <!-- Leerzustand: public/safety.js blendet ihn ein, solange das Jahr keine
+               Ziele hat, setzt die Jahreszahl des Vorjahres ein und blendet den
+               &Uuml;bernehmen-Button aus, wenn es kein Vorjahr mit Katalog gibt.
+               Die Beschriftung steckt in einem eigenen <span>, damit die
+               Jahreszahl nicht zum Flex-Item des .btn wird (sonst Extra-Gaps). -->
+          <div class="empty-state-inline" id="objectives-empty" style="display:none">
+            <p>Noch keine Sicherheitsziele f&uuml;r dieses Jahr.</p>
+            <div class="empty-state-actions">
+              <button type="button" class="btn btn-secondary" id="btn-copy-prev-catalog"><span>Katalog aus <span id="objectives-prev-year"></span> &uuml;bernehmen</span></button>
+              <button type="button" class="btn btn-secondary" id="btn-load-default-catalog">Standard-Katalog laden</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -116,6 +163,84 @@
       <textarea id="srb-default-topics" hidden><%= srbDefaultTopics %></textarea>
     </div>
 
+    <!-- Level 3: SPI-Bewertung Full-Page Detail (Add / Edit) — CM-006 -->
+    <div id="spi-detail" style="display:none">
+      <div class="meeting-detail-header">
+        <button type="button" class="btn btn-secondary" id="spi-detail-back">Zur&uuml;ck</button>
+        <h2 id="spi-detail-title">Bewertung</h2>
+        <button type="button" class="btn btn-secondary" id="spi-detail-pdf" style="display:none">PDF</button>
+      </div>
+      <form id="spi-form">
+        <div class="audit-section">
+          <input type="hidden" id="spi-form-id">
+          <input type="hidden" id="spi-form-objective-id">
+          <!-- Ziel, SPT und Intervall als Lesekontext der Bewertung —
+               gef&uuml;llt von public/safety.js aus dem Katalogeintrag bzw., bei einer
+               bereits unterschriebenen Bewertung, aus deren *_snapshot-Feldern. -->
+          <div class="cap-info-block" id="spi-form-context"></div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="spi-form-eval-date">Datum der Feststellung</label>
+              <input type="text" id="spi-form-eval-date" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
+            </div>
+            <div class="form-group">
+              <label for="spi-form-spi-value">SPI (gemessener Wert)</label>
+              <input type="text" id="spi-form-spi-value">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="spi-form-result-text">Ergebnis</label>
+            <input type="text" id="spi-form-result-text" placeholder="z.B. Erf&uuml;llt, Nicht erf&uuml;llt, -2">
+          </div>
+          <div class="form-group">
+            <!-- Bare label + aria-labelledby wie bei den Wochentagen in
+                 views/settings.ejs: die Gruppe hat keine eigene Control. -->
+            <label id="spi-form-rating-label">Bewertung</label>
+            <div class="radio-row" role="radiogroup" aria-labelledby="spi-form-rating-label">
+              <label class="radio-check"><input type="radio" name="spi-rating" id="spi-form-rating-positiv" value="POSITIV"> Positiv</label>
+              <label class="radio-check"><input type="radio" name="spi-rating" id="spi-form-rating-negativ" value="NEGATIV"> Negativ</label>
+              <!-- Vorschlag aus spt_direction/spt_value, gesetzt von public/safety.js -->
+              <span class="form-hint" id="spi-form-rating-hint" aria-live="polite"></span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="spi-form-cause-analysis">Ursachenanalyse</label>
+            <textarea id="spi-form-cause-analysis" rows="5"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="spi-form-measures">Ma&szlig;nahmen</label>
+            <textarea id="spi-form-measures" rows="5"></textarea>
+          </div>
+
+          <hr class="form-divider">
+
+          <div class="form-group">
+            <label for="spi-form-decision">Entscheidung des Safety Managers</label>
+            <textarea id="spi-form-decision" rows="5"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="spi-form-decision-place">Ort</label>
+              <input type="text" id="spi-form-decision-place">
+            </div>
+            <div class="form-group">
+              <label for="spi-form-decided-at">Datum der Unterschrift</label>
+              <input type="text" id="spi-form-decided-at" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="spi-form-copy-to">Kopie an</label>
+            <input type="text" id="spi-form-copy-to">
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button type="button" class="btn btn-secondary" id="spi-btn-cancel">Abbrechen</button>
+          <button type="submit" class="btn btn-primary" id="spi-btn-save">Speichern</button>
+        </div>
+      </form>
+    </div>
+
   </div>
 </main>
 
@@ -136,3 +261,82 @@
     </div>
   </form>
 </dialog>
+
+<!-- Sicherheitsziel Add / Edit dialog (Katalogfelder CM-006) -->
+<dialog id="objective-dialog" aria-labelledby="objective-dialog-title">
+  <div class="dialog-header" id="objective-dialog-title">Sicherheitsziel hinzuf&uuml;gen</div>
+  <form id="objective-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="objective-form-id">
+      <div class="form-group">
+        <label for="objective-form-title">Titel *</label>
+        <input type="text" id="objective-form-title" required placeholder="z.B. Gefahrenliste">
+      </div>
+      <div class="form-group">
+        <label for="objective-form-objective">Zielsatz</label>
+        <textarea id="objective-form-objective" rows="3" placeholder="Unser Ziel ist es, &hellip;"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="objective-form-spt">SPT-Anzeigetext</label>
+        <input type="text" id="objective-form-spt" placeholder="z.B. Mindestens 20 Stck.">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <!-- Maschinenlesbare H&auml;lfte des SPT: nur f&uuml;r den Bewertungsvorschlag,
+               gedruckt wird immer der Anzeigetext oben. -->
+          <label for="objective-form-spt-direction">SPT-Richtung</label>
+          <select id="objective-form-spt-direction">
+            <option value="">&mdash;</option>
+            <option value="MIN">Mindestens (MIN)</option>
+            <option value="MAX">H&ouml;chstens (MAX)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="objective-form-spt-value">SPT-Wert</label>
+          <input type="number" id="objective-form-spt-value" step="any">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="objective-form-spi-description">SPI-Beschreibung</label>
+        <textarea id="objective-form-spi-description" rows="3"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="objective-form-interval-months">Intervall (Monate)</label>
+          <input type="number" id="objective-form-interval-months" min="1" max="60" value="12">
+        </div>
+        <div class="form-group">
+          <label for="objective-form-active">Aktiv</label>
+          <select id="objective-form-active">
+            <option value="1">Ja</option>
+            <option value="0">Nein</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="objective-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="objective-btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  // Tab-Toggle des Jahres-Details — gleiche Mechanik wie in views/settings.ejs,
+  // aber auf #year-tabs begrenzt. Bewusst kein localStorage: welcher Tab offen
+  // ist, geh&ouml;rt zur fl&uuml;chtigen Navigation innerhalb eines Jahres.
+  // public/safety.js darf zus&auml;tzliche click-Listener auf dieselben Buttons legen
+  // (Nachladen der Katalogdaten) und mit .click() auf einen Tab zur&uuml;ckschalten.
+  document.querySelectorAll('#year-tabs .settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#year-tabs .settings-tab').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('#year-detail > .settings-tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      document.getElementById(tab.getAttribute('aria-controls')).classList.add('active');
+    });
+  });
+</script>
