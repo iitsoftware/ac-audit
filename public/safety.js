@@ -216,7 +216,7 @@
     }
     let html = `<div class="lines-table-wrap"><table class="lines-table">
       <thead><tr>
-        <th style="width:50px">Lfd.</th><th style="width:90px">SRB Nr.</th><th style="width:110px">Datum</th><th style="width:140px">Ort</th><th>Teilnehmer</th><th>Themen</th><th style="width:100px"></th>
+        <th style="width:50px">Lfd.</th><th style="width:90px">SRB Nr.</th><th style="width:110px">Datum</th><th style="width:140px">Ort</th><th>Teilnehmer</th><th style="width:100px"></th>
       </tr></thead><tbody>`;
     // Lfd. = laufende Nummer innerhalb des Jahres, abgeleitet aus der
     // chronologischen Reihenfolge — nicht gespeichert, daher lückenlos 1..n.
@@ -227,7 +227,6 @@
         <td>${escapeHtml(formatDateDE(m.meeting_date))}</td>
         <td class="wrap-cell">${escapeHtml(m.location || '')}</td>
         <td class="wrap-cell">${escapeHtml(m.participants || '')}</td>
-        <td class="wrap-cell">${escapeHtml(m.topics || '')}</td>
         <td class="line-actions">
           <button type="button" class="btn-icon" data-action="pdf" data-id="${m.id}" title="Meeting-Protokoll als PDF" aria-label="Meeting-Protokoll als PDF exportieren">${ICON_SHARE}</button>
           <button type="button" class="pane-action-btn danger" data-action="delete" data-id="${m.id}" title="Löschen" aria-label="Meeting löschen">&#128465;</button>
