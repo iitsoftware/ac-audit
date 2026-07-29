@@ -443,6 +443,8 @@ function generateSmsMeetingPdfBuffer(id) {
 }
 
 // One page per evaluation — download and email share this generator.
+// `year` kommt mit zurück: das Jahrespaket betitelt Betreff und Dateiname mit dem
+// Safety Year, und die Bewertungen einer Auswahl stammen immer aus einem Jahr.
 function generateSpiEvaluationsPdfBuffer(ids) {
   return new Promise((resolve, reject) => {
     if (!ids || ids.length === 0) return reject(new Error('No IDs provided'));
@@ -451,21 +453,28 @@ function generateSpiEvaluationsPdfBuffer(ids) {
     doc.on('data', chunk => chunks.push(chunk));
     doc.on('error', reject);
 
-    let dept, company;
-    for (let idx = 0; idx < ids.length; idx++) {
-      const ev = stmts.getSpiEvaluation.get(ids[idx]);
+    let dept, company, year;
+    // Gezählt wird das Gerenderte, nicht der Schleifenindex: eine zwischenzeitlich
+    // gelöschte erste ID würde sonst eine leere Seite vor das Paket setzen.
+    let rendered = 0;
+    for (const id of ids) {
+      const ev = stmts.getSpiEvaluation.get(id);
       if (!ev) continue;
       const obj = stmts.getSafetyObjective.get(ev.safety_objective_id);
-      const year = stmts.getSafetyYear.get(ev.safety_year_id);
+      year = stmts.getSafetyYear.get(ev.safety_year_id);
       dept = stmts.getDepartment.get(ev.department_id);
       company = stmts.getCompany.get(dept.company_id);
       const logoRow = stmts.getCompanyLogo.get(company.id);
       const qm = getQmForDepartment(company.id, dept.id);
-      if (idx > 0) doc.addPage();
+      if (rendered > 0) doc.addPage();
       renderSpiEvaluationPdf(doc, { ev, obj, year, dept, company, logoRow, qm, startY: 50 });
+      rendered++;
     }
+    // Ohne eine einzige gefundene Bewertung gäbe es ein Dokument ohne Seiten und
+    // die E-Mail-Route stünde ohne dept/company da — lieber ein sprechender Fehler.
+    if (rendered === 0) return reject(new Error('SPI evaluation not found'));
     addPdfFooter(doc, { label: FOOTER_LABEL_SPI });
-    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), dept, company }));
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), dept, company, year }));
     doc.end();
   });
 }

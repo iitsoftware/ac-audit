@@ -5,7 +5,12 @@ const { logAction, formatDateDE } = require('../services/audit-log');
 const { getQmForDepartment, buildAuthoritySalutation, sendDocumentEmail } = require('../services/email');
 const { snapshotSafetyYear, snapshotSmsMeeting, snapshotSafetyObjective, snapshotSpiEvaluation } = require('../services/trash');
 const { seedObjectivesForYear } = require('../services/safety-defaults');
-const { generateSmsMeetingPdfBuffer } = require('../pdf/safety');
+const {
+  generateSmsMeetingPdfBuffer,
+  generateSpiEvaluationPdfBuffer,
+  generateSpiEvaluationsPdfBuffer,
+  generateSafetyObjectivesPdfBuffer
+} = require('../pdf/safety');
 
 const router = express.Router();
 
@@ -13,6 +18,21 @@ function deptContext(departmentId) {
   const dept = stmts.getDepartment.get(departmentId);
   const company = dept ? stmts.getCompany.get(dept.company_id) : null;
   return { dept, company };
+}
+
+// Anschreiben aller AC-SMS-Ausgaben. Die beiden Varianten unterscheiden sich nur in
+// Anrede und Gruß — `document` ist die Nominalphrase, die in beiden Sätzen steht
+// ("das SRB Meeting Protokoll (SRB Nr. 4 – 19.12.2025)"). Signatur immer
+// "Safety Manager": AC-SMS verschickt über die AC-Change-Route (Modul 'change').
+function safetyMail({ title, label, document, authority, dept, company, qm }) {
+  const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
+  const subject = authority
+    ? `${title} – ${label} – ${company.name} (${dept.name})`
+    : `${title} – ${label} (${dept.name})`;
+  const greeting = authority
+    ? `${buildAuthoritySalutation(dept).trim()},\n\nanbei übersenden wir Ihnen ${document}.\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen`
+    : `Hallo,\n\nanbei ${document}.\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße`;
+  return { subject, text: `${greeting}\n\n\n${qmName}\nSafety Manager\n${company.name}\n\n` };
 }
 
 // Human-readable meeting name used for log entries, trash names, PDF file names
@@ -189,16 +209,11 @@ router.post('/api/sms-meetings/:id/send-email', async (req, res) => {
   try {
     const { buffer, dept, company } = await generateSmsMeetingPdfBuffer(req.params.id);
     const qm = getQmForDepartment(company.id, dept.id);
-    const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : '';
     const label = meetingLabel(meeting);
-    let subject, text;
-    if (authority) {
-      subject = `SRB Meeting Protokoll – ${label} – ${company.name} (${dept.name})`;
-      text = `${buildAuthoritySalutation(dept).trim()},\n\nanbei übersenden wir Ihnen das SRB Meeting Protokoll (${label}).\n\nBei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n\n\n${qmName}\nSafety Manager\n${company.name}\n\n`;
-    } else {
-      subject = `SRB Meeting Protokoll – ${label} (${dept.name})`;
-      text = `Hallo,\n\nanbei das SRB Meeting Protokoll (${label}).\n\nBei Fragen stehen wir gerne zur Verfügung.\n\nViele Grüße\n\n\n${qmName}\nSafety Manager\n${company.name}\n\n`;
-    }
+    const { subject, text } = safetyMail({
+      title: 'SRB Meeting Protokoll', label, document: `das SRB Meeting Protokoll (${label})`,
+      authority, dept, company, qm
+    });
     await sendDocumentEmail({ module: 'change', to, subject, text,
       filename: `SRB-Meeting_${meeting.meeting_date || 'Protokoll'}.pdf`, buffer, qm,
       logParams: ['SRB Meeting Protokoll gesendet', 'sms_meeting', meeting.id, label, `An: ${to}${authority ? ' (Behörde)' : ''}`, company.name, dept.name] });
@@ -233,6 +248,21 @@ router.get('/api/safety-years/:yearId/objectives', (req, res) => {
   const year = stmts.getSafetyYear.get(req.params.yearId);
   if (!year) return res.status(404).json({ error: 'Safety year not found' });
   res.json(stmts.getSafetyObjectivesByYear.all(req.params.yearId));
+});
+
+// Katalog-PDF (MOE-Anhangtabelle) des Jahres. Ein leerer Katalog ist kein Fehler —
+// der Generator druckt dann Kopf und Tabelle mit einer sprechenden Leerzeile.
+router.get('/api/safety-years/:yearId/objectives/pdf', async (req, res) => {
+  const year = stmts.getSafetyYear.get(req.params.yearId);
+  if (!year) return res.status(404).json({ error: 'Safety year not found' });
+  try {
+    const { buffer } = await generateSafetyObjectivesPdfBuffer(req.params.yearId);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="Sicherheitsziele_${year.year}.pdf"`);
+    res.send(buffer);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.post('/api/safety-years/:yearId/objectives', (req, res) => {
@@ -419,6 +449,65 @@ router.post('/api/safety-objectives/:id/spi-evaluations', (req, res) => {
   res.status(201).json(evaluation);
 });
 
+// Betreff-Label des Jahrespakets: die Auswahl stammt immer aus einem Sicherheitsjahr,
+// das der PDF-Generator mit zurückgibt — fehlt es, bleibt die neutrale Bezeichnung.
+function packageLabel(year) {
+  return year && year.year ? `Safety Year ${year.year}` : 'SPI-Bewertungen';
+}
+
+function evaluationCountLabel(count) {
+  return `${count} Bewertung${count === 1 ? '' : 'en'}`;
+}
+
+// Bereits gelöschte IDs überspringt der Generator still; die Route filtert sie
+// vorab, damit Anzahl im Betreff und Log zur wirklich gedruckten Auswahl passen.
+function existingEvaluationIds(ids) {
+  return ids.filter(id => stmts.getSpiEvaluation.get(id));
+}
+
+// ── Jahrespaket fürs SRB: eine Seite je Bewertung (ORDER: vor den :id-Routen) ──
+router.get('/api/spi-evaluations/pdf', async (req, res) => {
+  const ids = existingEvaluationIds((req.query.ids || '').split(',').filter(Boolean));
+  if (ids.length === 0) return res.status(400).json({ error: 'Keine SPI-Bewertungen ausgewählt' });
+  try {
+    const { buffer, year } = await generateSpiEvaluationsPdfBuffer(ids);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="SPI-Bewertungen${year && year.year ? '_' + year.year : ''}.pdf"`);
+    res.send(buffer);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Jahrespaket per E-Mail (ORDER: vor den :id-Routen) ──
+router.post('/api/spi-evaluations/send-email', async (req, res) => {
+  const { to, authority } = req.body;
+  if (!Array.isArray(req.body.ids) || req.body.ids.length === 0) {
+    return res.status(400).json({ error: 'Keine SPI-Bewertungen ausgewählt' });
+  }
+  const ids = existingEvaluationIds(req.body.ids);
+  if (ids.length === 0) return res.status(404).json({ error: 'SPI evaluation not found' });
+  if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
+  try {
+    const { buffer, dept, company, year } = await generateSpiEvaluationsPdfBuffer(ids);
+    const qm = getQmForDepartment(company.id, dept.id);
+    const label = packageLabel(year);
+    const count = evaluationCountLabel(ids.length);
+    const { subject, text } = safetyMail({
+      title: 'Safety Performance Analysis', label,
+      document: `die SPI-Bewertungen des ${label} (${count})`,
+      authority, dept, company, qm
+    });
+    await sendDocumentEmail({ module: 'change', to, subject, text,
+      filename: `SPI-Bewertungen${year && year.year ? '_' + year.year : ''}.pdf`, buffer, qm,
+      logParams: ['SPI-Bewertungen gesendet', 'spi_evaluation', '', `${label} – ${count}`,
+        `An: ${to}${authority ? ' (Behörde)' : ''}`, company.name, dept.name] });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
 router.get('/api/spi-evaluations/:id', (req, res) => {
   const evaluation = stmts.getSpiEvaluation.get(req.params.id);
   if (!evaluation) return res.status(404).json({ error: 'SPI evaluation not found' });
@@ -472,6 +561,48 @@ router.delete('/api/spi-evaluations/:id', (req, res) => {
   logAction('SPI-Bewertung gelöscht', 'spi_evaluation', req.params.id, label, '',
     company ? company.name : '', dept ? dept.name : '');
   res.status(204).end();
+});
+
+// Dateiname wie beim SRB-Protokoll: das Datum trägt ihn, ein Entwurf ohne
+// Bewertungsdatum bekommt ein sprechendes Ersatzwort statt eines nackten Suffix.
+function evaluationFilename(evaluation) {
+  return `SPI-Bewertung_${evaluation.eval_date || 'Entwurf'}.pdf`;
+}
+
+router.get('/api/spi-evaluations/:id/pdf', async (req, res) => {
+  const evaluation = stmts.getSpiEvaluation.get(req.params.id);
+  if (!evaluation) return res.status(404).json({ error: 'SPI evaluation not found' });
+  try {
+    const { buffer } = await generateSpiEvaluationPdfBuffer(req.params.id);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="${evaluationFilename(evaluation)}"`);
+    res.send(buffer);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/api/spi-evaluations/:id/send-email', async (req, res) => {
+  const evaluation = stmts.getSpiEvaluation.get(req.params.id);
+  if (!evaluation) return res.status(404).json({ error: 'SPI evaluation not found' });
+  const { to, authority } = req.body;
+  if (!to) return res.status(400).json({ error: 'E-Mail-Adresse erforderlich' });
+  try {
+    const { buffer, dept, company } = await generateSpiEvaluationPdfBuffer(req.params.id);
+    const qm = getQmForDepartment(company.id, dept.id);
+    const label = evaluationLabel(evaluation);
+    const { subject, text } = safetyMail({
+      title: 'Safety Performance Analysis', label, document: `die SPI-Bewertung (${label})`,
+      authority, dept, company, qm
+    });
+    await sendDocumentEmail({ module: 'change', to, subject, text,
+      filename: evaluationFilename(evaluation), buffer, qm,
+      logParams: ['SPI-Bewertung gesendet', 'spi_evaluation', evaluation.id, label,
+        `An: ${to}${authority ? ' (Behörde)' : ''}`, company.name, dept.name] });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

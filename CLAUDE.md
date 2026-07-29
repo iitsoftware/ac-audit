@@ -349,6 +349,7 @@ form carries "Erfüllt", "Nicht erfüllt" and bare numbers like "-2" in that col
 - `POST /api/safety-years/:yearId/objectives` — Create objective (`title` required, `sort_order` = max+1)
 - `POST /api/safety-years/:yearId/seed-objectives` — Bootstrap the catalogue, body `{ source?: 'previous' | 'default' }` (omitted: previous year, else default). 409 when the catalogue is not empty or `previous` has no source year; returns `{ created, source }`
 - `PATCH /api/safety-years/:yearId/objectives/reorder` — Body `{ ids: [...] }`; IDs not belonging to the year are ignored. Returns the re-sorted catalogue
+- `GET /api/safety-years/:yearId/objectives/pdf` — Katalog-PDF (MOE-Anhangtabelle) of the year. An empty catalogue is **not** an error: the PDF still carries the header and one speaking row
 - `GET /api/safety-objectives/:id` — Single objective
 - `PUT /api/safety-objectives/:id` — Update objective (partial: omitted fields keep their value)
 - `DELETE /api/safety-objectives/:id` — Delete objective (CASCADE to its SPI evaluations, snapshot to trash)
@@ -359,6 +360,15 @@ form carries "Erfüllt", "Nicht erfüllt" and bare numbers like "-2" in that col
 - `GET /api/spi-evaluations/:id` — Single evaluation incl. the effective `eff_objective` / `eff_spt` / `eff_interval` (`COALESCE(snapshot, catalogue)`)
 - `PUT /api/spi-evaluations/:id` — Update (partial: omitted fields keep their value). Setting `decided_at` on a record that had none freezes `objective_snapshot` / `spt_snapshot` / `interval_snapshot` **once** — the signature makes the document reprint identically even after a later catalogue edit; a further save never rewrites them
 - `DELETE /api/spi-evaluations/:id` — Delete evaluation (snapshot to trash, parent `safety_objective`)
+- `GET /api/spi-evaluations/pdf?ids=id1,id2,…` — Jahrespaket fürs SRB, one page per evaluation (**registered before the `:id` routes**, otherwise `:id` swallows the segment `pdf`)
+- `POST /api/spi-evaluations/send-email` — Body `{ ids: [], to, authority? }`, sends the same package (**also before the `:id` routes**)
+- `GET /api/spi-evaluations/:id/pdf` — Single CM-006 evaluation PDF
+- `POST /api/spi-evaluations/:id/send-email` — Body `{ to, authority? }`
+
+IDs that no longer exist are filtered out **before** the PDF is generated, so the
+count in subject, file name and log entry matches what was really printed; a
+selection where nothing is left yields 400 (download) / 404 (email) instead of a
+PDF without pages.
 
 `result_text` is free text and `rating` (`'' | 'POSITIV' | 'NEGATIV'`) is set by
 hand — neither is derived or overwritten server-side. The original CM-006 forms
@@ -461,6 +471,7 @@ rejects as a binding, hence the explicit NULL.
 
 - AC-Audit emails use `smtp_*` settings (from: ac-audit@...), title: "Compliance Monitoring Manager"
 - AC-Change emails use `change_smtp_*` settings (from: ac-change@...), title: "Safety Manager"
+- AC-SMS emails (SRB protocol, SPI evaluations, SPI year package) ride the **AC-Change** route: module `'change'`, so the same `change_smtp_*` settings and the same "Safety Manager" signature. All three build subject and body through `safetyMail()` in `routes/safety.js` — the formal and the informal variant differ only in salutation and closing, so the caller passes just the noun phrase (`document`) that appears in both
 - All outgoing emails set `replyTo` to the QM email of the department
 - Settings split into tabs: Global (backup), AC-Audit (CAP, notifications, SMTP), AC-Change (SMTP), AC-SMS (SRB-Standard-Themen)
 
