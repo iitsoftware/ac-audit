@@ -213,7 +213,9 @@ router.post('/api/audit-plan-lines/:lineId/checklist-items', (req, res) => {
   );
   const evalVal = b.evaluation || '';
   if (['O', 'L1', 'L2', 'L3'].includes(evalVal)) {
-    const dl = calcCapDeadline(evalVal, line.performed_date);
+    // Fremdaudits bringen die Frist des Auditors mit — sie wird unverändert
+    // übernommen. Ohne Angabe bleibt es bei der konfigurierten CAP-Regel.
+    const dl = b.cap_deadline || calcCapDeadline(evalVal, line.performed_date);
     const plan = stmts.getAuditPlan.get(line.audit_plan_id);
     const deptId = plan ? plan.department_id : null;
     stmts.createCapItem.run(uuidv4(), id, dl, '', '', '', '', 'OPEN', null, '', deptId, 'audit', null);
