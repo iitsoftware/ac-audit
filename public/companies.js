@@ -1751,8 +1751,13 @@
       </div>
     </div>`;
 
-    // 5W Analysis section (only for L1/L2)
-    const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
+    // 5W Analysis section — intern nur ab L1/L2, bei Behoerdenaudits fuer jede
+    // Beanstandung: die Behoerde verlangt die Ursachenanalyse (CM-002) auch fuer
+    // die Stufe "Bemerkung". plan_type kommt aus GET /api/cap-items/:id und nicht
+    // aus currentPlan, damit die Freigabe auch nach einem Reload direkt auf der
+    // CAP-Ebene (persistierter navPath) noch stimmt.
+    const hasFiveWhy = (cap.plan_type || 'AUDIT') === 'AUTHORITY'
+      || cap.evaluation === 'L1' || cap.evaluation === 'L2';
     if (hasFiveWhy) {
       html += `<div class="audit-section">
         <div class="audit-section-header"><h3>5-Why Analyse</h3></div>

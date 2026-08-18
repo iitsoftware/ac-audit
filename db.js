@@ -269,10 +269,11 @@ const stmts = {
   ),
   getCapItem: db.prepare(
     `SELECT c.*, ci.regulation_ref, ci.compliance_check, ci.evaluation, ci.auditor_comment,
-            pl.subject, pl.audit_no
+            pl.subject, pl.audit_no, p.plan_type
      FROM cap_item c
      JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
      JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
+     JOIN audit_plan p ON p.id = pl.audit_plan_id
      WHERE c.id = ?`
   ),
   getCapItemRaw: db.prepare(
