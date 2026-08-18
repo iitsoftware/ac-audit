@@ -212,6 +212,14 @@ const stmts = {
      GROUP BY checklist_item_id`
   ),
 
+  // Fristen der CAP-Items einer Zeile — die flache Beanstandungstabelle der
+  // Behördenaudits zeigt sie als Spalte, ohne pro Zeile ein CAP-Item nachzuladen.
+  getCapDeadlinesByLine: db.prepare(
+    `SELECT c.checklist_item_id, c.deadline
+     FROM cap_item c
+     WHERE c.checklist_item_id IN (SELECT id FROM audit_checklist_item WHERE audit_plan_line_id = ?)`
+  ),
+
   getEvidenceCountsByPlan: db.prepare(
     `SELECT ci.audit_plan_line_id, COUNT(*) AS evidence_count
      FROM checklist_evidence_file cef

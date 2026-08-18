@@ -221,7 +221,7 @@ form carries "Erfüllt", "Nicht erfüllt" and bare numbers like "-2" in that col
 - `DELETE /api/audit-plan-lines/:id` — Delete
 
 ### Checklist Items
-- `GET /api/audit-plan-lines/:lineId/checklist-items` — List (with evidence counts)
+- `GET /api/audit-plan-lines/:lineId/checklist-items` — List (with evidence counts and `cap_deadline` — the deadline of the item's CAP item, `''` when there is none)
 - `POST /api/audit-plan-lines/:lineId/checklist-items` — Create
 - `PUT /api/checklist-items/:id` — Update
 - `DELETE /api/checklist-items/:id` — Delete
@@ -419,6 +419,7 @@ SPI 0), so any automatic rule would be factually wrong. `spt_direction` /
 - Trash: DELETE handlers snapshot entity tree (incl. BLOBs as base64) to `trash_item` table before CASCADE delete. Restore re-inserts with original UUIDs in a transaction. Auto-cleanup of expired items (configurable `trash_retention_days`, default 30)
 - Docker: `DATA_DIR` env configures DB + backup location (default `/data` in container). Single volume mount for all persistent data
 - Share button blink: `has-selection` class on `.select-header` triggers CSS blink animation when checkboxes are selected
+- The checklist of an **authority** plan (`plan_type = 'AUTHORITY'`) renders as ONE flat Beanstandungstabelle instead of the three sections — `Beanstandung Nr. | Referenz Paragraph | Beanstandung Beschreibung | Stufe | Frist` (`renderLineDetail()` in `public/companies.js`). `Beanstandung Nr.` is **derived** from the row index like the `Lfd.` of the AC-SMS tables, so it stays gapless 1..n when a Beanstandung is deleted; `Stufe` is labelled through `evalLabel(item.evaluation, true)` (the stored value stays `O`/`L1`/`L2`), and `Frist` is the `cap_deadline` the list endpoint carries along from the CAP item. New rows are stored with `section = 'THEORETICAL'` and the section select is hidden in the dialog — the authority knows no sections, and pinning one value keeps sorting and saving untouched. Internal plans keep the three-section view unchanged
 - AC-SMS PDFs (`pdf/safety.js`) pass the footer label `CM-025, SRB Meeting, Rev. 1, 28.08.2024  |  Erstellt mit ac-sms` to `addPdfFooter()` — the LBA form reference of the SRB meeting minutes plus the app hint. `label` *replaces* the `addPdfFooter()` default `Erstellt mit ac-audit`, so both parts have to live in the one string (AC-Change does the same with `label: 'Erstellt mit ac-change'`)
 - AC-SMS navigation mirrors AC-Audit: Firma → Abteilung → year tiles (`.plan-tile`, reusing the audit-plan tile styles) → meeting detail. Tile state: `plan-tile-done` once the year has meetings, `plan-tile-wip` while it is empty
 - The SRB-meeting table of a safety year shows a **derived** running number (`Lfd.` = index+1 of the chronologically sorted list, `public/safety.js`) next to the free-text `SRB Nr.` (`meeting_no`) from the CM-025 form. The `ORDER BY meeting_date, created_at` of the `sms_meeting` list statements in `db.js` carries that numbering — it is never stored, so `Lfd.` stays gapless 1..n and renumbers when a meeting is inserted or deleted. The columns are `Lfd. | SRB Nr. | Datum | Ort | Teilnehmer` — the former `Themen` column was dropped: the standard agenda now prefills every protocol, so the cell was the same wall of text in every row

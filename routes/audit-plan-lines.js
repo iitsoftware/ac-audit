@@ -197,6 +197,13 @@ router.get('/api/audit-plan-lines/:lineId/checklist-items', (req, res) => {
   const evMap = {};
   for (const e of evCounts) evMap[e.checklist_item_id] = e.evidence_count;
   for (const item of items) item.evidence_count = evMap[item.id] || 0;
+  // Die Frist wird am CAP-Item gepflegt, gehört in der Beanstandungsliste der
+  // Behördenaudits aber in die Zeile — wie evidence_count hier angereichert,
+  // damit die Tabelle nicht pro Zeile ein CAP-Item nachlädt.
+  const capDeadlines = stmts.getCapDeadlinesByLine.all(req.params.lineId);
+  const capMap = {};
+  for (const c of capDeadlines) capMap[c.checklist_item_id] = c.deadline;
+  for (const item of items) item.cap_deadline = capMap[item.id] || '';
   res.json(items);
 });
 

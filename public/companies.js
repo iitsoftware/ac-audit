@@ -954,42 +954,40 @@
     // ── Eval Summary ──
     html += renderEvalSummary();
 
-    // ── Three Checklist Sections ──
-    const sections = [
-      { key: 'THEORETICAL', label: 'Theoretical / Documentation Verification' },
-      { key: 'PRACTICAL', label: 'Practical Review' },
-      { key: 'PROCEDURE', label: 'Procedure' },
-    ];
-
-    sections.forEach(sec => {
-      const items = checklistItems.filter(ci => ci.section === sec.key);
+    // ── Checkliste ──
+    // Ein Behördenaudit kennt keine Sektionen: die Behörde übergibt eine flache
+    // Beanstandungsliste in der Spaltenfolge ihres Berichts. Die Beanstandung Nr.
+    // ist wie das `Lfd.` der AC-SMS-Tabellen aus dem Zeilenindex abgeleitet und
+    // nie gespeichert, damit sie beim Löschen lückenlos 1..n bleibt.
+    // Interne Pläne behalten die drei Sektionen unverändert.
+    if (isAuthorityLine) {
       html += `<div class="audit-section">
         <div class="audit-section-header">
-          <h3>${sec.label}</h3>
-          <button class="btn-icon btn-add-section-ci" data-section="${sec.key}" title="Eintrag hinzuf\u00fcgen">+</button>
+          <h3>Beanstandungen</h3>
+          <button class="btn-icon btn-add-section-ci" data-section="THEORETICAL" title="Beanstandung hinzuf\u00fcgen">+</button>
         </div>`;
 
-      if (items.length === 0) {
-        html += '<div class="empty-state-inline" style="padding:16px 0">Keine Eintr\u00e4ge</div>';
+      if (checklistItems.length === 0) {
+        html += '<div class="empty-state-inline" style="padding:16px 0">Keine Beanstandungen</div>';
       } else {
         html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
           <colgroup>
-            <col style="width:36px"><col style="width:30px"><col style="width:11%"><col style="width:25%"><col style="width:110px"><col style="width:10%"><col style="width:auto"><col style="width:56px">
+            <col style="width:120px"><col style="width:16%"><col style="width:auto"><col style="width:110px"><col style="width:100px"><col style="width:56px">
           </colgroup>
           <thead><tr>
-            <th>#</th><th>A</th><th>Regulation</th><th>Compliance Check</th><th>Bewertung</th><th>Dok. Ref.</th><th>Kommentar</th><th></th>
+            <th>Beanstandung Nr.</th><th>Referenz Paragraph</th><th>Beanstandung Beschreibung</th><th>Stufe</th><th>Frist</th><th></th>
           </tr></thead><tbody>`;
-        items.forEach((item, idx) => {
+        checklistItems.forEach((item, idx) => {
           const evalClass = item.evaluation ? `eval-${item.evaluation}` : '';
-          const clipIcon = item.evidence_count > 0 ? `<span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
+          // Der Beweis-Clip hängt an der Beschreibung statt in einer eigenen Spalte —
+          // die Spaltenfolge der Beanstandungsliste gibt die Behörde vor.
+          const clipIcon = item.evidence_count > 0 ? ` <span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
           html += `<tr class="ci-row-clickable" data-id="${item.id}">
             <td>${idx + 1}</td>
-            <td class="ci-clip-cell">${clipIcon}</td>
             <td>${escapeHtml(item.regulation_ref)}</td>
-            <td class="wrap-cell">${escapeHtml(item.compliance_check)}</td>
-            <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(item.evaluation)}</span>` : ''}</td>
-            <td class="wrap-cell">${escapeHtml(item.document_ref)}</td>
-            <td class="wrap-cell">${escapeHtml(item.auditor_comment)}</td>
+            <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
+            <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</td>
+            <td>${escapeHtml(formatDateDE(item.cap_deadline))}</td>
             <td class="line-actions">
               <button class="pane-action-btn danger" data-action="delete-ci" data-id="${item.id}" title="L\u00f6schen">&#128465;</button>
             </td>
@@ -998,7 +996,53 @@
         html += '</tbody></table></div>';
       }
       html += '</div>';
-    });
+    } else {
+      // ── Three Checklist Sections ──
+      const sections = [
+        { key: 'THEORETICAL', label: 'Theoretical / Documentation Verification' },
+        { key: 'PRACTICAL', label: 'Practical Review' },
+        { key: 'PROCEDURE', label: 'Procedure' },
+      ];
+
+      sections.forEach(sec => {
+        const items = checklistItems.filter(ci => ci.section === sec.key);
+        html += `<div class="audit-section">
+          <div class="audit-section-header">
+            <h3>${sec.label}</h3>
+            <button class="btn-icon btn-add-section-ci" data-section="${sec.key}" title="Eintrag hinzuf\u00fcgen">+</button>
+          </div>`;
+
+        if (items.length === 0) {
+          html += '<div class="empty-state-inline" style="padding:16px 0">Keine Eintr\u00e4ge</div>';
+        } else {
+          html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
+            <colgroup>
+              <col style="width:36px"><col style="width:30px"><col style="width:11%"><col style="width:25%"><col style="width:110px"><col style="width:10%"><col style="width:auto"><col style="width:56px">
+            </colgroup>
+            <thead><tr>
+              <th>#</th><th>A</th><th>Regulation</th><th>Compliance Check</th><th>Bewertung</th><th>Dok. Ref.</th><th>Kommentar</th><th></th>
+            </tr></thead><tbody>`;
+          items.forEach((item, idx) => {
+            const evalClass = item.evaluation ? `eval-${item.evaluation}` : '';
+            const clipIcon = item.evidence_count > 0 ? `<span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
+            html += `<tr class="ci-row-clickable" data-id="${item.id}">
+              <td>${idx + 1}</td>
+              <td class="ci-clip-cell">${clipIcon}</td>
+              <td>${escapeHtml(item.regulation_ref)}</td>
+              <td class="wrap-cell">${escapeHtml(item.compliance_check)}</td>
+              <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(item.evaluation)}</span>` : ''}</td>
+              <td class="wrap-cell">${escapeHtml(item.document_ref)}</td>
+              <td class="wrap-cell">${escapeHtml(item.auditor_comment)}</td>
+              <td class="line-actions">
+                <button class="pane-action-btn danger" data-action="delete-ci" data-id="${item.id}" title="L\u00f6schen">&#128465;</button>
+              </td>
+            </tr>`;
+          });
+          html += '</tbody></table></div>';
+        }
+        html += '</div>';
+      });
+    }
 
     html += '</div>';
     contentEl.innerHTML = html;
@@ -1058,8 +1102,12 @@
     contentEl.querySelectorAll('.btn-add-section-ci').forEach(btn => {
       btn.addEventListener('click', () => {
         const section = btn.dataset.section;
-        const sectionItems = checklistItems.filter(ci => ci.section === section);
-        openChecklistItemDialog(null, section, sectionItems.length + 1);
+        // Die flache Beanstandungsliste zählt über alle Zeilen, die Sektionsansicht
+        // nur innerhalb ihrer Sektion — sonst kollidieren die sort_order-Werte.
+        const count = isAuthorityLine
+          ? checklistItems.length
+          : checklistItems.filter(ci => ci.section === section).length;
+        openChecklistItemDialog(null, section, count + 1);
       });
     });
 
@@ -1146,9 +1194,18 @@
       .map(o => `<option value="${o.value}">${evalLabel(o.value, isAuthorityPlan)}</option>`)
       .join('');
 
-    document.getElementById('checklist-item-dialog-title').textContent = isEdit ? 'Eintrag bearbeiten' : 'Eintrag hinzuf\u00fcgen';
+    const noun = isAuthorityPlan ? 'Beanstandung' : 'Eintrag';
+    document.getElementById('checklist-item-dialog-title').textContent = isEdit ? `${noun} bearbeiten` : `${noun} hinzuf\u00fcgen`;
     document.getElementById('ci-form-id').value = isEdit ? item.id : '';
-    document.getElementById('ci-form-section').value = isEdit ? (item.section || 'THEORETICAL') : (defaultSection || 'THEORETICAL');
+    // Ein Behördenaudit hat keine Sektionen: jede Beanstandung wird als 'THEORETICAL'
+    // gespeichert, damit Sortier- und Speicherlogik unverändert bleiben. Die Auswahl
+    // wäre dort ohne Bedeutung und wird deshalb ausgeblendet.
+    const sectionSelect = document.getElementById('ci-form-section');
+    const sectionGroup = sectionSelect.closest('.form-group');
+    if (sectionGroup) sectionGroup.style.display = isAuthorityPlan ? 'none' : '';
+    sectionSelect.value = isAuthorityPlan
+      ? 'THEORETICAL'
+      : (isEdit ? (item.section || 'THEORETICAL') : (defaultSection || 'THEORETICAL'));
     document.getElementById('ci-form-sort-order').value = isEdit ? (item.sort_order || 0) : (defaultSortOrder || checklistItems.length + 1);
     document.getElementById('ci-form-regulation-ref').value = isEdit ? (item.regulation_ref || '') : '';
     document.getElementById('ci-form-compliance-check').value = isEdit ? (item.compliance_check || '') : '';
