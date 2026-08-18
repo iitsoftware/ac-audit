@@ -1,6 +1,6 @@
 const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
-const { createPdfDoc } = require('./common');
+const { createPdfDoc, authorityEvalLabel } = require('./common');
 
 // ── Internal: render audit plan PDF content ─────────────────
 function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed, titleLabel }) {
@@ -226,72 +226,24 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
   }
 }
 
-// ── PDF Helper: Render single audit line into doc ────────────
-function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY }) {
-  const pageW = 595.28;
-  const tableRight = pageW - 50;
+// Liest immer den Rohwert 'C'/'NA'/'O'/'L1'/'L2'/'L3' — auch im Behördenaudit,
+// wo nur die Zelle beschriftet wird. Deshalb braucht die Karte keine AUTHORITY-Einträge.
+const EVAL_COLORS = {
+  'C': '#d4edda', 'NA': '#e2e3e5', 'O': '#fff3cd',
+  'L1': '#f8d7da', 'L2': '#f5c6cb', 'L3': '#f1b0b7'
+};
 
-  let y = startY || 50;
-
-  if (logoRow && logoRow.logo) {
-    try {
-      doc.image(logoRow.logo, 50, y, { height: 45 });
-      y += 55;
-    } catch { y += 10; }
-  }
-
-  doc.fontSize(14).font('Helvetica-Bold').text(company.name, 50, y);
-  y += 20;
-  doc.fontSize(9).font('Helvetica');
-  let subLine = dept.name;
-  if (dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
-  if (dept.regulation) subLine += `  |  ${dept.regulation}`;
-  doc.text(subLine, 50, y);
-  y += 25;
-
-  doc.fontSize(14).font('Helvetica-Bold').text('Audit Checklist', 50, y);
-  y += 25;
-
-  doc.fontSize(10).font('Helvetica-Bold').text('Audit Information', 50, y);
-  y += 16;
-
-  const infoItems = [
-    ['Auditplan', plan.year || ''],
-    ['Audit Nr.', line.audit_no || ''],
-    ['Thema', line.subject || ''],
-    ['Auditor Team', line.auditor_team || ''],
-    ['Auditee', line.auditee || ''],
-    ['Audit Start', formatDateDE(line.audit_start_date)],
-    ['Audit End', formatDateDE(line.audit_end_date)],
-    ['Location', line.audit_location || ''],
-    ['Document Ref', line.document_ref || ''],
-    ['Iss/Rev', line.document_iss_rev || ''],
-    ['Rev Date', formatDateDE(line.document_rev_date)],
-  ];
-
-  doc.fontSize(8);
-  const labelW = 100;
-  const valW = tableRight - 50 - labelW;
-  for (const [label, value] of infoItems) {
-    doc.rect(50, y, labelW, 16).fill('#f0f4ff');
-    doc.rect(50 + labelW, y, valW, 16).stroke();
-    doc.rect(50, y, labelW, 16).stroke();
-    doc.fillColor('#000000').font('Helvetica-Bold').text(label, 54, y + 3, { width: labelW - 8 });
-    doc.font('Helvetica').text(value, 50 + labelW + 4, y + 3, { width: valW - 8 });
-    y += 16;
-  }
-  y += 15;
+// ── PDF Helper: dreigeteilte Checklistentabelle eines internen Audits ─────
+// Gibt das neue y zurück. Unverändertes Verhalten — nur aus renderAuditLinePdf
+// herausgezogen, damit die Behördenvariante als gleichrangige Schwester danebensteht.
+function renderInternalSections(doc, { checklistItems, startY, tableRight }) {
+  let y = startY;
 
   const sections = [
     { key: 'THEORETICAL', label: 'Theoretical / Documentation Verification' },
     { key: 'PRACTICAL', label: 'Practical Review' },
     { key: 'PROCEDURE', label: 'Procedure / MOE Review' },
   ];
-
-  const evalColors = {
-    'C': '#d4edda', 'NA': '#e2e3e5', 'O': '#fff3cd',
-    'L1': '#f8d7da', 'L2': '#f5c6cb', 'L3': '#f1b0b7'
-  };
 
   const clColX = [50, 70, 140, 290, 330, 400];
   const clColW = [20, 70, 150, 40, 70, 95.28];
@@ -364,8 +316,8 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
       }
 
       const evalVal = (item.evaluation || '').trim().toUpperCase();
-      if (evalColors[evalVal]) {
-        doc.rect(clColX[3], y, clColW[3], rowH).fill(evalColors[evalVal]);
+      if (EVAL_COLORS[evalVal]) {
+        doc.rect(clColX[3], y, clColW[3], rowH).fill(EVAL_COLORS[evalVal]);
         doc.fillColor('#000000');
       }
 
@@ -387,20 +339,189 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
     y += 12;
   }
 
+  return y;
+}
+
+// ── PDF Helper: flache Beanstandungstabelle eines Behördenaudits ─────
+// Ein Behördenaudit kennt keine Sektionen: die Behörde übergibt eine flache
+// Beanstandungsliste in der Spaltenfolge ihres Berichts. Spiegelt renderLineDetail()
+// in public/companies.js — die Beanstandung Nr. ist wie dort aus dem Zeilenindex
+// abgeleitet und nie gespeichert, damit sie beim Löschen lückenlos 1..n bleibt.
+// Gibt das neue y zurück, wie es die Sektionsschleife interner Pläne hinterlässt.
+function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight }) {
+  let y = startY;
+
+  const colX = [50, 112, 200, 415, 470];
+  const colW = [62, 88, 215, 55, 75.28];
+  const headers = ['Beanstandung Nr.', 'Referenz Paragraph', 'Beanstandung Beschreibung', 'Stufe', 'Frist'];
+  // Zweizeilige Überschriften ("Beanstandung Nr.") brauchen mehr als die 16pt der internen Tabelle.
+  const headerH = 24;
+
+  // Die Frist wird am CAP-Item gepflegt, gehört in der Beanstandungsliste aber in die
+  // Zeile — einmal pro Audit-Zeile nachgeschlagen statt pro Beanstandung ein CAP zu laden,
+  // genau wie GET /api/audit-plan-lines/:lineId/checklist-items es fürs UI anreichert.
+  const capDeadlines = {};
+  for (const c of stmts.getCapDeadlinesByLine.all(line.id)) capDeadlines[c.checklist_item_id] = c.deadline;
+
+  const cellText = item => [
+    item.regulation_ref || '',
+    item.compliance_check || '',
+    authorityEvalLabel(item.evaluation),
+    formatDateDE(capDeadlines[item.id]),
+  ];
+
+  // Setzt Schrift selbst, weil heightOfString() sonst mit der Schrift des Aufrufers misst.
+  const rowHeight = item => {
+    doc.font('Helvetica').fontSize(7);
+    const heights = cellText(item).map((t, c) => doc.heightOfString(t, { width: colW[c + 1] - 6 }) + 6);
+    return Math.max(14, ...heights);
+  };
+
+  const drawHeader = () => {
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.rect(50, y, tableRight - 50, headerH).fill('#2563eb');
+    doc.fillColor('#ffffff');
+    for (let c = 0; c < headers.length; c++) {
+      doc.text(headers[c], colX[c] + 3, y + 3, { width: colW[c] - 6 });
+    }
+    doc.fillColor('#000000');
+    y += headerH;
+    doc.font('Helvetica').fontSize(7);
+  };
+
+  if (checklistItems.length === 0) {
+    if (y + 34 > 740) { doc.addPage(); y = 50; }
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Beanstandungen', 50, y);
+    y += 16;
+    doc.fontSize(8).font('Helvetica').fillColor('#888888').text('Keine Beanstandungen', 50, y);
+    doc.fillColor('#000000');
+    return y + 18;
+  }
+
+  // Überschrift, Tabellenkopf und erste Zeile bleiben zusammen auf einer Seite.
+  if (y + 16 + headerH + rowHeight(checklistItems[0]) > 740) { doc.addPage(); y = 50; }
+
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Beanstandungen', 50, y);
+  y += 16;
+  drawHeader();
+
+  for (let i = 0; i < checklistItems.length; i++) {
+    const item = checklistItems[i];
+    const rowH = rowHeight(item);
+
+    if (y + rowH > 740) {
+      doc.addPage();
+      y = 50;
+      drawHeader();
+    }
+
+    if (i % 2 === 0) {
+      doc.rect(50, y, tableRight - 50, rowH).fill('#f8f9fa');
+      doc.fillColor('#000000');
+    }
+
+    // Die Farbe liest den Rohwert 'O'/'L1'/'L2' — beschriftet wird nur die Zelle.
+    const evalVal = (item.evaluation || '').trim().toUpperCase();
+    if (EVAL_COLORS[evalVal]) {
+      doc.rect(colX[3], y, colW[3], rowH).fill(EVAL_COLORS[evalVal]);
+      doc.fillColor('#000000');
+    }
+
+    doc.strokeColor('#d0d0d0').lineWidth(0.5);
+    doc.rect(50, y, tableRight - 50, rowH).stroke();
+    for (let c = 1; c < colX.length; c++) {
+      doc.moveTo(colX[c], y).lineTo(colX[c], y + rowH).stroke();
+    }
+
+    doc.text(String(i + 1), colX[0] + 3, y + 3, { width: colW[0] - 6 });
+    cellText(item).forEach((t, c) => doc.text(t, colX[c + 1] + 3, y + 3, { width: colW[c + 1] - 6 }));
+
+    y += rowH;
+  }
+
+  return y + 12;
+}
+
+// ── PDF Helper: Render single audit line into doc ────────────
+function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY }) {
+  const pageW = 595.28;
+  const tableRight = pageW - 50;
+
+  let y = startY || 50;
+
+  if (logoRow && logoRow.logo) {
+    try {
+      doc.image(logoRow.logo, 50, y, { height: 45 });
+      y += 55;
+    } catch { y += 10; }
+  }
+
+  doc.fontSize(14).font('Helvetica-Bold').text(company.name, 50, y);
+  y += 20;
+  doc.fontSize(9).font('Helvetica');
+  let subLine = dept.name;
+  if (dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
+  if (dept.regulation) subLine += `  |  ${dept.regulation}`;
+  doc.text(subLine, 50, y);
+  y += 25;
+
+  doc.fontSize(14).font('Helvetica-Bold').text('Audit Checklist', 50, y);
+  y += 25;
+
+  doc.fontSize(10).font('Helvetica-Bold').text('Audit Information', 50, y);
+  y += 16;
+
+  const infoItems = [
+    ['Auditplan', plan.year || ''],
+    ['Audit Nr.', line.audit_no || ''],
+    ['Thema', line.subject || ''],
+    ['Auditor Team', line.auditor_team || ''],
+    ['Auditee', line.auditee || ''],
+    ['Audit Start', formatDateDE(line.audit_start_date)],
+    ['Audit End', formatDateDE(line.audit_end_date)],
+    ['Location', line.audit_location || ''],
+    ['Document Ref', line.document_ref || ''],
+    ['Iss/Rev', line.document_iss_rev || ''],
+    ['Rev Date', formatDateDE(line.document_rev_date)],
+  ];
+
+  doc.fontSize(8);
+  const labelW = 100;
+  const valW = tableRight - 50 - labelW;
+  for (const [label, value] of infoItems) {
+    doc.rect(50, y, labelW, 16).fill('#f0f4ff');
+    doc.rect(50 + labelW, y, valW, 16).stroke();
+    doc.rect(50, y, labelW, 16).stroke();
+    doc.fillColor('#000000').font('Helvetica-Bold').text(label, 54, y + 3, { width: labelW - 8 });
+    doc.font('Helvetica').text(value, 50 + labelW + 4, y + 3, { width: valW - 8 });
+    y += 16;
+  }
+  y += 15;
+
+  // Ein Behördenaudit kennt keine Sektionen — dieselbe flache Beanstandungstabelle
+  // wie renderLineDetail() im UI. Interne Pläne drucken unverändert die drei Sektionen.
+  const isAuthority = (plan.plan_type || 'AUDIT') === 'AUTHORITY';
+
+  y = isAuthority
+    ? renderAuthorityFindings(doc, { line, checklistItems, startY: y, tableRight })
+    : renderInternalSections(doc, { checklistItems, startY: y, tableRight });
+
   if (y + 50 > 740) { doc.addPage(); y = 50; }
   doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Summary', 50, y);
   y += 16;
 
-  const totalQ = checklistItems.length;
-  const cCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'C').length;
-  const naCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'NA').length;
-  const oCount = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'O').length;
-  const l1Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L1').length;
-  const l2Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L2').length;
-  const l3Count = checklistItems.filter(i => (i.evaluation || '').toUpperCase() === 'L3').length;
+  const countEval = value => checklistItems.filter(i => (i.evaluation || '').toUpperCase() === value).length;
 
-  const sumHeaders = ['Total Questions', 'Conformities', 'Not Applicable', 'Observation', 'Level 1', 'Level 2', 'Level 3'];
-  const sumValues = [totalQ, cCount, naCount, oCount, l1Count, l2Count, l3Count];
+  // Die Zählzeile eines Behördenaudits kennt nur die Stufen, die auch im
+  // Auswahlmenü stehen (authorityEvalValues im Frontend): C/NA sind kein Urteil
+  // einer Beanstandungsliste und L3 kennt die Behörde nicht. Gezählt wird weiter
+  // der Rohwert, beschriftet der Klartext des LBA-Berichts.
+  const sumHeaders = isAuthority
+    ? ['Beanstandungen', 'Bemerkung', 'Level 1', 'Level 2']
+    : ['Total Questions', 'Conformities', 'Not Applicable', 'Observation', 'Level 1', 'Level 2', 'Level 3'];
+  const sumValues = isAuthority
+    ? [checklistItems.length, countEval('O'), countEval('L1'), countEval('L2')]
+    : [checklistItems.length, countEval('C'), countEval('NA'), countEval('O'), countEval('L1'), countEval('L2'), countEval('L3')];
   const sumColW = (tableRight - 50) / sumHeaders.length;
 
   doc.fontSize(7).font('Helvetica-Bold');
@@ -493,7 +614,13 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000').text('Legend', 50, y);
   y += 14;
   doc.fontSize(7).font('Helvetica').fillColor('#444444');
-  const legendItems = [
+  // Dieselbe Grenze wie Tabelle und Zählzeile: die Legende erklärt die Spalte "Stufe",
+  // also darf sie im Behördenaudit keine Werte beschreiben, die dort nicht vorkommen.
+  const legendItems = isAuthority ? [
+    'Bemerkung - Beobachtung, kein Finding, lediglich Empfehlung zur Verbesserung',
+    'Level 1 - Nichtkonformität, das Finding wird innerhalb von 5 Arbeitstagen behoben',
+    'Level 2 - Nichtkonformität, Behebung des Findings innerhalb von 60 Arbeitstagen',
+  ] : [
     'C - Conform: The requirement is fully met',
     'NA - Not Applicable: The requirement does not apply',
     'O - Observation: No finding, recommendation for improvement',

@@ -1,18 +1,15 @@
 const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
-const { createPdfDoc, addPdfFooter } = require('./common');
-
-// Beschriftung, kein Datenmodell: gespeichert bleibt 'O'/'L1'/'L2', gedruckt wird bei
-// einem Behördenaudit der Klartext des echten LBA-CAP. Spiegelt authorityEvalLabels /
-// evalLabel() im Frontend — die Farbzuordnung liest weiter den Rohwert.
-const AUTHORITY_EVAL_LABELS = { O: 'Bemerkung', L1: 'Level 1', L2: 'Level 2' };
+const { createPdfDoc, addPdfFooter, authorityEvalLabel } = require('./common');
 
 function isAuthorityCap(cap) {
   return (cap.plan_type || 'AUDIT') === 'AUTHORITY';
 }
 
+// Beschriftung, kein Datenmodell — die Klartext-Zuordnung steht in pdf/common.js,
+// weil das Audit-Line-PDF dieselbe Stufe druckt.
 function capEvalLabel(cap) {
-  if (isAuthorityCap(cap) && AUTHORITY_EVAL_LABELS[cap.evaluation]) return AUTHORITY_EVAL_LABELS[cap.evaluation];
+  if (isAuthorityCap(cap)) return authorityEvalLabel(cap.evaluation);
   return cap.evaluation;
 }
 
