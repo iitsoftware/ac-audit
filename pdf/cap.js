@@ -2,6 +2,29 @@ const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
 const { createPdfDoc, addPdfFooter } = require('./common');
 
+// Beschriftung, kein Datenmodell: gespeichert bleibt 'O'/'L1'/'L2', gedruckt wird bei
+// einem Behördenaudit der Klartext des echten LBA-CAP. Spiegelt authorityEvalLabels /
+// evalLabel() im Frontend — die Farbzuordnung liest weiter den Rohwert.
+const AUTHORITY_EVAL_LABELS = { O: 'Bemerkung', L1: 'Level 1', L2: 'Level 2' };
+
+function isAuthorityCap(cap) {
+  return (cap.plan_type || 'AUDIT') === 'AUTHORITY';
+}
+
+function capEvalLabel(cap) {
+  if (isAuthorityCap(cap) && AUTHORITY_EVAL_LABELS[cap.evaluation]) return AUTHORITY_EVAL_LABELS[cap.evaluation];
+  return cap.evaluation;
+}
+
+// Die Behörde verlangt die Ursachenanalyse (CM-002) für JEDE Beanstandung, auch für die
+// Stufe "Bemerkung" — interne Pläne behalten die L1/L2-Grenze exakt. Die Regel steht hier
+// einmal, weil außer dem Renderer auch die drei Aufrufer entscheiden müssen, ob
+// sie den 5-Why-Datensatz überhaupt laden. plan_type hängt an getCapItem, der CAP-Satz
+// trägt die Entscheidung also selbst und braucht keinen separat geladenen Plan.
+function capHasFiveWhy(cap) {
+  return isAuthorityCap(cap) || cap.evaluation === 'L1' || cap.evaluation === 'L2';
+}
+
 function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY }) {
   const pageW = 595.28;
   const tableRight = pageW - 50;
@@ -65,14 +88,13 @@ function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWh
   drawInfoRow('Audit-Nr.', cap.audit_no);
   drawInfoRow('Thema', cap.subject);
   drawInfoRow('Finding', cap.compliance_check);
-  drawInfoRow('Level', cap.evaluation, { evalHighlight: cap.evaluation, bold: true });
+  drawInfoRow('Level', capEvalLabel(cap), { evalHighlight: cap.evaluation, bold: true });
   drawInfoRow('Regulation Ref.', cap.regulation_ref);
   drawInfoRow('Kommentar', cap.auditor_comment);
   y += 15;
 
-  // ── Section 2: 5-Why (only L1/L2) ──
-  const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
-  if (hasFiveWhy && fiveWhy) {
+  // ── Section 2: 5-Why (intern nur L1/L2, bei Behördenaudits immer) ──
+  if (capHasFiveWhy(cap) && fiveWhy) {
     if (y + 30 > 740) { doc.addPage(); y = 50; }
     doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('5-Why Analyse', 50, y);
     y += 16;
@@ -145,8 +167,7 @@ function generateCapItemsPdfBuffer(ids) {
       dept = stmts.getDepartment.get(plan.department_id);
       company = stmts.getCompany.get(dept.company_id);
       const logoRow = stmts.getCompanyLogo.get(company.id);
-      const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
-      const fiveWhy = hasFiveWhy ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+      const fiveWhy = capHasFiveWhy(cap) ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
       const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
       if (idx > 0) doc.addPage();
       renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY: 50 });
@@ -157,4 +178,4 @@ function generateCapItemsPdfBuffer(ids) {
   });
 }
 
-module.exports = { renderCapItemPdf, generateCapItemsPdfBuffer };
+module.exports = { renderCapItemPdf, generateCapItemsPdfBuffer, capHasFiveWhy };

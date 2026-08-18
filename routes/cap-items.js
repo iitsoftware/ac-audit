@@ -6,7 +6,7 @@ const { logAction } = require('../services/audit-log');
 const { getCapDeadlineDays, calcCapDeadline } = require('../services/cap-deadlines');
 const { snapshotCapItem } = require('../services/trash');
 const { getQmForDepartment, buildAuthoritySalutation, sendDocumentEmail } = require('../services/email');
-const { renderCapItemPdf, generateCapItemsPdfBuffer } = require('../pdf/cap');
+const { renderCapItemPdf, generateCapItemsPdfBuffer, capHasFiveWhy } = require('../pdf/cap');
 const { addPdfFooter } = require('../pdf/common');
 
 const router = express.Router();
@@ -61,8 +61,7 @@ router.get('/api/cap-items/pdf', (req, res) => {
     const dept = stmts.getDepartment.get(plan.department_id);
     const company = stmts.getCompany.get(dept.company_id);
     const logoRow = stmts.getCompanyLogo.get(company.id);
-    const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
-    const fiveWhy = hasFiveWhy ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+    const fiveWhy = capHasFiveWhy(cap) ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
     const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
 
     if (idx > 0) doc.addPage();
@@ -174,8 +173,7 @@ router.get('/api/cap-items/:id/pdf', (req, res) => {
   const dept = stmts.getDepartment.get(plan.department_id);
   const company = stmts.getCompany.get(dept.company_id);
   const logoRow = stmts.getCompanyLogo.get(company.id);
-  const hasFiveWhy = cap.evaluation === 'L1' || cap.evaluation === 'L2';
-  const fiveWhy = hasFiveWhy ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+  const fiveWhy = capHasFiveWhy(cap) ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
   const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
