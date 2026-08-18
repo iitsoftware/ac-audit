@@ -1197,12 +1197,19 @@
     const noun = isAuthorityPlan ? 'Beanstandung' : 'Eintrag';
     document.getElementById('checklist-item-dialog-title').textContent = isEdit ? `${noun} bearbeiten` : `${noun} hinzuf\u00fcgen`;
     document.getElementById('ci-form-id').value = isEdit ? item.id : '';
+    // Die Behörde spricht nicht von Regulation Ref. / Compliance Check, sondern von
+    // Referenz Paragraph und Beanstandung Beschreibung — wie in der Beanstandungstabelle.
+    document.querySelector('label[for="ci-form-regulation-ref"]').textContent =
+      isAuthorityPlan ? 'Referenz Paragraph' : 'Regulation Ref.';
+    document.querySelector('label[for="ci-form-compliance-check"]').textContent =
+      isAuthorityPlan ? 'Beanstandung Beschreibung' : 'Compliance Check';
     // Ein Behördenaudit hat keine Sektionen: jede Beanstandung wird als 'THEORETICAL'
-    // gespeichert, damit Sortier- und Speicherlogik unverändert bleiben. Die Auswahl
-    // wäre dort ohne Bedeutung und wird deshalb ausgeblendet.
+    // gespeichert, damit Sortier- und Speicherlogik unverändert bleiben. Sektion und
+    // Sortierung wären dort ohne Bedeutung, deshalb verschwindet ihre ganze Zeile —
+    // die Werte werden weiter gesetzt und unverändert mitgeschickt.
     const sectionSelect = document.getElementById('ci-form-section');
-    const sectionGroup = sectionSelect.closest('.form-group');
-    if (sectionGroup) sectionGroup.style.display = isAuthorityPlan ? 'none' : '';
+    const metaRow = sectionSelect.closest('.form-row');
+    if (metaRow) metaRow.style.display = isAuthorityPlan ? 'none' : '';
     sectionSelect.value = isAuthorityPlan
       ? 'THEORETICAL'
       : (isEdit ? (item.section || 'THEORETICAL') : (defaultSection || 'THEORETICAL'));
@@ -1212,6 +1219,11 @@
     document.getElementById('ci-form-evaluation').value = isEdit ? (item.evaluation || '') : '';
     document.getElementById('ci-form-doc-ref').value = isEdit ? (item.document_ref || '') : '';
     document.getElementById('ci-form-comment').value = isEdit ? (item.auditor_comment || '') : '';
+    // Frist: nur beim Behördenaudit — die Behörde gibt die Frist der Beanstandung vor,
+    // intern rechnet sie die CAP-Regel aus. Der Wert kommt als `cap_deadline` aus der
+    // Listen-Route und wird beim Speichern wieder als `cap_deadline` (ISO) geschickt.
+    document.getElementById('ci-form-deadline-group').style.display = isAuthorityPlan ? '' : 'none';
+    document.getElementById('ci-form-deadline').value = isAuthorityPlan && isEdit ? formatDateDE(item.cap_deadline) : '';
     // Evidence section: show only in edit mode
     const evSection = document.getElementById('ci-evidence-section');
     const evThumbs = document.getElementById('ci-evidence-thumbs');
@@ -1227,6 +1239,8 @@
   }
 
   document.getElementById('ci-btn-cancel').addEventListener('click', () => ciDialog.close());
+  // Einmalig: das Frist-Feld des Dialogs lebt im EJS, der Listener darf nicht pro Öffnen wachsen.
+  initDateAutoFormat(document.getElementById('ci-form-deadline'));
 
   document.getElementById('checklist-item-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1240,6 +1254,14 @@
       auditor_comment: document.getElementById('ci-form-comment').value.trim(),
       document_ref: document.getElementById('ci-form-doc-ref').value.trim(),
     };
+    // Beim Behördenaudit reicht die Frist als `cap_deadline` (ISO) mit — die Route legt
+    // damit das CAP-Item an bzw. überschreibt dessen Frist. Ein leeres Feld schickt nichts:
+    // die am CAP-Item gepflegte Frist bleibt dann unangetastet.
+    if (currentPlan && (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY') {
+      const deadlineIso = parseDateDE(document.getElementById('ci-form-deadline').value);
+      if (deadlineIso === undefined) return toast('Frist bitte im Format TT.MM.JJJJ eingeben', 'error');
+      if (deadlineIso) data.cap_deadline = deadlineIso;
+    }
 
     const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
