@@ -21,10 +21,16 @@ router.put('/api/checklist-items/:id', (req, res) => {
   const existingCap = stmts.getCapItemByChecklistItem.get(req.params.id);
   if (needsCap && !existingCap) {
     const lineForCap = stmts.getAuditPlanLine.get(existing.audit_plan_line_id);
-    const dl = calcCapDeadline(evalVal, lineForCap ? lineForCap.performed_date : null);
+    // Fremdaudits bringen die Frist des Auditors mit — sie wird unverändert
+    // übernommen. Ohne Angabe bleibt es bei der konfigurierten CAP-Regel.
+    const dl = b.cap_deadline || calcCapDeadline(evalVal, lineForCap ? lineForCap.performed_date : null);
     const planForCap = lineForCap ? stmts.getAuditPlan.get(lineForCap.audit_plan_id) : null;
     const deptIdForCap = planForCap ? planForCap.department_id : null;
     stmts.createCapItem.run(uuidv4(), req.params.id, dl, '', '', '', '', 'OPEN', null, '', deptIdForCap, 'audit', null);
+  } else if (needsCap && existingCap && b.cap_deadline) {
+    // Nur eine ausdrücklich mitgeschickte Frist überschreibt die bestehende;
+    // ohne Angabe bleibt die am CAP-Item gepflegte Frist unangetastet.
+    stmts.updateCapItemDeadline.run(b.cap_deadline, existingCap.id);
   } else if (!needsCap && existingCap) {
     stmts.deleteCapItemByChecklistItem.run(req.params.id);
   }
