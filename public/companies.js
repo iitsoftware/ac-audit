@@ -1116,7 +1116,17 @@
     { value: 'L2', label: 'L2 (Level 2)' },
     { value: 'L3', label: 'L3 (Level 3)' },
   ];
-  const authorityEvalValues = ['', 'O', 'L1', 'L2', 'L3'];
+  // Authority audits only know Bemerkung/Level 1/Level 2 — C/NA/L3 are no categories there
+  const authorityEvalValues = ['', 'O', 'L1', 'L2'];
+  const authorityEvalLabels = { O: 'Bemerkung', L1: 'Level 1', L2: 'Level 2' };
+
+  // Labeling only: the stored value stays 'O'/'L1'/'L2', just the wording follows
+  // the authority's language. No migration, no effect on badge classes or statistics.
+  function evalLabel(value, isAuthority) {
+    if (isAuthority && authorityEvalLabels[value]) return authorityEvalLabels[value];
+    const opt = allEvalOptions.find(o => o.value === value);
+    return opt ? opt.label : value;
+  }
 
   function openChecklistItemDialog(item, defaultSection, defaultSortOrder) {
     const isEdit = !!item;
@@ -1124,10 +1134,16 @@
 
     // Filter evaluation options for authority plans
     const evalSelect = document.getElementById('ci-form-evaluation');
-    const allowedValues = isAuthorityPlan ? authorityEvalValues : allEvalOptions.map(o => o.value);
+    // An already stored value stays selectable even after it left the menu (legacy 'L3' on an
+    // authority plan) — otherwise it would silently collapse to '' on the next save.
+    const allowedValues = isAuthorityPlan
+      ? (isEdit && item.evaluation && !authorityEvalValues.includes(item.evaluation)
+        ? [...authorityEvalValues, item.evaluation]
+        : authorityEvalValues)
+      : allEvalOptions.map(o => o.value);
     evalSelect.innerHTML = allEvalOptions
       .filter(o => allowedValues.includes(o.value))
-      .map(o => `<option value="${o.value}">${o.label}</option>`)
+      .map(o => `<option value="${o.value}">${evalLabel(o.value, isAuthorityPlan)}</option>`)
       .join('');
 
     document.getElementById('checklist-item-dialog-title').textContent = isEdit ? 'Eintrag bearbeiten' : 'Eintrag hinzuf\u00fcgen';
