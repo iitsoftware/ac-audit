@@ -312,9 +312,11 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
 
     doc.font('Helvetica').fontSize(7);
     const firstItem = items[0];
+    const firstRegH = doc.heightOfString(firstItem.regulation_ref || '', { width: clColW[1] - 6 });
     const firstCompH = doc.heightOfString(firstItem.compliance_check || '', { width: clColW[2] - 6 });
     const firstCommH = doc.heightOfString(firstItem.auditor_comment || '', { width: clColW[4] - 6 });
-    const firstRowH = Math.max(14, firstCompH + 6, firstCommH + 6);
+    const firstDocH = doc.heightOfString(firstItem.document_ref || '', { width: clColW[5] - 6 });
+    const firstRowH = Math.max(14, firstRegH + 6, firstCompH + 6, firstCommH + 6, firstDocH + 6);
     if (y + 16 + 16 + firstRowH > 740) { doc.addPage(); y = 50; }
 
     doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text(section.label, 50, y);
@@ -332,9 +334,15 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
     doc.font('Helvetica').fontSize(7);
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
+      // Alle umbrechenden Spalten messen — Regulation Ref (70pt) und Document Ref
+      // (95pt) brechen genauso um wie Compliance Check und Auditor Comment.
+      // Muss identisch zur firstRowH-Abschätzung oben bleiben, sonst laufen
+      // Seitenumbruch-Schätzung und gezeichnete Zeile auseinander.
+      const regH = doc.heightOfString(item.regulation_ref || '', { width: clColW[1] - 6 });
       const compH = doc.heightOfString(item.compliance_check || '', { width: clColW[2] - 6 });
       const commH = doc.heightOfString(item.auditor_comment || '', { width: clColW[4] - 6 });
-      const rowH = Math.max(14, compH + 6, commH + 6);
+      const docH = doc.heightOfString(item.document_ref || '', { width: clColW[5] - 6 });
+      const rowH = Math.max(14, regH + 6, compH + 6, commH + 6, docH + 6);
 
       if (y + rowH > 740) {
         doc.addPage();
