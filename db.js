@@ -825,6 +825,12 @@ const stmts = {
     `INSERT INTO cap_item (id, checklist_item_id, deadline, responsible_person, root_cause, corrective_action, preventive_action, status, completion_date, evidence, notified_at, source, source_ref_id, department_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
+  // Wie createCapAction, nur mit den Original-UUIDs und den Original-Zeitstempeln:
+  // die Maßnahmen kaskadieren mit ihrem CAP-Item und kommen mit ihm zurück.
+  restoreCapAction: db.prepare(
+    `INSERT INTO cap_action (id, cap_item_id, sort_order, kind, description, responsible_person, target_date, completion_date, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
   restoreChecklistItem: db.prepare(
     `INSERT INTO audit_checklist_item (id, audit_plan_line_id, section, sort_order, regulation_ref, compliance_check, evaluation, auditor_comment, document_ref, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`

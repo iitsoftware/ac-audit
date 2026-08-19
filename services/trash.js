@@ -2,6 +2,11 @@ const { db, stmts } = require('../db');
 
 // ── Snapshot helpers (read entity + children with BLOBs base64-encoded) ──
 
+// Nimmt alles mit, was per ON DELETE CASCADE am CAP-Item hängt: Nachweise,
+// 5-Why und die Maßnahmen. Der Snapshot des Prüfpunkts, der Audit-Line und des
+// Auditplans geht durch dieselbe Funktion, damit die Liste der Kinder an EINER
+// Stelle steht — eine zweite, eingerückte Kopie wäre genau die Stelle, die beim
+// nächsten Kind wieder vergessen wird.
 function snapshotCapItem(capId) {
   const cap = stmts.getCapItemRaw.get(capId);
   if (!cap) return null;
@@ -9,6 +14,7 @@ function snapshotCapItem(capId) {
   cap.evidence_files = evidenceFiles.map(f => ({ ...f, data: f.data ? Buffer.from(f.data).toString('base64') : null }));
   const fiveWhy = stmts.getFiveWhyByCapItem.get(capId);
   cap.five_why = fiveWhy || null;
+  cap.cap_actions = stmts.getCapActionsByCapItem.all(capId);
   return cap;
 }
 
@@ -20,12 +26,7 @@ function snapshotAuditPlanLine(lineId) {
     const checkEvFiles = stmts.getEvidenceFilesByChecklistItemFull.all(item.id);
     item.evidence_files = checkEvFiles.map(f => ({ ...f, data: f.data ? Buffer.from(f.data).toString('base64') : null }));
     const capItem = stmts.getCapItemByChecklistItem.get(item.id);
-    if (capItem) {
-      const capEvFiles = stmts.getEvidenceFilesByCapItemFull.all(capItem.id);
-      capItem.evidence_files = capEvFiles.map(f => ({ ...f, data: f.data ? Buffer.from(f.data).toString('base64') : null }));
-      capItem.five_why = stmts.getFiveWhyByCapItem.get(capItem.id) || null;
-    }
-    item.cap_item = capItem || null;
+    item.cap_item = capItem ? snapshotCapItem(capItem.id) : null;
     return item;
   });
   return line;
@@ -96,6 +97,18 @@ function restoreCapItem(cap) {
     stmts.insertFiveWhyFull.run(
       fw.id, fw.cap_item_id, fw.why1, fw.why2, fw.why3, fw.why4, fw.why5,
       fw.root_cause, fw.created_at, fw.updated_at
+    );
+  }
+  // Snapshots von vor der Tabelle cap_action haben das Feld schlicht nicht — das
+  // ist kein Fehler, sondern ein CAP ohne Maßnahmenliste. Deshalb der Default auf
+  // die leere Liste und ausdrücklich KEIN Nachbilden aus corrective_action /
+  // preventive_action: die beiden Textfelder stehen in derselben Zeile ohnehin
+  // noch drin und sind genau der CM-003-Fallback, aus dem sie gedruckt werden.
+  for (const a of cap.cap_actions || []) {
+    stmts.restoreCapAction.run(
+      a.id, a.cap_item_id, a.sort_order, a.kind, a.description,
+      a.responsible_person, a.target_date, a.completion_date,
+      a.created_at, a.updated_at
     );
   }
 }
