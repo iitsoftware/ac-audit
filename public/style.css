@@ -1281,6 +1281,25 @@ dialog.dialog-wide {
   min-height: 2.5em;
 }
 
+/* ── Massnahmen-Gruppen des Beanstandungs-Screens ───────── */
+/* Zwei Listen (Behebung / Praevention) mit eigener Kopfzeile und "+"-Button,
+   darunter als dritte Gruppe die Erledigung am CAP-Item selbst. */
+.cap-action-group + .cap-action-group {
+  margin-top: 20px;
+}
+
+.cap-action-group h4 {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Der Loeschen-Knopf einer Massnahme bleibt sichtbar — die Zeile ist ein
+   Formular, kein Navigationsziel, das erst beim Ueberfahren Aktionen zeigt. */
+.cap-action-remove {
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* ── Clickable checklist item rows ──────────────────────── */
 /* ── Checklist table: fixed column widths across all 3 sections */
 .checklist-table {

@@ -1462,6 +1462,7 @@
   let currentFinding = null;      // audit_checklist_item
   let currentFindingIndex = -1;   // Zeilenindex im Bericht → abgeleitete Beanstandung Nr.
   let currentFindingCap = null;   // cap_item der Beanstandung, null solange keine Stufe gesetzt ist
+  let currentFindingActions = []; // cap_action-Zeilen des CAP-Items, in Server-Reihenfolge
 
   // Die Beanstandung Nr. ist wie in renderLineDetail() aus dem Zeilenindex abgeleitet
   // und nie gespeichert — sie bleibt beim Löschen lückenlos 1..n.
@@ -1484,6 +1485,7 @@
     currentFinding = null;
     currentFindingIndex = -1;
     currentFindingCap = null;
+    currentFindingActions = [];
 
     // Eine Beanstandung hängt immer unter ihrem Bericht, dessen Segment im
     // persistierten Nav-Pfad steht — so findet auch ein Reload direkt auf dieser
@@ -1506,6 +1508,7 @@
     try {
       const caps = await fetchJSON(`/api/audit-plans/${currentLine.audit_plan_id}/cap-items`);
       currentFindingCap = (caps.items || []).find(c => c.checklist_item_id === findingId) || null;
+      if (currentFindingCap) await loadFindingActions(currentFindingCap);
     } catch (e) {
       toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
     }
@@ -1575,9 +1578,9 @@
       </div>
     </div>`;
 
-    // ── Maßnahme ── (CAP-Item der Beanstandung)
+    // ── Maßnahmen ── (cap_action-Zeilen + CAP-Item der Beanstandung)
     html += `<div class="audit-section">
-      <div class="audit-section-header"><h3>Maßnahme</h3></div>
+      <div class="audit-section-header"><h3>Maßnahmen</h3></div>
       <div id="finding-actions">${findingActionsHtml(cap)}</div>
     </div>`;
 
@@ -1616,6 +1619,7 @@
       contentEl.querySelectorAll('.finding-cap-field').forEach(el => {
         el.addEventListener('blur', saveFindingCapFields);
       });
+      initFindingActions();
       // Die Route spiegelt den Root Cause nach cap_item.root_cause — der lokale
       // Datensatz wird mitgeführt, damit saveFindingCapFields() ihn unverändert
       // mitschickt statt den Stand vor dem Speichern zurückzuschreiben.
@@ -1627,27 +1631,214 @@
   // Der Status ist aus completion_date abgeleitet und nirgends gespeichert.
   function capStatus(cap) { return cap.completion_date ? 'CLOSED' : 'OPEN'; }
 
+  // Eine Beanstandung trägt mehrere durchnummerierte Maßnahmen je Art — das ist
+  // die Mehrzahl, für die cap_action angelegt wurde. Die zwei Gruppen stehen hier
+  // an genau EINER Stelle: Beschriftung, Reihenfolge und die Zuordnung zum
+  // gespeicherten `kind` würden sonst zwischen Liste, "+"-Button und Lese-
+  // Migration auseinanderlaufen.
+  const CAP_ACTION_GROUPS = [
+    { kind: 'CORRECTIVE', label: 'Behebungsmaßnahmen', single: 'Behebungsmaßnahme', legacy: 'corrective_action' },
+    { kind: 'PREVENTIVE', label: 'Präventivmaßnahmen', single: 'Präventivmaßnahme', legacy: 'preventive_action' },
+  ];
+
+  // Lädt die Maßnahmen des CAP-Items und holt dabei den Altbestand einmalig nach:
+  // vor cap_action trug das CAP-Item je Art EINEN Maßnahmentext. Steht dort etwas
+  // und ist die Liste leer, wird daraus beim ersten Öffnen je eine Maßnahme — ein
+  // zweites Mal kann das nicht greifen, weil die Liste danach nicht mehr leer ist.
+  // Die beiden Textspalten bleiben stehen: sie sind der CM-003-Fallback für alles,
+  // was nie über diesen Screen läuft, und das PDF druckt sie nur, solange es keine
+  // cap_action-Zeilen gibt — doppelt gedruckt wird also nichts.
+  // Die leere Liste ist deshalb der richtige Auslöser und kein fehlendes Merker-
+  // Feld: solange sie leer ist, SIND die beiden Texte die Maßnahmen der
+  // Beanstandung, weil genau sie gedruckt werden. Ein Screen, der daneben "keine
+  // Maßnahmen" zeigte, widerspräche dem eigenen CM-003.
+  async function loadFindingActions(cap) {
+    currentFindingActions = await fetchJSON(`/api/cap-items/${cap.id}/actions`);
+    if (currentFindingActions.length) return;
+    for (const g of CAP_ACTION_GROUPS) {
+      const description = (cap[g.legacy] || '').trim();
+      if (!description) continue;
+      currentFindingActions.push(await fetchJSON(`/api/cap-items/${cap.id}/actions`, {
+        method: 'POST', body: { kind: g.kind, description }
+      }));
+    }
+  }
+
   // Eigene Funktion, weil die Sektion nach einem Stufenwechsel auch für sich allein
   // gezeichnet werden muss: das CAP-Item entsteht und vergeht mit der Stufe.
   // Die Frist steht bewusst nicht hier, sondern als einziges Feld in den Stammdaten
   // (dieselbe Spalte cap_item.deadline) — zweimal sichtbar wäre eine der beiden
-  // Anzeigen nach jedem Speichern veraltet.
+  // Anzeigen nach jedem Speichern veraltet. Verantwortlicher, Erledigt am und der
+  // daraus abgeleitete Status bleiben am CAP-Item: sie gelten für die Beanstandung
+  // als Ganzes, und genau diese Spalten lesen Fristen-Mails und Home-Dashboard.
   function findingActionsHtml(cap) {
-    if (!cap) return '<div class="empty-state-inline" style="padding:16px 0">Keine Maßnahme — die Beanstandung hat noch keine Stufe</div>';
-    return `<div class="inline-form-grid">
-      <label for="fa-corrective">Behebungsmaßnahme</label><textarea class="inline-input inline-textarea finding-cap-field" id="fa-corrective" rows="4">${escapeHtml(cap.corrective_action || '')}</textarea>
-      <label for="fa-preventive">Präventivmaßnahme</label><textarea class="inline-input inline-textarea finding-cap-field" id="fa-preventive" rows="4">${escapeHtml(cap.preventive_action || '')}</textarea>
-      <label for="fa-responsible">Verantwortlicher</label><input class="inline-input finding-cap-field" id="fa-responsible" value="${escapeAttr(cap.responsible_person || '')}">
-      <label for="fa-completion-date">Erledigt am</label><input class="inline-input finding-cap-field" id="fa-completion-date" value="${escapeAttr(formatDateDE(cap.completion_date))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
-      <span class="inline-form-label">Status</span><span><span class="cap-status-${capStatus(cap)}" id="fa-status">${capStatus(cap)}</span></span>
+    if (!cap) return '<div class="empty-state-inline" style="padding:16px 0">Keine Maßnahmen — die Beanstandung hat noch keine Stufe</div>';
+    let html = '';
+    for (const g of CAP_ACTION_GROUPS) {
+      html += `<div class="cap-action-group">
+        <div class="audit-section-header">
+          <h4>${g.label}</h4>
+          <button type="button" class="btn-icon" id="fa-add-${g.kind}" title="${g.single} hinzufügen">+</button>
+        </div>
+        <div id="fa-list-${g.kind}">${capActionListHtml(g.kind)}</div>
+      </div>`;
+    }
+    // Eigene Gruppe mit eigener Überschrift, weil die drei Felder am CAP-Item
+    // hängen und nicht an einer Maßnahme: Verantwortlicher und Erledigt am gibt es
+    // in den Zeilen darüber ein zweites Mal, direkt untergeschoben läsen sie sich
+    // als weitere Spalte der Präventivmaßnahmen.
+    return html + `<div class="cap-action-group">
+      <div class="audit-section-header"><h4>Erledigung der Beanstandung</h4></div>
+      <div class="inline-form-grid">
+        <label for="fa-responsible">Verantwortlicher</label><input class="inline-input finding-cap-field" id="fa-responsible" value="${escapeAttr(cap.responsible_person || '')}">
+        <label for="fa-completion-date">Erledigt am</label><input class="inline-input finding-cap-field" id="fa-completion-date" value="${escapeAttr(formatDateDE(cap.completion_date))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
+        <span class="inline-form-label">Status</span><span><span class="cap-status-${capStatus(cap)}" id="fa-status">${capStatus(cap)}</span></span>
+      </div>
     </div>`;
   }
 
+  // Die laufende Nr. ist wie die Beanstandung Nr. und das Nr. des Zielkatalogs aus
+  // dem Zeilenindex abgeleitet und nirgends gespeichert — sie zählt innerhalb der
+  // eigenen Gruppe und bleibt beim Löschen einer Maßnahme lückenlos 1..n.
+  // Die Felder tragen keine IDs, sondern Klassen: es sind n Zeilen, und die Zeile
+  // findet ihren Datensatz über data-cap-action.
+  function capActionListHtml(kind) {
+    const group = CAP_ACTION_GROUPS.find(g => g.kind === kind);
+    const actions = currentFindingActions.filter(a => a.kind === kind);
+    if (!actions.length) return `<div class="empty-state-inline" style="padding:12px 0">Keine ${group.label} erfasst</div>`;
+
+    let html = `<div class="lines-table-wrap"><table class="lines-table">
+      <colgroup>
+        <col style="width:48px"><col style="width:auto"><col style="width:16%"><col style="width:120px"><col style="width:120px"><col style="width:48px">
+      </colgroup>
+      <thead><tr>
+        <th>Nr.</th><th>Maßnahme</th><th>Verantwortlicher</th><th>Zieldatum</th><th>Erledigt am</th><th></th>
+      </tr></thead><tbody>`;
+    actions.forEach((a, idx) => {
+      // aria-label statt <label>: die Spaltenüberschrift beschriftet die Spalte,
+      // nicht das einzelne Feld, und in n Zeilen wäre jede ID doppelt.
+      const who = `${group.single} ${idx + 1}`;
+      html += `<tr data-cap-action="${a.id}">
+        <td>${idx + 1}</td>
+        <td><textarea class="inline-input inline-textarea cap-action-field cap-action-desc" rows="2" aria-label="${who} — Beschreibung">${escapeHtml(a.description || '')}</textarea></td>
+        <td><input class="inline-input cap-action-field cap-action-responsible" value="${escapeAttr(a.responsible_person || '')}" aria-label="${who} — Verantwortlicher"></td>
+        <td><input class="inline-input cap-action-field cap-action-date cap-action-target" value="${escapeAttr(formatDateDE(a.target_date))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ" aria-label="${who} — Zieldatum"></td>
+        <td><input class="inline-input cap-action-field cap-action-date cap-action-completion" value="${escapeAttr(formatDateDE(a.completion_date))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ" aria-label="${who} — Erledigt am"></td>
+        <td class="cap-action-remove"><button type="button" class="pane-action-btn danger" data-cap-action-delete="${a.id}" title="Löschen">&#128465;</button></td>
+      </tr>`;
+    });
+    return html + '</tbody></table></div>';
+  }
+
+  // Der "+"-Button steht in der Gruppen-Kopfzeile und überlebt jedes Neuzeichnen
+  // der Liste darunter — er wird deshalb einmal je Screen verdrahtet, die Zeilen
+  // dagegen nach jedem Neuzeichnen ihrer Liste.
+  function initFindingActions() {
+    CAP_ACTION_GROUPS.forEach(g => {
+      const addBtn = contentEl.querySelector(`#fa-add-${g.kind}`);
+      if (addBtn) addBtn.addEventListener('click', () => addCapAction(g.kind));
+      wireCapActionRows(g.kind);
+    });
+  }
+
+  function wireCapActionRows(kind) {
+    const list = contentEl.querySelector(`#fa-list-${kind}`);
+    if (!list) return;
+    list.querySelectorAll('.cap-action-date').forEach(initDateAutoFormat);
+    // Auto-Save auf Blur wie überall auf diesem Screen — keine Speichern-Buttons.
+    list.querySelectorAll('.cap-action-field').forEach(el => {
+      el.addEventListener('blur', () => saveCapAction(el.closest('tr').dataset.capAction));
+    });
+    list.querySelectorAll('[data-cap-action-delete]').forEach(btn => {
+      btn.addEventListener('click', () => deleteCapAction(btn.dataset.capActionDelete));
+    });
+  }
+
+  // Nur die Liste EINER Gruppe wird neu gezeichnet: die andere Gruppe und die
+  // CAP-Felder darunter behalten dabei ihren Zustand samt Fokus.
+  function renderCapActionList(kind) {
+    const list = contentEl.querySelector(`#fa-list-${kind}`);
+    if (!list) return;
+    list.innerHTML = capActionListHtml(kind);
+    wireCapActionRows(kind);
+  }
+
+  async function addCapAction(kind) {
+    const cap = currentFindingCap;
+    if (!cap) return;
+    try {
+      const created = await fetchJSON(`/api/cap-items/${cap.id}/actions`, { method: 'POST', body: { kind } });
+      // Ans Ende der Liste: innerhalb der eigenen Gruppe ist das die neue letzte
+      // Nummer, und die Gruppierung entsteht ohnehin erst beim Filtern.
+      currentFindingActions.push(created);
+      renderCapActionList(kind);
+      const desc = contentEl.querySelector(`tr[data-cap-action="${created.id}"] .cap-action-desc`);
+      if (desc) desc.focus();
+    } catch (err) {
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
+    }
+  }
+
+  // PUT /api/cap-actions/:id ist ein partielles Update — die Zeile schickt genau
+  // ihre vier Felder, kind und sort_order behalten ihren Wert. Ein geleertes
+  // Datumsfeld räumt hier wirklich auf NULL (die Konvention der Route): anders als
+  // die Frist der Beanstandung steht das Datum nur auf diesem einen Screen.
+  async function saveCapAction(id) {
+    const action = currentFindingActions.find(a => a.id === id);
+    const row = contentEl.querySelector(`tr[data-cap-action="${id}"]`);
+    if (!action || !row) return;
+
+    const targetIso = parseDateDE(row.querySelector('.cap-action-target').value);
+    if (targetIso === undefined) return toast('Zieldatum bitte im Format TT.MM.JJJJ eingeben', 'error');
+    const completionIso = parseDateDE(row.querySelector('.cap-action-completion').value);
+    if (completionIso === undefined) return toast('Erledigt am bitte im Format TT.MM.JJJJ eingeben', 'error');
+
+    const data = {
+      description: row.querySelector('.cap-action-desc').value.trim(),
+      responsible_person: row.querySelector('.cap-action-responsible').value.trim(),
+      target_date: targetIso,
+      completion_date: completionIso,
+    };
+
+    // Fortschreiben statt neu zeichnen: ein Re-Render auf Blur würde den Fokus des
+    // gerade angesprungenen Feldes verlieren. Die laufende Nr. hängt an der
+    // Reihenfolge, nicht am Inhalt, und ändert sich beim Speichern nicht.
+    // Der lokale Stand wird schon vor der Antwort gesetzt: ein "+"-Klick löst
+    // dieses Speichern per Blur aus und zeichnet die Liste neu, noch während die
+    // Antwort unterwegs ist — aus dem alten Datensatz gezeichnet stünde dann
+    // wieder der Text von vor der Eingabe im Feld.
+    Object.assign(action, data);
+    try {
+      Object.assign(action, await fetchJSON(`/api/cap-actions/${id}`, { method: 'PUT', body: data }));
+    } catch (err) {
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
+    }
+  }
+
+  function deleteCapAction(id) {
+    const action = currentFindingActions.find(a => a.id === id);
+    if (!action) return;
+    const desc = (action.description || '').trim();
+    confirmDelete({
+      title: 'Maßnahme löschen',
+      message: `<p>Soll die Maßnahme <strong>${escapeHtml(desc.length > 80 ? desc.slice(0, 80) + '…' : (desc || 'ohne Beschreibung'))}</strong> wirklich gelöscht werden?</p>`,
+      onConfirm: async () => {
+        await fetchJSON(`/api/cap-actions/${id}`, { method: 'DELETE' });
+        currentFindingActions = currentFindingActions.filter(a => a.id !== id);
+        // Die Nummern der Gruppe rücken nach — sie sind der Zeilenindex.
+        renderCapActionList(action.kind);
+        toast('Maßnahme gelöscht');
+      },
+    });
+  }
+
   // Auto-Save auf Blur wie die Stammdaten darüber. PUT /api/cap-items/:id ersetzt
-  // den Datensatz vollständig, deshalb reisen Frist, Ursache und Nachweis-Text
-  // unverändert aus currentFindingCap mit: die Frist wird in den Stammdaten
-  // gepflegt, die Ursache vom 5-Why gespiegelt, den Nachweis-Text zeigt dieser
-  // Screen gar nicht — ohne sie würde jedes Speichern hier sie leeren.
+  // den Datensatz vollständig, deshalb reisen Frist, Ursache, Nachweis-Text und
+  // die beiden alten Maßnahmentexte unverändert aus currentFindingCap mit: die
+  // Frist wird in den Stammdaten gepflegt, die Ursache vom 5-Why gespiegelt, den
+  // Nachweis-Text zeigt dieser Screen gar nicht, und die Maßnahmen stehen seit
+  // cap_action in eigenen Zeilen — die zwei Spalten bleiben als CM-003-Fallback
+  // des Altbestands stehen und dürfen von hier nicht geleert werden.
   async function saveFindingCapFields() {
     const cap = currentFindingCap;
     if (!cap) return;
@@ -1658,8 +1849,8 @@
       deadline: cap.deadline || null,
       responsible_person: document.getElementById('fa-responsible').value.trim(),
       root_cause: cap.root_cause || '',
-      corrective_action: document.getElementById('fa-corrective').value.trim(),
-      preventive_action: document.getElementById('fa-preventive').value.trim(),
+      corrective_action: cap.corrective_action || '',
+      preventive_action: cap.preventive_action || '',
       completion_date: completionIso,
       evidence: cap.evidence || '',
     };
