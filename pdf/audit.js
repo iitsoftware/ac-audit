@@ -342,23 +342,25 @@ function renderInternalSections(doc, { checklistItems, startY, tableRight }) {
   return y;
 }
 
-// ── PDF Helper: flache Beanstandungstabelle eines Behördenaudits ─────
+// ── PDF Helper: flache Findings-Tabelle eines Behördenaudits ─────────
 // Ein Behördenaudit kennt keine Sektionen: die Behörde übergibt eine flache
-// Beanstandungsliste in der Spaltenfolge ihres Berichts. Spiegelt renderLineDetail()
-// in public/companies.js — die Beanstandung Nr. ist wie dort aus dem Zeilenindex
-// abgeleitet und nie gespeichert, damit sie beim Löschen lückenlos 1..n bleibt.
+// Findings-Liste in der Spaltenfolge ihres Berichts. Spiegelt renderLineDetail()
+// in public/companies.js — die Nr. ist wie dort aus dem Zeilenindex abgeleitet
+// und nie gespeichert, damit sie beim Löschen lückenlos 1..n bleibt.
 // Gibt das neue y zurück, wie es die Sektionsschleife interner Pläne hinterlässt.
 function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight }) {
   let y = startY;
 
   const colX = [50, 112, 200, 415, 470];
   const colW = [62, 88, 215, 55, 75.28];
-  const headers = ['Beanstandung Nr.', 'Referenz Paragraph', 'Beanstandung Beschreibung', 'Stufe', 'Frist'];
-  // Zweizeilige Überschriften ("Beanstandung Nr.") brauchen mehr als die 16pt der internen Tabelle.
-  const headerH = 24;
+  const headers = ['Nr.', 'Referenz Paragraph', 'Beschreibung', 'Level', 'Frist'];
+  // Seit der Umbenennung passt jede Überschrift in eine Zeile, also dieselben
+  // 16pt wie in der internen Tabelle — die breiteste ("Referenz Paragraph",
+  // 65.8pt bei 7pt fett) bleibt unter den 82pt ihrer Spalte.
+  const headerH = 16;
 
-  // Die Frist wird am CAP-Item gepflegt, gehört in der Beanstandungsliste aber in die
-  // Zeile — einmal pro Audit-Zeile nachgeschlagen statt pro Beanstandung ein CAP zu laden,
+  // Die Frist wird am CAP-Item gepflegt, gehört in der Findings-Liste aber in die
+  // Zeile — einmal pro Audit-Zeile nachgeschlagen statt pro Finding ein CAP zu laden,
   // genau wie GET /api/audit-plan-lines/:lineId/checklist-items es fürs UI anreichert.
   const capDeadlines = {};
   for (const c of stmts.getCapDeadlinesByLine.all(line.id)) capDeadlines[c.checklist_item_id] = c.deadline;
@@ -391,9 +393,9 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
 
   if (checklistItems.length === 0) {
     if (y + 34 > 740) { doc.addPage(); y = 50; }
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Beanstandungen', 50, y);
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Findings', 50, y);
     y += 16;
-    doc.fontSize(8).font('Helvetica').fillColor('#888888').text('Keine Beanstandungen', 50, y);
+    doc.fontSize(8).font('Helvetica').fillColor('#888888').text('Keine Findings', 50, y);
     doc.fillColor('#000000');
     return y + 18;
   }
@@ -401,7 +403,7 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
   // Überschrift, Tabellenkopf und erste Zeile bleiben zusammen auf einer Seite.
   if (y + 16 + headerH + rowHeight(checklistItems[0]) > 740) { doc.addPage(); y = 50; }
 
-  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Beanstandungen', 50, y);
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text('Findings', 50, y);
   y += 16;
   drawHeader();
 
@@ -498,7 +500,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   }
   y += 15;
 
-  // Ein Behördenaudit kennt keine Sektionen — dieselbe flache Beanstandungstabelle
+  // Ein Behördenaudit kennt keine Sektionen — dieselbe flache Findings-Tabelle
   // wie renderLineDetail() im UI. Interne Pläne drucken unverändert die drei Sektionen.
   const isAuthority = (plan.plan_type || 'AUDIT') === 'AUTHORITY';
 
@@ -512,12 +514,12 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
 
   const countEval = value => checklistItems.filter(i => (i.evaluation || '').toUpperCase() === value).length;
 
-  // Die Zählzeile eines Behördenaudits kennt nur die Stufen, die auch im
+  // Die Zählzeile eines Behördenaudits kennt nur die Level, die auch im
   // Auswahlmenü stehen (authorityEvalValues im Frontend): C/NA sind kein Urteil
-  // einer Beanstandungsliste und L3 kennt die Behörde nicht. Gezählt wird weiter
+  // einer Findings-Liste und L3 kennt die Behörde nicht. Gezählt wird weiter
   // der Rohwert, beschriftet der Klartext des LBA-Berichts.
   const sumHeaders = isAuthority
-    ? ['Beanstandungen', 'Bemerkung', 'Level 1', 'Level 2']
+    ? ['Findings', 'Bemerkung', 'Level 1', 'Level 2']
     : ['Total Questions', 'Conformities', 'Not Applicable', 'Observation', 'Level 1', 'Level 2', 'Level 3'];
   const sumValues = isAuthority
     ? [checklistItems.length, countEval('O'), countEval('L1'), countEval('L2')]
@@ -614,7 +616,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000').text('Legend', 50, y);
   y += 14;
   doc.fontSize(7).font('Helvetica').fillColor('#444444');
-  // Dieselbe Grenze wie Tabelle und Zählzeile: die Legende erklärt die Spalte "Stufe",
+  // Dieselbe Grenze wie Tabelle und Zählzeile: die Legende erklärt die Spalte "Level",
   // also darf sie im Behördenaudit keine Werte beschreiben, die dort nicht vorkommen.
   const legendItems = isAuthority ? [
     'Bemerkung - Beobachtung, kein Finding, lediglich Empfehlung zur Verbesserung',
