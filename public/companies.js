@@ -1476,7 +1476,7 @@
     // ── Maßnahme ── (CAP-Item der Beanstandung)
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Maßnahme</h3></div>
-      <div id="finding-cap-fields">${findingCapHtml(cap)}</div>
+      <div id="finding-actions">${findingActionsHtml(cap)}</div>
     </div>`;
 
     // ── Ursachenanalyse ── (5-Why, CM-002)
@@ -1503,21 +1503,72 @@
     contentEl.querySelectorAll('.finding-field').forEach(el => {
       el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'blur', saveFindingFields);
     });
-    // Die Route spiegelt den Root Cause nach cap_item.root_cause — der lokale
-    // Datensatz wird mitgeführt, damit ein späteres Neuzeichnen der Maßnahme
-    // nicht den Stand vor dem Speichern zeigt.
-    if (cap) initFiveWhy(cap.id, rc => { cap.root_cause = rc; });
+    if (cap) {
+      initDateAutoFormat(document.getElementById('fa-completion-date'));
+      contentEl.querySelectorAll('.finding-cap-field').forEach(el => {
+        el.addEventListener('blur', saveFindingCapFields);
+      });
+      // Die Route spiegelt den Root Cause nach cap_item.root_cause — der lokale
+      // Datensatz wird mitgeführt, damit saveFindingCapFields() ihn unverändert
+      // mitschickt statt den Stand vor dem Speichern zurückzuschreiben.
+      initFiveWhy(cap.id, rc => { cap.root_cause = rc; });
+    }
   }
 
-  // Eigene Funktion, weil die Frist der Stammdaten dasselbe CAP-Item schreibt: nach
-  // dem Speichern wird nur dieser Block neu gezeichnet statt des ganzen Screens.
-  function findingCapHtml(cap) {
+  // Der Status ist aus completion_date abgeleitet und nirgends gespeichert.
+  function capStatus(cap) { return cap.completion_date ? 'CLOSED' : 'OPEN'; }
+
+  // Eigene Funktion, weil die Sektion nach einem Stufenwechsel auch für sich allein
+  // gezeichnet werden muss: das CAP-Item entsteht und vergeht mit der Stufe.
+  // Die Frist steht bewusst nicht hier, sondern als einziges Feld in den Stammdaten
+  // (dieselbe Spalte cap_item.deadline) — zweimal sichtbar wäre eine der beiden
+  // Anzeigen nach jedem Speichern veraltet.
+  function findingActionsHtml(cap) {
     if (!cap) return '<div class="empty-state-inline" style="padding:16px 0">Keine Maßnahme — die Beanstandung hat noch keine Stufe</div>';
-    return `<div class="cap-info-block">
-      <div class="cap-info-row"><span class="cap-info-label">Frist</span><span>${escapeHtml(formatDateDE(cap.deadline))}</span></div>
-      <div class="cap-info-row"><span class="cap-info-label">Verantwortlich</span><span>${escapeHtml(cap.responsible_person || '')}</span></div>
-      <div class="cap-info-row"><span class="cap-info-label">Status</span><span class="cap-status-${cap.completion_date ? 'CLOSED' : 'OPEN'}">${cap.completion_date ? 'CLOSED' : 'OPEN'}</span></div>
+    return `<div class="inline-form-grid">
+      <label for="fa-corrective">Behebungsmaßnahme</label><textarea class="inline-input inline-textarea finding-cap-field" id="fa-corrective" rows="4">${escapeHtml(cap.corrective_action || '')}</textarea>
+      <label for="fa-preventive">Präventivmaßnahme</label><textarea class="inline-input inline-textarea finding-cap-field" id="fa-preventive" rows="4">${escapeHtml(cap.preventive_action || '')}</textarea>
+      <label for="fa-responsible">Verantwortlicher</label><input class="inline-input finding-cap-field" id="fa-responsible" value="${escapeAttr(cap.responsible_person || '')}">
+      <label for="fa-completion-date">Erledigt am</label><input class="inline-input finding-cap-field" id="fa-completion-date" value="${escapeAttr(formatDateDE(cap.completion_date))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
+      <span class="inline-form-label">Status</span><span><span class="cap-status-${capStatus(cap)}" id="fa-status">${capStatus(cap)}</span></span>
     </div>`;
+  }
+
+  // Auto-Save auf Blur wie die Stammdaten darüber. PUT /api/cap-items/:id ersetzt
+  // den Datensatz vollständig, deshalb reisen Frist, Ursache und Nachweis-Text
+  // unverändert aus currentFindingCap mit: die Frist wird in den Stammdaten
+  // gepflegt, die Ursache vom 5-Why gespiegelt, den Nachweis-Text zeigt dieser
+  // Screen gar nicht — ohne sie würde jedes Speichern hier sie leeren.
+  async function saveFindingCapFields() {
+    const cap = currentFindingCap;
+    if (!cap) return;
+    const completionIso = parseDateDE(document.getElementById('fa-completion-date').value);
+    if (completionIso === undefined) return toast('Erledigt am bitte im Format TT.MM.JJJJ eingeben', 'error');
+
+    const data = {
+      deadline: cap.deadline || null,
+      responsible_person: document.getElementById('fa-responsible').value.trim(),
+      root_cause: cap.root_cause || '',
+      corrective_action: document.getElementById('fa-corrective').value.trim(),
+      preventive_action: document.getElementById('fa-preventive').value.trim(),
+      completion_date: completionIso,
+      evidence: cap.evidence || '',
+    };
+
+    try {
+      await fetchJSON(`/api/cap-items/${cap.id}`, { method: 'PUT', body: data });
+      // Fortschreiben statt neu zeichnen: ein Re-Render auf Blur würde den Fokus
+      // des gerade angesprungenen Feldes verlieren. Nur der abgeleitete Status
+      // hängt an einem Feld dieser Sektion und wird deshalb nachgezogen.
+      Object.assign(cap, data);
+      const statusEl = document.getElementById('fa-status');
+      if (statusEl) {
+        statusEl.textContent = capStatus(cap);
+        statusEl.className = `cap-status-${capStatus(cap)}`;
+      }
+    } catch (err) {
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
+    }
   }
 
   // Auto-Save auf Blur bzw. change wie auf der Bericht- und der CAP-Ebene.
@@ -1570,13 +1621,11 @@
       Object.assign(item, saved);
       if (deadlineIso) {
         item.cap_deadline = deadlineIso;
-        // Dieselbe Frist steht am CAP-Item: die Maßnahme-Sektion würde sonst die
-        // alte anzeigen. Nur dieser Block wird neu gezeichnet, der Fokus des
-        // gerade angesprungenen Feldes bleibt damit erhalten.
-        if (currentFindingCap) {
-          currentFindingCap.deadline = deadlineIso;
-          document.getElementById('finding-cap-fields').innerHTML = findingCapHtml(currentFindingCap);
-        }
+        // Dieselbe Frist steht am CAP-Item, das die Maßnahme-Sektion vollständig
+        // zurückschreibt — der lokale Datensatz muss sie also mitbekommen, sonst
+        // setzt das nächste Speichern dort die alte Frist wieder ein. Gezeichnet
+        // wird sie nur in den Stammdaten, es bleibt beim reinen Nachziehen.
+        if (currentFindingCap) currentFindingCap.deadline = deadlineIso;
       // Ein leer gelassenes Feld hat nichts geschickt: die gespeicherte Frist steht
       // weiter am CAP-Item, also darf der Screen sie nicht als gelöscht ausgeben.
       } else if (!deadlineInput.value.trim()) {
@@ -1930,7 +1979,6 @@
       <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED">CLOSED</button>
     </div>`;
 
-    function capStatus(c) { return c.completion_date ? 'CLOSED' : 'OPEN'; }
     const filtered = capFilter ? capItems.filter(c => capStatus(c) === capFilter) : capItems;
 
     if (filtered.length === 0) {
