@@ -1131,7 +1131,7 @@
     }
 
     // ── Eval Summary ──
-    html += renderEvalSummary();
+    html += renderEvalSummary(isAuthorityLine);
 
     // ── Checkliste ──
     // Ein Behördenaudit kennt keine Sektionen: die Behörde übergibt eine flache
@@ -1451,8 +1451,22 @@
     }
   }
 
-  function renderEvalSummary() {
-    const counts = { C: 0, NA: 0, O: 0, L1: 0, L2: 0, L3: 0 };
+  // Die Zusammenfassung eines Beh\u00f6rdenaudits kennt nur die Stufen, die auch im
+  // Auswahlmen\u00fc stehen (authorityEvalValues): C/NA sind kein Urteil einer
+  // Findingliste und L3 kennt die Beh\u00f6rde nicht \u2014 dieselbe Grenze, die die
+  // Z\u00e4hlzeile des Audit-Line-PDF (pdf/audit.js) l\u00e4ngst zieht. Beschriftung ist
+  // das Ganze: gez\u00e4hlt, gef\u00e4rbt und gespeichert wird weiter der Rohwert
+  // O/L1/L2, die Badge-Klasse bleibt `eval-${key}` und evalHighlight, die
+  // Eval-Statistik und die CAP-Anlage lesen unver\u00e4ndert weiter.
+  // Der Klartext steht im Badge und nicht daneben, weil die Findingliste direkt
+  // darunter genau dasselbe tut (renderFindingsSection()) \u2014 ein Badge "O" \u00fcber
+  // einer Zeile "Bemerkung" w\u00e4re derselbe Wert in zwei Sprachen. Interne Audits
+  // behalten Kurzform + Langform exakt wie bisher.
+  function renderEvalSummary(isAuthority) {
+    const internalLabels = { C: 'Compliant', NA: 'Not Applicable', O: 'Observation', L1: 'Level 1', L2: 'Level 2', L3: 'Level 3' };
+    const keys = isAuthority ? ['O', 'L1', 'L2'] : Object.keys(internalLabels);
+    const counts = {};
+    keys.forEach(key => { counts[key] = 0; });
     checklistItems.forEach(item => {
       if (item.evaluation && counts.hasOwnProperty(item.evaluation)) {
         counts[item.evaluation]++;
@@ -1462,16 +1476,18 @@
     let html = `<div class="eval-summary">
       <h4>Zusammenfassung</h4>
       <div class="eval-summary-grid">`;
-    const labels = { C: 'Compliant', NA: 'Not Applicable', O: 'Observation', L1: 'Level 1', L2: 'Level 2', L3: 'Level 3' };
-    for (const [key, label] of Object.entries(labels)) {
+    keys.forEach(key => {
+      const badge = isAuthority ? evalLabel(key, true) : key;
       html += `<div class="eval-summary-item">
-        <span class="eval-badge eval-${key}">${key}</span>
+        <span class="eval-badge eval-${key}">${escapeHtml(badge)}</span>
         <span class="eval-summary-count">${counts[key]}</span>
-        <span class="eval-summary-label">${label}</span>
+        ${isAuthority ? '' : `<span class="eval-summary-label">${internalLabels[key]}</span>`}
       </div>`;
-    }
+    });
     html += `</div>`;
-    html += `<div class="eval-summary-total">Gesamt: ${total} Eintr\u00e4ge</div>`;
+    // Die Gesamtzahl hei\u00dft Findings statt Eintr\u00e4ge \u2014 dieselbe Umbenennung, die
+    // Liste und PDF-Z\u00e4hlzeile schon tragen.
+    html += `<div class="eval-summary-total">Gesamt: ${total} ${isAuthority ? 'Findings' : 'Eintr\u00e4ge'}</div>`;
     html += `</div>`;
     return html;
   }
