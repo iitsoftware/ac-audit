@@ -2237,7 +2237,16 @@
     });
 
     const cap = currentCapItem;
+    // plan_type kommt aus GET /api/cap-items/:id und nicht aus currentPlan: der navPath
+    // ist persistiert, ein Reload direkt auf die CAP-Ebene hat keinen Plan geladen.
+    // Steuert die Level-Beschriftung unten und die Freigabe der 5-Why-Analyse.
+    const isAuthority = (cap.plan_type || 'AUDIT') === 'AUTHORITY';
     let html = '<div class="audit-detail">';
+
+    // Nur beschriftet, nicht umgestellt: gespeichert bleibt der rohe Wert, die
+    // Badge-Klasse liest ihn weiter. Interne Pläne behalten die Kurzform — genau
+    // wie capEvalLabel() in pdf/cap.js, das für sie ebenfalls den Rohwert druckt.
+    const levelLabel = isAuthority ? evalLabel(cap.evaluation, true) : cap.evaluation;
 
     // Read-only info block
     html += `<div class="audit-section">
@@ -2246,7 +2255,7 @@
         <div class="cap-info-row"><span class="cap-info-label">Audit-Nr.</span><span>${escapeHtml(cap.audit_no || '')}</span></div>
         <div class="cap-info-row"><span class="cap-info-label">Thema</span><span>${escapeHtml(cap.subject || '')}</span></div>
         <div class="cap-info-row"><span class="cap-info-label">Finding</span><span>${escapeHtml(cap.compliance_check || '')}</span></div>
-        <div class="cap-info-row"><span class="cap-info-label">Level</span><span>${cap.evaluation ? `<span class="eval-badge eval-${cap.evaluation}">${escapeHtml(cap.evaluation)}</span>` : ''}</span></div>
+        <div class="cap-info-row"><span class="cap-info-label">Level</span><span>${cap.evaluation ? `<span class="eval-badge eval-${cap.evaluation}">${escapeHtml(levelLabel)}</span>` : ''}</span></div>
         <div class="cap-info-row"><span class="cap-info-label">Regulation Ref.</span><span>${escapeHtml(cap.regulation_ref || '')}</span></div>
         <div class="cap-info-row"><span class="cap-info-label">Kommentar</span><span>${escapeHtml(cap.auditor_comment || '')}</span></div>
       </div>
@@ -2254,11 +2263,8 @@
 
     // 5W Analysis section — intern nur ab L1/L2, bei Behoerdenaudits fuer jede
     // Beanstandung: die Behoerde verlangt die Ursachenanalyse (CM-002) auch fuer
-    // die Stufe "Bemerkung". plan_type kommt aus GET /api/cap-items/:id und nicht
-    // aus currentPlan, damit die Freigabe auch nach einem Reload direkt auf der
-    // CAP-Ebene (persistierter navPath) noch stimmt.
-    const hasFiveWhy = (cap.plan_type || 'AUDIT') === 'AUTHORITY'
-      || cap.evaluation === 'L1' || cap.evaluation === 'L2';
+    // die Stufe "Bemerkung".
+    const hasFiveWhy = isAuthority || cap.evaluation === 'L1' || cap.evaluation === 'L2';
     if (hasFiveWhy) {
       html += `<div class="audit-section">
         <div class="audit-section-header"><h3>5-Why Analyse</h3></div>
