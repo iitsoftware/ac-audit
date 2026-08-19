@@ -1532,16 +1532,19 @@
       .map(o => `<option value="${o.value}">${evalLabel(o.value, isAuthorityPlan)}</option>`)
       .join('');
 
-    const noun = isAuthorityPlan ? 'Beanstandung' : 'Eintrag';
+    const noun = isAuthorityPlan ? 'Finding' : 'Eintrag';
     document.getElementById('checklist-item-dialog-title').textContent = isEdit ? `${noun} bearbeiten` : `${noun} hinzuf\u00fcgen`;
     document.getElementById('ci-form-id').value = isEdit ? item.id : '';
-    // Die Behörde spricht nicht von Regulation Ref. / Compliance Check, sondern von
-    // Referenz Paragraph und Beanstandung Beschreibung — wie in der Beanstandungstabelle.
+    // Die Behörde spricht nicht von Regulation Ref. / Compliance Check / Bewertung,
+    // sondern von Referenz Paragraph, Beschreibung und Level — der Dialog trägt
+    // deshalb die Spaltennamen der Findingliste, in die er einfügt.
     document.querySelector('label[for="ci-form-regulation-ref"]').textContent =
       isAuthorityPlan ? 'Referenz Paragraph' : 'Regulation Ref.';
     document.querySelector('label[for="ci-form-compliance-check"]').textContent =
-      isAuthorityPlan ? 'Beanstandung Beschreibung' : 'Compliance Check';
-    // Ein Behördenaudit hat keine Sektionen: jede Beanstandung wird als 'THEORETICAL'
+      isAuthorityPlan ? 'Beschreibung' : 'Compliance Check';
+    document.querySelector('label[for="ci-form-evaluation"]').textContent =
+      isAuthorityPlan ? 'Level' : 'Bewertung';
+    // Ein Behördenaudit hat keine Sektionen: jedes Finding wird als 'THEORETICAL'
     // gespeichert, damit Sortier- und Speicherlogik unverändert bleiben. Sektion und
     // Sortierung wären dort ohne Bedeutung, deshalb verschwindet ihre ganze Zeile —
     // die Werte werden weiter gesetzt und unverändert mitgeschickt.
@@ -1654,10 +1657,13 @@
   let currentFindingCap = null;   // cap_item der Beanstandung, null solange keine Stufe gesetzt ist
   let currentFindingActions = []; // cap_action-Zeilen des CAP-Items, in Server-Reihenfolge
 
-  // Die Beanstandung Nr. ist wie in renderLineDetail() aus dem Zeilenindex abgeleitet
-  // und nie gespeichert — sie bleibt beim Löschen lückenlos 1..n.
+  // Die Nr. ist wie in renderLineDetail() aus dem Zeilenindex abgeleitet und nie
+  // gespeichert — sie bleibt beim Löschen lückenlos 1..n. Der Name steht an genau
+  // EINER Stelle, weil ihn der Zeilenklick, das Umbenennen in loadFinding() und die
+  // Überschrift des Screens gemeinsam tragen: das Segment heißt wie die Liste, aus
+  // der es aufgeschlagen wird, und die heißt Findings.
   function findingSegmentName(idx) {
-    return `Beanstandung ${idx + 1}`;
+    return `Finding ${idx + 1}`;
   }
 
   // Der Breadcrumb der Ebene ist Abteilung → Bericht → Beanstandung; die Abteilung
@@ -1680,7 +1686,7 @@
     // Eine Beanstandung hängt immer unter ihrem Bericht, dessen Segment im
     // persistierten Nav-Pfad steht — so findet auch ein Reload direkt auf dieser
     // Ebene die Zeile wieder. Die Liste des Berichts wird ohnehin gebraucht: die
-    // Beanstandung Nr. ist aus dem Zeilenindex abgeleitet.
+    // Nr. des Findings ist aus dem Zeilenindex abgeleitet.
     const lineSeg = [...navPath].reverse().find(s => s.type === 'audit-plan-line');
     if (!lineSeg) return;
 
@@ -1706,8 +1712,8 @@
     }
 
     // Nummer im Breadcrumb nachziehen: der Sprung aus der Tabelle kennt sie zwar,
-    // ein Reload auf dem gespeicherten Pfad aber nicht — und nach dem Löschen einer
-    // vorangehenden Beanstandung stimmt sie ohnehin neu.
+    // ein Reload auf dem gespeicherten Pfad aber nicht — und nach dem Löschen eines
+    // vorangehenden Findings stimmt sie ohnehin neu.
     const seg = navPath[navPath.length - 1];
     if (seg && seg.type === 'finding' && seg.id === findingId && seg.name !== findingSegmentName(idx)) {
       seg.name = findingSegmentName(idx);
@@ -1719,38 +1725,39 @@
   function renderFindingDetail() {
     if (!currentFinding) {
       headerEl.innerHTML = '';
-      contentEl.innerHTML = '<div class="empty-state-inline">Beanstandung nicht gefunden</div>';
+      contentEl.innerHTML = '<div class="empty-state-inline">Finding nicht gefunden</div>';
       return;
     }
 
     const item = currentFinding;
     const cap = currentFindingCap;
 
-    // ── Teilen ── (CM-003-CAP-PDF genau dieser Beanstandung)
-    // Das Dokument der Beanstandung ist das CAP-PDF: bei einem Behördenaudit
+    // ── Teilen ── (CM-003-CAP-PDF genau dieses Findings)
+    // Das Dokument des Findings ist das CAP-PDF: bei einem Behördenaudit
     // trägt es die 5-Why-Sektion und den Stufen-Klartext bereits (capHasFiveWhy()
     // und capEvalLabel() in pdf/cap.js), an der Erzeugung ist also nichts zu tun.
     // Es hängt aber — wie Maßnahme, Ursachenanalyse und Beweismittel — am
     // CAP-Item, und das entsteht erst mit der Stufe. Statt zu verschwinden bleibt
     // der Button dann sichtbar und deaktiviert, damit der Grund dort steht, wo
     // man ihn sucht, genau wie in den sprechenden Leerzuständen der Sektionen.
+    const shareTitle = cap ? 'Finding als PDF exportieren' : 'Kein PDF — das Finding hat noch kein Level';
     headerEl.innerHTML = `<h2>${escapeHtml(findingSegmentName(currentFindingIndex))}</h2>
-      <span id="finding-share"><button class="btn-icon" id="btn-finding-export" title="${cap ? 'Beanstandung als PDF exportieren' : 'Kein PDF — die Beanstandung hat noch keine Stufe'}"${cap ? '' : ' disabled'}>${ICON_SHARE}</button></span>`;
+      <span id="finding-share"><button class="btn-icon" id="btn-finding-export" title="${shareTitle}" aria-label="${shareTitle}"${cap ? '' : ' disabled'}>${ICON_SHARE}</button></span>`;
     if (cap) {
       document.getElementById('btn-finding-export').addEventListener('click', () => {
         // Derselbe Dialog und dieselbe Auswahl-Variable wie auf der CAP-Ebene:
         // Download, Behördenversand und freier Empfänger sind für eine einzelne
-        // Beanstandung genau das, was sie für ein einzelnes CAP-Item sind. Weil
+        // Finding genau das, was sie für ein einzelnes CAP-Item sind. Weil
         // es genau ein Eintrag ist, bietet der Dialog hier zusätzlich die Wahl
-        // zwischen CM-003 und dem CM-002-Formular derselben Beanstandung an.
+        // zwischen CM-003 und dem CM-002-Formular desselben Findings an.
         openCapExportDialog([cap.id]);
       });
     }
 
     let html = '<div class="audit-detail">';
 
-    // ── Beanstandung ── (Stammdaten)
-    // Die Stufe kennt beim Behördenaudit nur '', 'O', 'L1', 'L2' und wird über
+    // ── Stammdaten ──
+    // Das Level kennt beim Behördenaudit nur '', 'O', 'L1', 'L2' und wird über
     // evalLabel(value, true) beschriftet — gespeichert bleibt der rohe Wert. Ein
     // bereits gespeicherter Wert außerhalb der Liste (Altbestand 'L3') bleibt
     // wählbar, sonst fiele er beim nächsten Speichern still auf '' zurück.
@@ -1759,18 +1766,22 @@
       .map(o => `<option value="${escapeAttr(o.value)}"${o.value === (item.evaluation || '') ? ' selected' : ''}>${escapeHtml(evalLabel(o.value, true))}</option>`)
       .join('');
 
+    // Die Sektion heißt Stammdaten und nicht noch einmal "Finding": die
+    // Überschrift des Screens trägt den Namen bereits, und die Spalten der
+    // Findingliste stehen hier ohne den Zusatz, den sie dort ebenfalls nicht mehr
+    // tragen — Nr. | Referenz Paragraph | Beschreibung | Level | Frist.
     html += `<div class="audit-section">
-      <div class="audit-section-header"><h3>Beanstandung</h3></div>
+      <div class="audit-section-header"><h3>Stammdaten</h3></div>
       <div id="finding-basics" class="inline-form-grid">
-        <span class="inline-form-label">Beanstandung Nr.</span><span>${currentFindingIndex + 1}</span>
+        <span class="inline-form-label">Nr.</span><span>${currentFindingIndex + 1}</span>
         <label for="fd-regulation-ref">Referenz Paragraph</label><input class="inline-input finding-field" id="fd-regulation-ref" value="${escapeAttr(item.regulation_ref || '')}">
-        <label for="fd-compliance-check">Beanstandung Beschreibung</label><textarea class="inline-input inline-textarea finding-field" id="fd-compliance-check" rows="4">${escapeHtml(item.compliance_check || '')}</textarea>
-        <label for="fd-evaluation">Stufe</label><select class="inline-input finding-field" id="fd-evaluation">${evalOptionsHtml}</select>
+        <label for="fd-compliance-check">Beschreibung</label><textarea class="inline-input inline-textarea finding-field" id="fd-compliance-check" rows="4">${escapeHtml(item.compliance_check || '')}</textarea>
+        <label for="fd-evaluation">Level</label><select class="inline-input finding-field" id="fd-evaluation">${evalOptionsHtml}</select>
         <label for="fd-deadline">Frist</label><input class="inline-input finding-field" id="fd-deadline" value="${escapeAttr(formatDateDE(item.cap_deadline))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
       </div>
     </div>`;
 
-    // ── Maßnahmen ── (cap_action-Zeilen + CAP-Item der Beanstandung)
+    // ── Maßnahmen ── (cap_action-Zeilen + CAP-Item des Findings)
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Maßnahmen</h3></div>
       <div id="finding-actions">${findingActionsHtml(cap)}</div>
@@ -1778,13 +1789,13 @@
 
     // ── Ursachenanalyse ── (5-Why, CM-002)
     // Hier gilt keine L1/L2-Grenze: die Behörde verlangt die Ursachenanalyse für
-    // jede Beanstandung bis hinunter zur Stufe "Bemerkung" — der Screen existiert
+    // jedes Finding bis hinunter zum Level "Bemerkung" — der Screen existiert
     // ohnehin nur für Behördenaudits. Die L1/L2-Grenze bleibt damit allein Sache
     // der CAP-Ebene (renderCapDetailLevel()) und der internen Audits.
-    // Der Datensatz hängt aber am CAP-Item, und das entsteht erst mit der Stufe.
+    // Der Datensatz hängt aber am CAP-Item, und das entsteht erst mit dem Level.
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Ursachenanalyse</h3></div>
-      <div id="finding-rootcause">${cap ? fiveWhyHtml() : '<div class="empty-state-inline" style="padding:16px 0">Keine Ursachenanalyse — die Beanstandung hat noch keine Stufe</div>'}</div>
+      <div id="finding-rootcause">${cap ? fiveWhyHtml() : '<div class="empty-state-inline" style="padding:16px 0">Keine Ursachenanalyse — das Finding hat noch kein Level</div>'}</div>
     </div>`;
 
     // ── Beweismittel ── (cap_evidence_file)
@@ -1793,10 +1804,10 @@
     // ausgeblendet, sonst gäbe es zwei Orte für dieselbe Sache. Interne Audits
     // behalten beide Töpfe unverändert.
     // Der Topf hängt damit — wie die Ursachenanalyse — am CAP-Item, und das
-    // entsteht erst mit der Stufe.
+    // entsteht erst mit dem Level.
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Beweismittel</h3></div>
-      <div id="finding-evidence">${cap ? capEvidenceHtml() : '<div class="empty-state-inline" style="padding:16px 0">Keine Beweismittel — die Beanstandung hat noch keine Stufe</div>'}</div>
+      <div id="finding-evidence">${cap ? capEvidenceHtml() : '<div class="empty-state-inline" style="padding:16px 0">Keine Beweismittel — das Finding hat noch kein Level</div>'}</div>
     </div>`;
 
     html += '</div>';
@@ -1856,15 +1867,15 @@
     }
   }
 
-  // Eigene Funktion, weil die Sektion nach einem Stufenwechsel auch für sich allein
-  // gezeichnet werden muss: das CAP-Item entsteht und vergeht mit der Stufe.
+  // Eigene Funktion, weil die Sektion nach einem Levelwechsel auch für sich allein
+  // gezeichnet werden muss: das CAP-Item entsteht und vergeht mit dem Level.
   // Die Frist steht bewusst nicht hier, sondern als einziges Feld in den Stammdaten
   // (dieselbe Spalte cap_item.deadline) — zweimal sichtbar wäre eine der beiden
   // Anzeigen nach jedem Speichern veraltet. Verantwortlicher, Erledigt am und der
-  // daraus abgeleitete Status bleiben am CAP-Item: sie gelten für die Beanstandung
+  // daraus abgeleitete Status bleiben am CAP-Item: sie gelten für das Finding
   // als Ganzes, und genau diese Spalten lesen Fristen-Mails und Home-Dashboard.
   function findingActionsHtml(cap) {
-    if (!cap) return '<div class="empty-state-inline" style="padding:16px 0">Keine Maßnahmen — die Beanstandung hat noch keine Stufe</div>';
+    if (!cap) return '<div class="empty-state-inline" style="padding:16px 0">Keine Maßnahmen — das Finding hat noch kein Level</div>';
     let html = '';
     for (const g of CAP_ACTION_GROUPS) {
       html += `<div class="cap-action-group">
@@ -1880,7 +1891,7 @@
     // in den Zeilen darüber ein zweites Mal, direkt untergeschoben läsen sie sich
     // als weitere Spalte der Präventivmaßnahmen.
     return html + `<div class="cap-action-group">
-      <div class="audit-section-header"><h4>Erledigung der Beanstandung</h4></div>
+      <div class="audit-section-header"><h4>Erledigung des Findings</h4></div>
       <div class="inline-form-grid">
         <label for="fa-responsible">Verantwortlicher</label><input class="inline-input finding-cap-field" id="fa-responsible" value="${escapeAttr(cap.responsible_person || '')}">
         <label for="fa-completion-date">Erledigt am</label><input class="inline-input finding-cap-field" id="fa-completion-date" value="${escapeAttr(formatDateDE(cap.completion_date))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
@@ -1889,7 +1900,7 @@
     </div>`;
   }
 
-  // Die laufende Nr. ist wie die Beanstandung Nr. und das Nr. des Zielkatalogs aus
+  // Die laufende Nr. ist wie die Nr. des Findings und das Nr. des Zielkatalogs aus
   // dem Zeilenindex abgeleitet und nirgends gespeichert — sie zählt innerhalb der
   // eigenen Gruppe und bleibt beim Löschen einer Maßnahme lückenlos 1..n.
   // Die Felder tragen keine IDs, sondern Klassen: es sind n Zeilen, und die Zeile
