@@ -385,12 +385,18 @@
   document.getElementById('plan-type-authority').addEventListener('click', async () => {
     planTypeDialog.close();
     try {
-      await fetchJSON(`/api/departments/${currentDeptId}/audit-plans`, {
+      const plan = await fetchJSON(`/api/departments/${currentDeptId}/audit-plans`, {
         method: 'POST',
         body: { year: new Date().getFullYear(), plan_type: 'AUTHORITY' }
       });
-      toast('Behördenaudits erstellt');
+      toast('Behördenaudit erstellt');
       await loadAuditPlans();
+      // Der Plan bringt seinen Beanstandungsbericht mit — direkt hinein springen,
+      // statt den Anwender auf die Kachel zu schicken, die genau dorthin führt.
+      if (plan && plan.authority_line_id) {
+        navPath.push({ type: 'audit-plan-line', id: plan.authority_line_id, name: `Behördenaudit ${plan.year}` });
+        renderCurrentLevel();
+      }
     } catch (err) {
       toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }

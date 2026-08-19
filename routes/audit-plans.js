@@ -6,6 +6,7 @@ const { db, stmts } = require('../db');
 const { logAction } = require('../services/audit-log');
 const { calcCapDeadline } = require('../services/cap-deadlines');
 const { snapshotAuditPlan } = require('../services/trash');
+const { authorityLineDefaults } = require('../services/audit-lines');
 const { sendDocumentEmail, getQmForDepartment, buildAuthoritySalutation } = require('../services/email');
 const { _renderAuditPlanPdf, generateAuditPlanPdfBuffer } = require('../pdf/audit');
 
@@ -44,8 +45,36 @@ router.post('/api/departments/:departmentId/audit-plans', (req, res) => {
   if (!year || !Number.isInteger(year)) return res.status(400).json({ error: 'Year is required' });
   const id = uuidv4();
   const pType = plan_type === 'AUTHORITY' ? 'AUTHORITY' : 'AUDIT';
-  stmts.createAuditPlan.run(id, req.params.departmentId, year, 'ENTWURF', 0, pType);
-  res.status(201).json(stmts.getAuditPlan.get(id));
+
+  // Ein Behördenbesuch = ein Plan = ein Bericht: der Plan legt seine eine
+  // audit_plan_line gleich mit an — in EINER Transaktion, damit ein Behördenplan
+  // nie ohne seinen Beanstandungsbericht existiert (die Kachel springt direkt in
+  // die Line, ein Plan ohne Line würde auf der leeren Plan-Ebene landen).
+  // Interne Pläne bekommen wie bisher nur den Plan, ihre Themenbereiche werden
+  // einzeln gepflegt.
+  let lineId = null;
+  if (pType === 'AUTHORITY') {
+    lineId = uuidv4();
+    const { auditorTeam, auditee } = authorityLineDefaults(dept);
+    db.transaction(() => {
+      stmts.createAuditPlan.run(id, req.params.departmentId, year, 'ENTWURF', 0, pType);
+      stmts.createAuditPlanLine.run(
+        lineId, id,
+        0, '', '', '', '',
+        '1', '', '',
+        auditorTeam, auditee,
+        null, null, '',
+        '', '', null,
+        '', 'OPEN'
+      );
+    })();
+  } else {
+    stmts.createAuditPlan.run(id, req.params.departmentId, year, 'ENTWURF', 0, pType);
+  }
+
+  // authority_line_id heißt wie die Spalte, die getAuditPlansByDepartment
+  // mitliefert — das Frontend springt aus beiden Quellen gleich in den Bericht.
+  res.status(201).json({ ...stmts.getAuditPlan.get(id), authority_line_id: lineId });
 });
 
 router.put('/api/audit-plans/:id', (req, res) => {

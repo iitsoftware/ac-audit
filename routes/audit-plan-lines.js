@@ -6,6 +6,7 @@ const { db, stmts } = require('../db');
 const { logAction } = require('../services/audit-log');
 const { calcCapDeadline } = require('../services/cap-deadlines');
 const { snapshotAuditPlanLine } = require('../services/trash');
+const { authorityLineDefaults } = require('../services/audit-lines');
 const { renderAuditLinePdf } = require('../pdf/audit');
 const { addPdfFooter } = require('../pdf/common');
 const { parseAuditChecklist } = require('../imports/audit');
@@ -53,13 +54,7 @@ router.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
   let auditorTeam = b.auditor_team || '';
   let auditee = b.auditee || '';
   if (plan.plan_type === 'AUTHORITY' && !auditorTeam && !auditee) {
-    const dept = stmts.getDepartment.get(plan.department_id);
-    if (dept && dept.authority_name) auditorTeam = dept.authority_name;
-    if (dept) {
-      const personsAll = stmts.getPersonsByCompany.all(dept.company_id);
-      const qm = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
-      if (qm) auditee = `${qm.first_name} ${qm.last_name}`.trim();
-    }
+    ({ auditorTeam, auditee } = authorityLineDefaults(stmts.getDepartment.get(plan.department_id)));
   }
 
   stmts.createAuditPlanLine.run(
