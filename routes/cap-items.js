@@ -95,10 +95,13 @@ router.get('/api/cap-items/pdf', (req, res) => {
     const company = stmts.getCompany.get(dept.company_id);
     const logoRow = stmts.getCompanyLogo.get(company.id);
     const fiveWhy = capHasFiveWhy(cap) ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+    // Die Maßnahmen lädt der Aufrufer, nicht der Renderer — dasselbe Muster wie beim
+    // 5-Why-Satz: der Renderer joint nur, was er bekommt.
+    const capActions = stmts.getCapActionsByCapItem.all(cap.id);
     const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
 
     if (idx > 0) doc.addPage();
-    renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY: 50 });
+    renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, capActions, evidenceFiles, startY: 50 });
   }
 
   addPdfFooter(doc);
@@ -195,6 +198,7 @@ router.get('/api/cap-items/:id/pdf', (req, res) => {
   const company = stmts.getCompany.get(dept.company_id);
   const logoRow = stmts.getCompanyLogo.get(company.id);
   const fiveWhy = capHasFiveWhy(cap) ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+  const capActions = stmts.getCapActionsByCapItem.all(cap.id);
   const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
@@ -202,7 +206,7 @@ router.get('/api/cap-items/:id/pdf', (req, res) => {
   res.set('Content-Disposition', `attachment; filename="${capPdfFilename('CAP', cap)}"`);
   doc.pipe(res);
 
-  renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY: 50 });
+  renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, capActions, evidenceFiles, startY: 50 });
   addPdfFooter(doc);
   doc.end();
 });

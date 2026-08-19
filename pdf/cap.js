@@ -22,7 +22,27 @@ function capHasFiveWhy(cap) {
   return isAuthorityCap(cap) || cap.evaluation === 'L1' || cap.evaluation === 'L2';
 }
 
-function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY }) {
+// Das CM-003 hat je Art EINE Formularzelle, in die die Behörde ihre Maßnahmen von
+// Hand als "1. … 2. …" schreibt — also joint der Renderer die cap_action-Zeilen
+// einer Gruppe genauso in diese eine Zelle. Die laufende Nummer ist wie überall
+// abgeleitet (Index der gedruckten Liste, nie gespeichert) und bleibt dadurch
+// lückenlos 1..n; eine Maßnahme ohne Text hat nichts zu drucken und zählt deshalb
+// nicht mit. Existieren KEINE Zeilen, bleibt der alte Textwert aus
+// cap_item.corrective_action / preventive_action der Fallback — Altbestand und
+// interne Audits drucken damit unverändert. Ausschlaggebend ist die leere Liste,
+// nicht der leere Text: sobald Zeilen da sind, sind sie die Maßnahmen der
+// Beanstandung, genau wie auf dem Beanstandungs-Screen.
+function capActionCell(capActions, kind, fallback) {
+  const rows = (capActions || []).filter(a => a.kind === kind);
+  if (rows.length === 0) return fallback;
+  return rows
+    .map(a => (a.description || '').trim())
+    .filter(Boolean)
+    .map((desc, i) => `${i + 1}. ${desc}`)
+    .join('\n');
+}
+
+function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, capActions, evidenceFiles, startY }) {
   const pageW = 595.28;
   const tableRight = pageW - 50;
   const contentW = tableRight - 50;
@@ -115,8 +135,10 @@ function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWh
   drawInfoRow('Deadline', formatDateDE(cap.deadline));
   drawInfoRow('Verantwortlich', cap.responsible_person);
   drawInfoRow('Ursache', cap.root_cause);
-  drawInfoRow('Korrekturmaßnahme', cap.corrective_action);
-  drawInfoRow('Vorbeugemaßnahme', cap.preventive_action);
+  // Verantwortlicher und Erledigt-Datum einer einzelnen Maßnahme bleiben außen vor —
+  // das Formular hat dafür keine Spalte; gedruckt wird der Verantwortliche des CAP-Items.
+  drawInfoRow('Korrekturmaßnahme', capActionCell(capActions, 'CORRECTIVE', cap.corrective_action));
+  drawInfoRow('Vorbeugemaßnahme', capActionCell(capActions, 'PREVENTIVE', cap.preventive_action));
   drawInfoRow('Erledigt am', formatDateDE(cap.completion_date));
   drawInfoRow('Nachweis', cap.evidence);
   y += 15;
@@ -165,9 +187,10 @@ function generateCapItemsPdfBuffer(ids) {
       company = stmts.getCompany.get(dept.company_id);
       const logoRow = stmts.getCompanyLogo.get(company.id);
       const fiveWhy = capHasFiveWhy(cap) ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
+      const capActions = stmts.getCapActionsByCapItem.all(cap.id);
       const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
       if (idx > 0) doc.addPage();
-      renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY: 50 });
+      renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, capActions, evidenceFiles, startY: 50 });
     }
     addPdfFooter(doc);
     doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), dept, company }));
