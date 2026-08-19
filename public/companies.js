@@ -1293,11 +1293,14 @@
     // Listen-Route und wird beim Speichern wieder als `cap_deadline` (ISO) geschickt.
     document.getElementById('ci-form-deadline-group').style.display = isAuthorityPlan ? '' : 'none';
     document.getElementById('ci-form-deadline').value = isAuthorityPlan && isEdit ? formatDateDE(item.cap_deadline) : '';
-    // Evidence section: show only in edit mode
+    // Evidence section: show only in edit mode — und beim Behördenaudit gar nicht.
+    // Dort werden die Beweismittel auf der Beanstandungs-Ebene am CAP-Item gepflegt
+    // (cap_evidence_file); checklist_evidence_file wäre ein zweiter Topf für
+    // dieselbe Sache. Interne Audits behalten beide Töpfe unverändert.
     const evSection = document.getElementById('ci-evidence-section');
     const evThumbs = document.getElementById('ci-evidence-thumbs');
     evThumbs.innerHTML = '';
-    if (isEdit) {
+    if (isEdit && !isAuthorityPlan) {
       evSection.style.display = '';
       loadChecklistEvidenceThumbs(item.id);
     } else {
@@ -1490,10 +1493,16 @@
       <div id="finding-rootcause">${cap ? fiveWhyHtml() : '<div class="empty-state-inline" style="padding:16px 0">Keine Ursachenanalyse — die Beanstandung hat noch keine Stufe</div>'}</div>
     </div>`;
 
-    // ── Nachweise ── (checklist_evidence_file)
+    // ── Beweismittel ── (cap_evidence_file)
+    // Auf diesem Screen gibt es genau EINEN Beweismittel-Topf, den des CAP-Items:
+    // der checklist_evidence_file-Bereich des Dialogs ist beim Behördenaudit
+    // ausgeblendet, sonst gäbe es zwei Orte für dieselbe Sache. Interne Audits
+    // behalten beide Töpfe unverändert.
+    // Der Topf hängt damit — wie die Ursachenanalyse — am CAP-Item, und das
+    // entsteht erst mit der Stufe.
     html += `<div class="audit-section">
-      <div class="audit-section-header"><h3>Nachweise</h3></div>
-      <div id="finding-evidence"></div>
+      <div class="audit-section-header"><h3>Beweismittel</h3></div>
+      <div id="finding-evidence">${cap ? capEvidenceHtml() : '<div class="empty-state-inline" style="padding:16px 0">Keine Beweismittel — die Beanstandung hat noch keine Stufe</div>'}</div>
     </div>`;
 
     html += '</div>';
@@ -1512,6 +1521,7 @@
       // Datensatz wird mitgeführt, damit saveFindingCapFields() ihn unverändert
       // mitschickt statt den Stand vor dem Speichern zurückzuschreiben.
       initFiveWhy(cap.id, rc => { cap.root_cause = rc; });
+      initCapEvidence(cap.id);
     }
   }
 
@@ -2189,8 +2199,7 @@
     // Evidence images
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Nachweise</h3></div>
-      <div class="cap-evidence-thumbs" id="cap-evidence-thumbs"></div>
-      <input type="file" id="cap-evidence-upload" accept="image/png,image/jpeg,.pdf" multiple style="margin-top:0.5rem">
+      ${capEvidenceHtml()}
     </div>`;
 
     html += '</div>';
@@ -2215,24 +2224,8 @@
       });
     }
 
-    // Load evidence thumbnails
-    loadEvidenceThumbs(cap.id);
-
-    // Evidence upload handler
-    document.getElementById('cap-evidence-upload').addEventListener('change', async (e) => {
-      const container = document.getElementById('cap-evidence-thumbs');
-      for (const file of e.target.files) {
-        try {
-          const base64 = await fileToBase64(file);
-          const created = await fetchJSON(`/api/cap-items/${cap.id}/evidence-files`, {
-            method: 'POST',
-            body: { filename: file.name, mime_type: file.type || 'image/png', data: base64 }
-          });
-          addEvidenceThumb(container, created, '/api/evidence-files');
-        } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
-      }
-      e.target.value = '';
-    });
+    // Load evidence thumbnails + upload handler
+    initCapEvidence(cap.id);
   }
 
   async function saveCapFields(capId) {
@@ -2257,14 +2250,45 @@
     }
   }
 
-  async function loadEvidenceThumbs(capItemId) {
-    const container = document.getElementById('cap-evidence-thumbs');
-    if (!container) return;
-    container.innerHTML = '';
-    try {
-      const files = await fetchJSON(`/api/cap-items/${capItemId}/evidence-files`);
-      files.forEach(f => addEvidenceThumb(container, f, '/api/evidence-files'));
-    } catch (e) { toast('Laden fehlgeschlagen', 'error'); }
+  // ── Beweismittel eines CAP-Items (cap_evidence_file) ────────
+  // Wie beim 5-Why teilen sich die CAP-Ebene und die Beanstandungs-Ebene Markup
+  // und Verdrahtung, damit die zwei Screens nicht auseinanderlaufen — die IDs
+  // dürfen sie teilen, weil immer nur eine der beiden Ebenen in contentEl steht.
+  function capEvidenceHtml() {
+    return `<div class="cap-evidence-thumbs" id="cap-evidence-thumbs"></div>
+      <input type="file" id="cap-evidence-upload" accept="image/png,image/jpeg,.pdf" multiple style="margin-top:0.5rem" aria-label="Beweismittel hochladen">`;
+  }
+
+  function initCapEvidence(capItemId) {
+    const container = contentEl.querySelector('#cap-evidence-thumbs');
+    const input = contentEl.querySelector('#cap-evidence-upload');
+    if (!container || !input) return;
+
+    (async () => {
+      try {
+        const files = await fetchJSON(`/api/cap-items/${capItemId}/evidence-files`);
+        // Der Screen kann während des Ladens schon neu gezeichnet worden sein — auf
+        // der Beanstandungs-Ebene tut das jeder Stufenwechsel. Dann gehört der
+        // Container bereits einem anderen CAP-Item, und die geteilten IDs würden
+        // dessen Beweismittel mit denen von hier auffüllen.
+        if (!container.isConnected) return;
+        files.forEach(f => addEvidenceThumb(container, f, '/api/evidence-files'));
+      } catch (e) { toast('Laden fehlgeschlagen', 'error'); }
+    })();
+
+    input.addEventListener('change', async (e) => {
+      for (const file of e.target.files) {
+        try {
+          const base64 = await fileToBase64(file);
+          const created = await fetchJSON(`/api/cap-items/${capItemId}/evidence-files`, {
+            method: 'POST',
+            body: { filename: file.name, mime_type: file.type || 'image/png', data: base64 }
+          });
+          addEvidenceThumb(container, created, '/api/evidence-files');
+        } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
+      }
+      e.target.value = '';
+    });
   }
 
   function addEvidenceThumb(container, file, apiPrefix) {
