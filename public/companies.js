@@ -1480,9 +1480,14 @@
     </div>`;
 
     // ── Ursachenanalyse ── (5-Why, CM-002)
+    // Hier gilt keine L1/L2-Grenze: die Behörde verlangt die Ursachenanalyse für
+    // jede Beanstandung bis hinunter zur Stufe "Bemerkung" — der Screen existiert
+    // ohnehin nur für Behördenaudits. Die L1/L2-Grenze bleibt damit allein Sache
+    // der CAP-Ebene (renderCapDetailLevel()) und der internen Audits.
+    // Der Datensatz hängt aber am CAP-Item, und das entsteht erst mit der Stufe.
     html += `<div class="audit-section">
-      <div class="audit-section-header"><h3>5-Why Analyse</h3></div>
-      <div id="finding-five-why"></div>
+      <div class="audit-section-header"><h3>Ursachenanalyse</h3></div>
+      <div id="finding-rootcause">${cap ? fiveWhyHtml() : '<div class="empty-state-inline" style="padding:16px 0">Keine Ursachenanalyse — die Beanstandung hat noch keine Stufe</div>'}</div>
     </div>`;
 
     // ── Nachweise ── (checklist_evidence_file)
@@ -1498,6 +1503,10 @@
     contentEl.querySelectorAll('.finding-field').forEach(el => {
       el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'blur', saveFindingFields);
     });
+    // Die Route spiegelt den Root Cause nach cap_item.root_cause — der lokale
+    // Datensatz wird mitgeführt, damit ein späteres Neuzeichnen der Maßnahme
+    // nicht den Stand vor dem Speichern zeigt.
+    if (cap) initFiveWhy(cap.id, rc => { cap.root_cause = rc; });
   }
 
   // Eigene Funktion, weil die Frist der Stammdaten dasselbe CAP-Item schreibt: nach
@@ -1576,6 +1585,60 @@
     } catch (err) {
       toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
+  }
+
+  // ── 5-Why (CM-002) ──────────────────────────────────────────
+  // Der Block hängt am CAP-Item und wird von der CAP-Ebene und der Beanstandungs-
+  // Ebene gezeichnet. Beide teilen sich Markup und Verdrahtung, damit die zwei
+  // Screens nicht auseinanderlaufen — die Feld-IDs dürfen sie teilen, weil immer
+  // nur eine der beiden Ebenen in contentEl steht.
+  function fiveWhyHtml() {
+    return `<div class="inline-form-grid" id="five-why-grid">
+      <label for="fw-why1">1. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2" placeholder="Warum ist das Problem aufgetreten?"></textarea>
+      <label for="fw-why2">2. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2" placeholder="Warum war das so?"></textarea>
+      <label for="fw-why3">3. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2" placeholder="Warum war das so?"></textarea>
+      <label for="fw-why4">4. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2" placeholder="Warum war das so?"></textarea>
+      <label for="fw-why5">5. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2" placeholder="Warum war das so?"></textarea>
+      <label for="fw-root-cause">Root Cause</label><textarea class="inline-input inline-textarea five-why-field" id="fw-root-cause" rows="3" placeholder="Grundursache (wird als Ursache übernommen)"></textarea>
+    </div>`;
+  }
+
+  // Lädt den Datensatz nach und hängt den Auto-Save auf Blur an — wie überall auf
+  // den Detailebenen gibt es keinen Speichern-Button. PUT …/five-why spiegelt den
+  // Root Cause zusätzlich nach cap_item.root_cause; onRootCause() zieht diese
+  // zweite Kopie dort nach, wo der aufrufende Screen sie ebenfalls führt.
+  function initFiveWhy(capItemId, onRootCause) {
+    const grid = contentEl.querySelector('#five-why-grid');
+    if (!grid) return;
+    const field = id => grid.querySelector(`#${id}`);
+    const ids = ['fw-why1', 'fw-why2', 'fw-why3', 'fw-why4', 'fw-why5'];
+
+    (async () => {
+      try {
+        const fw = await fetchJSON(`/api/cap-items/${capItemId}/five-why`);
+        // Der Screen kann während des Ladens schon neu gezeichnet worden sein — auf
+        // der Beanstandungs-Ebene tut das jeder Stufenwechsel. Dann gehören die
+        // Felder bereits einem anderen CAP-Item und dürfen nicht überschrieben
+        // werden. Kein Datensatz ist kein Fehler: die leeren Felder sind der Stand.
+        if (!fw || !grid.isConnected) return;
+        ids.forEach((id, i) => { field(id).value = fw[`why${i + 1}`] || ''; });
+        field('fw-root-cause').value = fw.root_cause || '';
+        if (onRootCause) onRootCause(fw.root_cause || '');
+      } catch (e) { toast('5-Why konnte nicht geladen werden', 'error'); }
+    })();
+
+    async function saveFiveWhy() {
+      const data = { root_cause: field('fw-root-cause').value.trim() };
+      ids.forEach((id, i) => { data[`why${i + 1}`] = field(id).value.trim(); });
+      try {
+        await fetchJSON(`/api/cap-items/${capItemId}/five-why`, { method: 'PUT', body: data });
+        if (onRootCause) onRootCause(data.root_cause);
+      } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
+    }
+
+    grid.querySelectorAll('.five-why-field').forEach(el => {
+      el.addEventListener('blur', saveFiveWhy);
+    });
   }
 
   // ── Import .docx ────────────────────────────────────────────
@@ -2057,14 +2120,7 @@
     if (hasFiveWhy) {
       html += `<div class="audit-section">
         <div class="audit-section-header"><h3>5-Why Analyse</h3></div>
-        <div class="inline-form-grid">
-          <label for="fw-why1">1. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2" placeholder="Warum ist das Problem aufgetreten?"></textarea>
-          <label for="fw-why2">2. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2" placeholder="Warum war das so?"></textarea>
-          <label for="fw-why3">3. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2" placeholder="Warum war das so?"></textarea>
-          <label for="fw-why4">4. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2" placeholder="Warum war das so?"></textarea>
-          <label for="fw-why5">5. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2" placeholder="Warum war das so?"></textarea>
-          <label for="fw-root-cause">Root Cause</label><textarea class="inline-input inline-textarea five-why-field" id="fw-root-cause" rows="3" placeholder="Grundursache (wird als Ursache übernommen)"></textarea>
-        </div>
+        ${fiveWhyHtml()}
       </div>`;
     }
 
@@ -2102,41 +2158,12 @@
       el.addEventListener(event, () => saveCapFields(cap.id));
     });
 
-    // 5W: load data and setup auto-save
+    // 5W: load data and setup auto-save — der Root Cause wandert in das
+    // schreibgeschützte Ursache-Feld, das die Route ohnehin mitschreibt.
     if (hasFiveWhy) {
-      (async () => {
-        try {
-          const fw = await fetchJSON(`/api/cap-items/${cap.id}/five-why`);
-          if (fw) {
-            document.getElementById('fw-why1').value = fw.why1 || '';
-            document.getElementById('fw-why2').value = fw.why2 || '';
-            document.getElementById('fw-why3').value = fw.why3 || '';
-            document.getElementById('fw-why4').value = fw.why4 || '';
-            document.getElementById('fw-why5').value = fw.why5 || '';
-            document.getElementById('fw-root-cause').value = fw.root_cause || '';
-            document.getElementById('cap-f-root-cause').value = fw.root_cause || '';
-          }
-        } catch (e) { toast('5-Why konnte nicht geladen werden', 'error'); }
-      })();
-
-      async function saveFiveWhy() {
-        const data = {
-          why1: document.getElementById('fw-why1').value.trim(),
-          why2: document.getElementById('fw-why2').value.trim(),
-          why3: document.getElementById('fw-why3').value.trim(),
-          why4: document.getElementById('fw-why4').value.trim(),
-          why5: document.getElementById('fw-why5').value.trim(),
-          root_cause: document.getElementById('fw-root-cause').value.trim(),
-        };
-        try {
-          await fetchJSON(`/api/cap-items/${cap.id}/five-why`, { method: 'PUT', body: data });
-          // Sync root_cause to the read-only Ursache field
-          document.getElementById('cap-f-root-cause').value = data.root_cause;
-        } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
-      }
-
-      contentEl.querySelectorAll('.five-why-field').forEach(el => {
-        el.addEventListener('blur', saveFiveWhy);
+      initFiveWhy(cap.id, rc => {
+        const el = document.getElementById('cap-f-root-cause');
+        if (el) el.value = rc;
       });
     }
 
