@@ -1245,7 +1245,11 @@ dialog.dialog-wide {
   font-size: 14px;
 }
 
-.inline-form-grid label {
+/* .inline-form-label: Beschriftung ohne Eingabefeld — für abgeleitete, nur
+   angezeigte Werte wie die Beanstandung Nr. Ein <label> ohne Control wäre für
+   Screenreader eine Beschriftung ins Leere. */
+.inline-form-grid label,
+.inline-form-grid .inline-form-label {
   font-weight: 600;
   color: var(--text-muted);
   font-size: 13px;

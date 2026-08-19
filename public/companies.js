@@ -1452,29 +1452,32 @@
 
     let html = '<div class="audit-detail">';
 
-    // ── Beanstandung ── (Stammdaten, vorerst lesend)
+    // ── Beanstandung ── (Stammdaten)
+    // Die Stufe kennt beim Behördenaudit nur '', 'O', 'L1', 'L2' und wird über
+    // evalLabel(value, true) beschriftet — gespeichert bleibt der rohe Wert. Ein
+    // bereits gespeicherter Wert außerhalb der Liste (Altbestand 'L3') bleibt
+    // wählbar, sonst fiele er beim nächsten Speichern still auf '' zurück.
+    const evalOptionsHtml = allEvalOptions
+      .filter(o => authorityEvalValues.includes(o.value) || o.value === item.evaluation)
+      .map(o => `<option value="${escapeAttr(o.value)}"${o.value === (item.evaluation || '') ? ' selected' : ''}>${escapeHtml(evalLabel(o.value, true))}</option>`)
+      .join('');
+
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Beanstandung</h3></div>
-      <div id="finding-fields" class="cap-info-block">
-        <div class="cap-info-row"><span class="cap-info-label">Referenz Paragraph</span><span>${escapeHtml(item.regulation_ref || '')}</span></div>
-        <div class="cap-info-row"><span class="cap-info-label">Beschreibung</span><span>${escapeHtml(item.compliance_check || '')}</span></div>
-        <div class="cap-info-row"><span class="cap-info-label">Stufe</span><span>${item.evaluation ? `<span class="eval-badge eval-${item.evaluation}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</span></div>
-        <div class="cap-info-row"><span class="cap-info-label">Frist</span><span>${escapeHtml(formatDateDE(item.cap_deadline))}</span></div>
+      <div id="finding-basics" class="inline-form-grid">
+        <span class="inline-form-label">Beanstandung Nr.</span><span>${currentFindingIndex + 1}</span>
+        <label for="fd-regulation-ref">Referenz Paragraph</label><input class="inline-input finding-field" id="fd-regulation-ref" value="${escapeAttr(item.regulation_ref || '')}">
+        <label for="fd-compliance-check">Beanstandung Beschreibung</label><textarea class="inline-input inline-textarea finding-field" id="fd-compliance-check" rows="4">${escapeHtml(item.compliance_check || '')}</textarea>
+        <label for="fd-evaluation">Stufe</label><select class="inline-input finding-field" id="fd-evaluation">${evalOptionsHtml}</select>
+        <label for="fd-deadline">Frist</label><input class="inline-input finding-field" id="fd-deadline" value="${escapeAttr(formatDateDE(item.cap_deadline))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
       </div>
     </div>`;
 
     // ── Maßnahme ── (CAP-Item der Beanstandung)
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Maßnahme</h3></div>
-      <div id="finding-cap-fields">`;
-    html += cap
-      ? `<div class="cap-info-block">
-          <div class="cap-info-row"><span class="cap-info-label">Frist</span><span>${escapeHtml(formatDateDE(cap.deadline))}</span></div>
-          <div class="cap-info-row"><span class="cap-info-label">Verantwortlich</span><span>${escapeHtml(cap.responsible_person || '')}</span></div>
-          <div class="cap-info-row"><span class="cap-info-label">Status</span><span class="cap-status-${cap.completion_date ? 'CLOSED' : 'OPEN'}">${cap.completion_date ? 'CLOSED' : 'OPEN'}</span></div>
-        </div>`
-      : '<div class="empty-state-inline" style="padding:16px 0">Keine Maßnahme — die Beanstandung hat noch keine Stufe</div>';
-    html += '</div></div>';
+      <div id="finding-cap-fields">${findingCapHtml(cap)}</div>
+    </div>`;
 
     // ── Ursachenanalyse ── (5-Why, CM-002)
     html += `<div class="audit-section">
@@ -1490,6 +1493,89 @@
 
     html += '</div>';
     contentEl.innerHTML = html;
+
+    initDateAutoFormat(document.getElementById('fd-deadline'));
+    contentEl.querySelectorAll('.finding-field').forEach(el => {
+      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'blur', saveFindingFields);
+    });
+  }
+
+  // Eigene Funktion, weil die Frist der Stammdaten dasselbe CAP-Item schreibt: nach
+  // dem Speichern wird nur dieser Block neu gezeichnet statt des ganzen Screens.
+  function findingCapHtml(cap) {
+    if (!cap) return '<div class="empty-state-inline" style="padding:16px 0">Keine Maßnahme — die Beanstandung hat noch keine Stufe</div>';
+    return `<div class="cap-info-block">
+      <div class="cap-info-row"><span class="cap-info-label">Frist</span><span>${escapeHtml(formatDateDE(cap.deadline))}</span></div>
+      <div class="cap-info-row"><span class="cap-info-label">Verantwortlich</span><span>${escapeHtml(cap.responsible_person || '')}</span></div>
+      <div class="cap-info-row"><span class="cap-info-label">Status</span><span class="cap-status-${cap.completion_date ? 'CLOSED' : 'OPEN'}">${cap.completion_date ? 'CLOSED' : 'OPEN'}</span></div>
+    </div>`;
+  }
+
+  // Auto-Save auf Blur bzw. change wie auf der Bericht- und der CAP-Ebene.
+  // PUT /api/checklist-items/:id ersetzt die Zeile vollständig, deshalb reisen
+  // Sektion, Sortierung, Dokument-Ref. und Kommentar unverändert mit — dieser
+  // Screen zeigt sie nicht, darf sie aber auch nicht leeren.
+  async function saveFindingFields() {
+    const item = currentFinding;
+    if (!item) return;
+    const deadlineInput = document.getElementById('fd-deadline');
+    const deadlineIso = parseDateDE(deadlineInput.value);
+    if (deadlineIso === undefined) return toast('Frist bitte im Format TT.MM.JJJJ eingeben', 'error');
+
+    const data = {
+      section: item.section || 'THEORETICAL',
+      sort_order: item.sort_order || 0,
+      regulation_ref: document.getElementById('fd-regulation-ref').value.trim(),
+      compliance_check: document.getElementById('fd-compliance-check').value.trim(),
+      evaluation: document.getElementById('fd-evaluation').value,
+      auditor_comment: item.auditor_comment || '',
+      document_ref: item.document_ref || '',
+    };
+    // Die Behörde gibt ihre Frist vor — sie geht als `cap_deadline` (ISO) mit und
+    // legt das CAP-Item damit an bzw. überschreibt dessen Frist. Ein leeres Feld
+    // schickt nichts und lässt die am CAP gepflegte Frist stehen (derselbe
+    // Vertrag wie im Checklisten-Dialog).
+    if (deadlineIso) data.cap_deadline = deadlineIso;
+
+    try {
+      const saved = await fetchJSON(`/api/checklist-items/${item.id}`, { method: 'PUT', body: data });
+      // Die Stufe entscheidet über die Existenz des CAP-Items: kippt sie über die
+      // Grenze, legt die Route eines an oder löscht es — dann stimmen Maßnahme und
+      // Frist nur nach einem echten Nachladen. Sonst wird der lokale Datensatz
+      // fortgeschrieben, damit der Fokus beim Durchtabben nicht verloren geht.
+      const needsCap = ['O', 'L1', 'L2', 'L3'].includes(data.evaluation);
+      if (needsCap !== !!currentFindingCap) {
+        // loadLineData() vor loadFinding(): die Frist steht am CAP-Item und kommt
+        // über die Listen-Route des Berichts: eine frisch angelegte Maßnahme hat
+        // sie womöglich selbst gerechnet, eine gelöschte gar keine mehr.
+        // loadFinding() allein würde die Liste aus dem Cache nehmen.
+        await loadLineData(currentLine.id);
+        await loadFinding(item.id);
+        renderFindingDetail();
+        return;
+      }
+      // `saved` ist die rohe Zeile; cap_deadline und evidence_count kommen aus der
+      // Listen-Route und fehlen dort, werden von Object.assign also nicht überschrieben.
+      // currentFinding ist dasselbe Objekt wie in checklistItems — die Beanstandungs-
+      // tabelle des Berichts zeigt beim Zurücknavigieren denselben Stand.
+      Object.assign(item, saved);
+      if (deadlineIso) {
+        item.cap_deadline = deadlineIso;
+        // Dieselbe Frist steht am CAP-Item: die Maßnahme-Sektion würde sonst die
+        // alte anzeigen. Nur dieser Block wird neu gezeichnet, der Fokus des
+        // gerade angesprungenen Feldes bleibt damit erhalten.
+        if (currentFindingCap) {
+          currentFindingCap.deadline = deadlineIso;
+          document.getElementById('finding-cap-fields').innerHTML = findingCapHtml(currentFindingCap);
+        }
+      // Ein leer gelassenes Feld hat nichts geschickt: die gespeicherte Frist steht
+      // weiter am CAP-Item, also darf der Screen sie nicht als gelöscht ausgeben.
+      } else if (!deadlineInput.value.trim()) {
+        deadlineInput.value = formatDateDE(item.cap_deadline);
+      }
+    } catch (err) {
+      toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
+    }
   }
 
   // ── Import .docx ────────────────────────────────────────────
