@@ -274,7 +274,23 @@
       return;
     }
     // Sort by year desc, then revision desc
-    const sorted = [...auditPlans].sort((a, b) => b.year - a.year || (b.revision || 0) - (a.revision || 0));
+    const byYear = (a, b) => b.year - a.year || (b.revision || 0) - (a.revision || 0);
+    // Ein Behördenaudit sortiert nach dem Datum seines Besuchs statt nach dem Jahr:
+    // die Jahreszahl steht auf keiner seiner Kacheln, und pro Besuch existiert ein
+    // eigener Plan — nach year sortiert stünden mehrere Besuche desselben Jahres in
+    // beliebiger Reihenfolge. authority_date liefert die Plan-Liste bereits mit
+    // (COALESCE aus performed_date / audit_end_date / audit_start_date), es ist ein
+    // ISO-Datum, dessen String-Vergleich chronologisch ist. Ein Bericht ohne Datum —
+    // also ein frisch angelegter — sortiert ans Ende seiner Gruppe, statt zwischen
+    // datierten Besuchen zu verschwinden; sind beide ohne Datum, bleibt die alte
+    // Ordnung nach Jahr und Revision als stabiler Rest.
+    const byAuthorityDate = (a, b) => {
+      const da = a.authority_date || '';
+      const db = b.authority_date || '';
+      if (da && db) return db.localeCompare(da);
+      if (da || db) return da ? -1 : 1;
+      return byYear(a, b);
+    };
     function derivePlanStatus(p) {
       if ((p.plan_type || 'AUDIT') === 'AUTHORITY') return { css: 'plan-tile-authority', label: 'Aktiv' };
       if (p.submitted_at) return { css: 'plan-tile-done', label: 'Erledigt' };
@@ -312,8 +328,9 @@
         </div>
       </div>`;
     }
-    const auditSorted = sorted.filter(p => (p.plan_type || 'AUDIT') !== 'AUTHORITY');
-    const authoritySorted = sorted.filter(p => (p.plan_type || 'AUDIT') === 'AUTHORITY');
+    const isAuthorityPlan = p => (p.plan_type || 'AUDIT') === 'AUTHORITY';
+    const auditSorted = auditPlans.filter(p => !isAuthorityPlan(p)).sort(byYear);
+    const authoritySorted = auditPlans.filter(isAuthorityPlan).sort(byAuthorityDate);
     let gridHtml = '';
     if (auditSorted.length > 0) {
       if (authoritySorted.length > 0) gridHtml += '<div class="plan-group-label">Auditpl\u00e4ne</div>';
