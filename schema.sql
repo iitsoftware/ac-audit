@@ -109,6 +109,32 @@ CREATE TABLE IF NOT EXISTS cap_item (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Die n Maßnahmen einer Beanstandung. Additiv: cap_item.corrective_action /
+-- preventive_action bleiben als Einzelfeld bestehen (Altbestand + CM-003-
+-- Fallback), es gibt weder Datenmigration noch Drop — die Behörde erwartet
+-- aber mehrere durchnummerierte Maßnahmen je Finding, und genau das ist die
+-- einzige Modell-Lücke des Behördenaudits: Besuch (audit_plan), Finding
+-- (audit_checklist_item) und 5W (five_why) bildet das bestehende Modell schon
+-- korrekt ab, deshalb kommt hier keine weitere Behörden-Tabelle dazu.
+-- kind trennt Behebungs- von Präventivmaßnahme, sort_order ist die gedruckte
+-- Reihenfolge (die Nummer selbst wird wie überall aus dem Index abgeleitet).
+-- Die Frist bleibt am Finding (cap_item.deadline); target_date ist nur ein
+-- internes Zwischenziel einer einzelnen Maßnahme.
+CREATE TABLE IF NOT EXISTS cap_action (
+  id TEXT PRIMARY KEY,
+  cap_item_id TEXT NOT NULL REFERENCES cap_item(id) ON DELETE CASCADE,
+  sort_order INTEGER DEFAULT 0,
+  -- 'CORRECTIVE' | 'PREVENTIVE'
+  kind TEXT DEFAULT 'CORRECTIVE',
+  description TEXT DEFAULT '',
+  responsible_person TEXT DEFAULT '',
+  target_date TEXT,
+  completion_date TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cap_action_cap_item ON cap_action(cap_item_id);
+
 CREATE TABLE IF NOT EXISTS cap_evidence_file (
   id TEXT PRIMARY KEY,
   cap_item_id TEXT NOT NULL REFERENCES cap_item(id) ON DELETE CASCADE,
