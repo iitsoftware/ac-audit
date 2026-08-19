@@ -245,11 +245,14 @@ const stmts = {
      GROUP BY ci.audit_plan_line_id`
   ),
 
+  // audit_plan_line_id reist mit, weil die Übersicht "Offene Beanstandungen" auf der
+  // Berichtsebene steht: sie zeigt genau die CAPs ihres Berichts, die Route liefert
+  // aber die des ganzen Plans (beim Altbestand mehrere Berichte).
   getCapItemsByPlan: db.prepare(
     `SELECT c.id, c.checklist_item_id, c.deadline, c.responsible_person, c.root_cause,
             c.corrective_action, c.preventive_action, c.status, c.completion_date, c.evidence,
             c.created_at, c.updated_at,
-            ci.regulation_ref, ci.compliance_check, ci.evaluation, ci.auditor_comment,
+            ci.audit_plan_line_id, ci.regulation_ref, ci.compliance_check, ci.evaluation, ci.auditor_comment,
             pl.subject, pl.audit_no
      FROM cap_item c
      JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id

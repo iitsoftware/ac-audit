@@ -1104,8 +1104,18 @@
       });
     }
 
+    // ── Offene Beanstandungen ──
+    // Die CAP-Sektion der Plan-Ebene, die beim Behördenaudit niemand mehr erreicht,
+    // seit die Kachel direkt in den Bericht springt. Sie trägt hier Status, Filter
+    // und den Sammel-Export, die die Beanstandungstabelle darüber nicht kennt.
+    // `audit-section` nur hier: auf der Berichtsebene stehen alle Blöcke in Karten,
+    // auf der Plan-Ebene steht die Sektion frei unter der Zeilenliste.
+    if (isAuthorityLine) html += `<div class="audit-section cap-section" id="cap-section"></div>`;
+
     html += '</div>';
     contentEl.innerHTML = html;
+
+    if (isAuthorityLine) loadCapSection(currentLine.audit_plan_id, currentLine);
 
     // ── Auto-save on blur for all inline fields ──
     // Init date auto-format for all date text inputs
@@ -1972,8 +1982,14 @@
   // ── CAP Section ──────────────────────────────────────────
   let capItems = [];
   let capSummary = { total: 0, closed: 0 };
+  // Bericht, auf dessen Ebene die Sektion gerade steht — null heißt Plan-Ebene.
+  // Beim Behördenaudit ist die Plan-Ebene kein Navigationsziel mehr, die Sektion
+  // zieht deshalb auf die Berichtsebene um und wird dort zur Übersicht
+  // "Offene Beanstandungen".
+  let capSectionLine = null;
 
-  async function loadCapSection(planId) {
+  async function loadCapSection(planId, line = null) {
+    capSectionLine = line;
     try {
       const data = await fetchJSON(`/api/audit-plans/${planId}/cap-items`);
       capItems = data.items || [];
@@ -1986,16 +2002,26 @@
     renderCapSection();
   }
 
+  // Auf der Berichtsebene eines Behördenaudits (capSectionLine gesetzt) ist die
+  // Sektion die Übersicht "Offene Beanstandungen": dieselben Zeilen wie die flache
+  // Beanstandungstabelle darüber, aber mit Status, Filter und Sammel-Export — und der
+  // Zeilenklick führt auf den Beanstandungs-Screen statt auf die CAP-Ebene, die beim
+  // Behördenaudit kein Navigationsziel mehr ist. Auf der Plan-Ebene (interne Pläne
+  // und der Behörden-Altbestand ohne eindeutigen Bericht) bleibt sie der CAP.
   function renderCapSection() {
     const section = document.getElementById('cap-section');
     if (!section) return;
 
-    const total = capSummary.total || 0;
-    const closed = capSummary.closed || 0;
+    const line = capSectionLine;
+    // Die Route liefert die CAPs des ganzen Plans; die Übersicht zeigt genau die
+    // ihres Berichts — beim Altbestand mit mehreren Berichten fällt das auseinander.
+    const scoped = line ? capItems.filter(c => c.audit_plan_line_id === line.id) : capItems;
+    const total = line ? scoped.length : (capSummary.total || 0);
+    const closed = line ? scoped.filter(c => capStatus(c) === 'CLOSED').length : (capSummary.closed || 0);
     const pct = total > 0 ? Math.round(closed / total * 100) : 0;
 
     let html = `<div class="cap-section-header">
-      <h3>Corrective Action Plan (CAP)</h3>
+      <h3>${line ? 'Offene Beanstandungen' : 'Corrective Action Plan (CAP)'}</h3>
       <div class="cap-progress">
         <div class="cap-progress-bar"><div class="cap-progress-fill" style="width:${pct}%"></div></div>
         <span class="cap-progress-label">${closed}/${total}</span>
@@ -2009,10 +2035,35 @@
       <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED">CLOSED</button>
     </div>`;
 
-    const filtered = capFilter ? capItems.filter(c => capStatus(c) === capFilter) : capItems;
+    const filtered = capFilter ? scoped.filter(c => capStatus(c) === capFilter) : scoped;
+
+    // Die Beanstandung Nr. ist wie in renderLineDetail() der Zeilenindex im Bericht —
+    // dieselbe Nummer trägt der Breadcrumb und der Beanstandungs-Screen selbst.
+    const findingIndex = cap => checklistItems.findIndex(ci => ci.id === cap.checklist_item_id);
 
     if (filtered.length === 0) {
-      html += '<div class="empty-state-inline" style="padding:16px 0">Keine Eintr\u00e4ge</div>';
+      html += `<div class="empty-state-inline" style="padding:16px 0">${line ? 'Keine Beanstandungen' : 'Keine Eintr\u00e4ge'}</div>`;
+    } else if (line) {
+      // Audit-Nr., Thema und Referenz Paragraph stehen auf diesem Screen schon oben
+      // bzw. in der Tabelle darüber — die Übersicht trägt nur, was dort fehlt.
+      html += `<div class="lines-table-wrap"><table class="lines-table">
+        <thead><tr>
+          <th>Beanstandung Nr.</th><th>Beanstandung Beschreibung</th><th>Stufe</th><th>Frist</th><th>Status</th>
+          <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-cap" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte Beanstandungen als PDF exportieren">${ICON_SHARE}</button></span></th>
+        </tr></thead><tbody>`;
+      filtered.forEach(cap => {
+        const evalClass = cap.evaluation ? `eval-${cap.evaluation}` : '';
+        const idx = findingIndex(cap);
+        html += `<tr class="cap-row-clickable" data-cap-id="${cap.id}">
+          <td>${idx >= 0 ? idx + 1 : ''}</td>
+          <td class="wrap-cell">${escapeHtml(cap.compliance_check || '')}</td>
+          <td>${cap.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(cap.evaluation, true))}</span>` : ''}</td>
+          <td>${escapeHtml(formatDateDE(cap.deadline))}</td>
+          <td><span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span></td>
+          <td class="col-select"><input type="checkbox" class="cap-select-cb" data-cap-id="${cap.id}"></td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
     } else {
       html += `<div class="lines-table-wrap"><table class="lines-table">
         <thead><tr>
@@ -2049,11 +2100,19 @@
     });
 
     // Row click → navigate to CAP detail
+    // Beim Behördenaudit liegen Stammdaten, Maßnahme, Ursachenanalyse und
+    // Beweismittel einer Beanstandung auf einem Screen — die CAP-Ebene wird dort nie
+    // mehr angesprungen. Interne Pläne behalten sie unverändert.
     section.querySelectorAll('.cap-row-clickable').forEach(row => {
       makeRowClickable(row, (e) => {
         if (e.target.closest('.col-select')) return;
         const cap = capItems.find(c => c.id === row.dataset.capId);
-        if (cap) {
+        if (!cap) return;
+        if (line) {
+          const idx = findingIndex(cap);
+          if (idx < 0) return;
+          pushNavSegment({ type: 'finding', id: cap.checklist_item_id, name: findingSegmentName(idx) });
+        } else {
           pushNavSegment({ type: 'cap-item', id: cap.id, name: 'CAP' });
         }
       });
@@ -2075,7 +2134,7 @@
       capCbs.forEach(cb => cb.addEventListener('change', updateCapSelection));
       capHeader.querySelector('.select-share-btn').addEventListener('click', () => {
         const ids = [...capCbs].filter(cb => cb.checked).map(cb => cb.dataset.capId);
-        if (ids.length === 0) { toast('Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
+        if (ids.length === 0) { toast(line ? 'Keine Beanstandungen ausgew\u00e4hlt' : 'Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
         selectedCapIds = ids;
         capExportEmailSection.style.display = 'none';
         capExportDialog.showModal();
