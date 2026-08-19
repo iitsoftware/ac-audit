@@ -213,6 +213,20 @@
 <dialog id="cap-export-dialog" aria-labelledby="cap-export-dialog-title">
   <div class="dialog-header" id="cap-export-dialog-title">CAP exportieren</div>
   <div class="dialog-body">
+    <!-- Dokumentwahl: wirkt allein auf den Download genau einer Beanstandung.
+         Das CM-002 ist ein Einzelformular (GET /api/cap-items/:id/five-why/pdf)
+         ohne Batch-Route, bei einer Mehrfachauswahl ist die Gruppe deshalb
+         ausgeblendet und der Dialog bleibt beim CM-003 wie bisher.
+         Bare label + aria-labelledby wie bei der CM-006-Bewertung in
+         views/safety.ejs: die Gruppe hat keine eigene Control. -->
+    <div class="form-group" id="cap-export-doc-group" style="display:none">
+      <label id="cap-export-doc-label">Dokument</label>
+      <div class="radio-row" role="radiogroup" aria-labelledby="cap-export-doc-label">
+        <label class="radio-check"><input type="radio" name="cap-export-doc" id="cap-export-doc-cap" value="cap" checked> CM-003 Korrekturma&szlig;nahme</label>
+        <label class="radio-check"><input type="radio" name="cap-export-doc" id="cap-export-doc-five-why" value="five-why"> CM-002 Ursachenanalyse</label>
+      </div>
+      <span class="form-hint">Der Versand schickt immer die CM-003 Korrekturma&szlig;nahme.</span>
+    </div>
     <div class="export-actions">
       <button class="btn btn-secondary" id="cap-export-download">Download PDF</button>
       <button class="btn btn-secondary" id="cap-export-authority">An Beh&ouml;rde senden</button>

@@ -1545,10 +1545,10 @@
       document.getElementById('btn-finding-export').addEventListener('click', () => {
         // Derselbe Dialog und dieselbe Auswahl-Variable wie auf der CAP-Ebene:
         // Download, Behördenversand und freier Empfänger sind für eine einzelne
-        // Beanstandung genau das, was sie für ein einzelnes CAP-Item sind.
-        selectedCapIds = [cap.id];
-        capExportEmailSection.style.display = 'none';
-        capExportDialog.showModal();
+        // Beanstandung genau das, was sie für ein einzelnes CAP-Item sind. Weil
+        // es genau ein Eintrag ist, bietet der Dialog hier zusätzlich die Wahl
+        // zwischen CM-003 und dem CM-002-Formular derselben Beanstandung an.
+        openCapExportDialog([cap.id]);
       });
     }
 
@@ -2204,9 +2204,7 @@
       capHeader.querySelector('.select-share-btn').addEventListener('click', () => {
         const ids = [...capCbs].filter(cb => cb.checked).map(cb => cb.dataset.capId);
         if (ids.length === 0) { toast(line ? 'Keine Beanstandungen ausgew\u00e4hlt' : 'Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
-        selectedCapIds = ids;
-        capExportEmailSection.style.display = 'none';
-        capExportDialog.showModal();
+        openCapExportDialog(ids);
       });
     }
   }
@@ -2216,7 +2214,28 @@
   const capExportEmailSection = document.getElementById('cap-export-email-section');
   const capExportEmailInput = document.getElementById('cap-export-email-to');
   const capExportEmailSendBtn = document.getElementById('cap-export-email-send');
+  const capExportDocGroup = document.getElementById('cap-export-doc-group');
+  const capExportDocCap = document.getElementById('cap-export-doc-cap');
+  const capExportDocFiveWhy = document.getElementById('cap-export-doc-five-why');
   let selectedCapIds = [];
+
+  // Alle drei Einstiege — Mehrfachauswahl der Übersicht, CAP-Ebene und
+  // Beanstandungs-Screen — öffnen den Dialog über diesen einen Weg, damit die
+  // Rücksetzer nicht an drei Stellen gepflegt werden müssen: der Dialog startet
+  // immer ohne aufgeklappte E-Mail-Sektion und immer beim CM-003.
+  function openCapExportDialog(ids) {
+    selectedCapIds = ids;
+    capExportEmailSection.style.display = 'none';
+    // Das CM-002 ist ein Einzelformular ohne Batch-Route: bei einer
+    // Mehrfachauswahl gibt es nichts zu wählen, die Gruppe verschwindet und der
+    // Download bleibt exakt der bisherige. Die Grenze ist die Anzahl und nicht
+    // der Screen — die CAP-Ebene teilt ebenfalls genau einen Eintrag, und die
+    // CM-002-Route ist bewusst ungated: ohne five_why-Datensatz liefert sie das
+    // leere, von Hand ausfüllbare Formular und keinen Fehler.
+    capExportDocGroup.style.display = ids.length === 1 ? '' : 'none';
+    capExportDocCap.checked = true;
+    capExportDialog.showModal();
+  }
 
   document.getElementById('cap-export-cancel').addEventListener('click', () => {
     capExportEmailSection.style.display = 'none';
@@ -2224,11 +2243,17 @@
   });
 
   document.getElementById('cap-export-download').addEventListener('click', () => {
-    // Bei genau einem Eintrag zieht die Einzelroute: sie rendert dasselbe CM-003-PDF,
-    // benennt die Datei aber sprechend nach Audit-Nr. und Stufe statt generisch
-    // "Corrective_Actions.pdf" — was die Beanstandungs- und die CAP-Ebene, die immer
-    // genau einen Eintrag teilen, gerade zum Weiterreichen an die Behörde brauchen.
-    if (selectedCapIds.length === 1) window.open(`/api/cap-items/${selectedCapIds[0]}/pdf`);
+    // Bei genau einem Eintrag ziehen die Einzelrouten: die Dokumentwahl entscheidet
+    // zwischen der CM-003-Korrekturmaßnahme und dem eigenständigen CM-002-Formular
+    // derselben Beanstandung. Beide benennen die Datei sprechend nach Audit-Nr. und
+    // Stufe (capPdfFilename()) statt generisch "Corrective_Actions.pdf" — was die
+    // Beanstandungs- und die CAP-Ebene, die immer genau einen Eintrag teilen, gerade
+    // zum Weiterreichen an die Behörde brauchen. Die Wahl wirkt nur hier: einen
+    // Versand des CM-002 gibt es nicht, dafür der Hinweis unter der Gruppe.
+    if (selectedCapIds.length === 1) {
+      const doc = capExportDocFiveWhy.checked ? 'five-why/pdf' : 'pdf';
+      window.open(`/api/cap-items/${selectedCapIds[0]}/${doc}`);
+    }
     else if (selectedCapIds.length > 0) window.open(`/api/cap-items/pdf?ids=${selectedCapIds.join(',')}`);
     capExportDialog.close();
   });
@@ -2300,9 +2325,7 @@
     headerEl.innerHTML = `<h2>Corrective Action</h2>
       <button class="btn-icon" id="btn-cap-detail-export" title="CAP exportieren">${ICON_SHARE}</button>`;
     document.getElementById('btn-cap-detail-export').addEventListener('click', () => {
-      selectedCapIds = [capItemId];
-      capExportEmailSection.style.display = 'none';
-      capExportDialog.showModal();
+      openCapExportDialog([capItemId]);
     });
 
     const cap = currentCapItem;
