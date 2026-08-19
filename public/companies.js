@@ -1119,31 +1119,38 @@
 
     // ── Checkliste ──
     // Ein Behördenaudit kennt keine Sektionen: die Behörde übergibt eine flache
-    // Beanstandungsliste in der Spaltenfolge ihres Berichts. Die Beanstandung Nr.
-    // ist wie das `Lfd.` der AC-SMS-Tabellen aus dem Zeilenindex abgeleitet und
-    // nie gespeichert, damit sie beim Löschen lückenlos 1..n bleibt.
+    // Findingliste in der Spaltenfolge ihres Berichts. Sie heißt Findings und nicht
+    // Beanstandungen — die Beanstandung IST das Finding, ein zweites Wort dafür
+    // zerschneidet die Kette Besuch → Finding → 5-Why/Maßnahmen. Die Nr. ist wie
+    // das `Lfd.` der AC-SMS-Tabellen aus dem Zeilenindex abgeleitet und nie
+    // gespeichert, damit sie beim Löschen lückenlos 1..n bleibt.
+    // Der Status ist genauso abgeleitet (capStatus(), aus completion_date), steht
+    // aber am CAP-Item und damit an derselben Liste, welche die Übersicht darunter
+    // lädt. Die Zellen gehen deshalb leer heraus und werden von
+    // paintFindingStatus() gefüllt, sobald loadCapSection() fertig ist — eine
+    // zweite Abfrage derselben Route wäre der Preis dafür, sie sofort zu füllen.
     // Interne Pläne behalten die drei Sektionen unverändert.
     if (isAuthorityLine) {
       html += `<div class="audit-section">
         <div class="audit-section-header">
-          <h3>Beanstandungen</h3>
-          <button class="btn-icon btn-add-section-ci" data-section="THEORETICAL" title="Beanstandung hinzuf\u00fcgen">+</button>
+          <h3>Findings</h3>
+          <button class="btn-icon btn-add-section-ci" data-section="THEORETICAL" title="Finding hinzuf\u00fcgen">+</button>
         </div>`;
 
       if (checklistItems.length === 0) {
-        html += '<div class="empty-state-inline" style="padding:16px 0">Keine Beanstandungen</div>';
+        html += '<div class="empty-state-inline" style="padding:16px 0">Keine Findings</div>';
       } else {
         html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
           <colgroup>
-            <col style="width:120px"><col style="width:16%"><col style="width:auto"><col style="width:110px"><col style="width:100px"><col style="width:56px">
+            <col style="width:56px"><col style="width:16%"><col style="width:auto"><col style="width:130px"><col style="width:100px"><col style="width:120px"><col style="width:56px">
           </colgroup>
           <thead><tr>
-            <th>Beanstandung Nr.</th><th>Referenz Paragraph</th><th>Beanstandung Beschreibung</th><th>Stufe</th><th>Frist</th><th></th>
+            <th>Nr.</th><th>Referenz Paragraph</th><th>Beschreibung</th><th>Level</th><th>Frist</th><th>Status</th><th></th>
           </tr></thead><tbody>`;
         checklistItems.forEach((item, idx) => {
           const evalClass = item.evaluation ? `eval-${item.evaluation}` : '';
           // Der Beweis-Clip hängt an der Beschreibung statt in einer eigenen Spalte —
-          // die Spaltenfolge der Beanstandungsliste gibt die Behörde vor.
+          // die Spaltenfolge der Findingliste gibt die Behörde vor.
           const clipIcon = item.evidence_count > 0 ? ` <span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
           html += `<tr class="ci-row-clickable" data-id="${item.id}">
             <td>${idx + 1}</td>
@@ -1151,6 +1158,7 @@
             <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
             <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</td>
             <td>${escapeHtml(formatDateDE(item.cap_deadline))}</td>
+            <td data-finding-status="${item.id}"></td>
             <td class="line-actions">
               <button class="pane-action-btn danger" data-action="delete-ci" data-id="${item.id}" title="L\u00f6schen">&#128465;</button>
             </td>
@@ -2322,6 +2330,19 @@
     }
     // capFilter is preserved from saved state (or null by default)
     renderCapSection();
+    paintFindingStatus();
+  }
+
+  // Die Status-Spalte der Findingliste (renderLineDetail(), nur Behördenaudit).
+  // Sie liest dieselben CAP-Items wie die Übersicht darunter und denselben
+  // capStatus()-Helper, damit dieselbe Beanstandung oben und unten nicht
+  // auseinanderlaufen kann. Ein Finding ohne Level hat kein CAP-Item und deshalb
+  // keinen Status — das ist ein Zustand und kein Fehler, die Zelle bleibt leer.
+  function paintFindingStatus() {
+    contentEl.querySelectorAll('[data-finding-status]').forEach(td => {
+      const cap = capItems.find(c => c.checklist_item_id === td.dataset.findingStatus);
+      td.innerHTML = cap ? `<span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span>` : '';
+    });
   }
 
   // Auf der Berichtsebene eines Behördenaudits (capSectionLine gesetzt) ist die
