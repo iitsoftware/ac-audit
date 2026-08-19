@@ -617,12 +617,19 @@
     // Lines section
     const linesTitle = isAuthority ? 'Findings' : 'Themenbereiche';
     const addLineTitle = isAuthority ? 'Finding hinzuf\u00fcgen' : 'Themenbereich hinzuf\u00fcgen';
+    // Ein Beh\u00f6rdenaudit hat genau EINEN Beanstandungsbericht, und der entsteht
+    // seit der Plananlage mit dem Plan zusammen \u2014 der +-Button entf\u00e4llt dort.
+    // Er bleibt nur f\u00fcr den Altbestand stehen, der die Plan-Ebene \u00fcberhaupt noch
+    // erreicht: ein Beh\u00f6rdenplan ohne Line (authority_line_id = NULL, siehe
+    // renderAuditPlans()) h\u00e4tte sonst keinen Weg mehr zu seinem Bericht.
+    // Interne Pl\u00e4ne behalten den Button unver\u00e4ndert.
+    const showAddLine = !isAuthority || sortedLines.length === 0;
     html += `<div class="plan-lines-header">
       <h3>${linesTitle}</h3>
       <div style="display:flex;gap:0.25rem">
         ${isAuthority ? '' : `<button class="btn-icon" id="btn-pdf-export" title="PDF exportieren">${ICON_SHARE}</button>`}
         <button class="btn-icon" id="btn-import-audits" title="Audit-Checklisten importieren (.xlsx)">${ICON_IMPORT}</button>
-        <button class="btn-icon" id="btn-add-line" title="${addLineTitle}">+</button>
+        ${showAddLine ? `<button class="btn-icon" id="btn-add-line" title="${addLineTitle}">+</button>` : ''}
       </div>
     </div>`;
 
@@ -810,20 +817,24 @@
     }
 
     // Bind add line: create empty line, then navigate to detail
-    document.getElementById('btn-add-line').addEventListener('click', async () => {
-      try {
-        const defaultCity = getSelectedCompany()?.city || '';
-        const isAuth = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
-        const defaultSubject = isAuth ? 'Neues Finding' : 'Neuer Themenbereich';
-        const created = await fetchJSON(`/api/audit-plans/${currentPlan.id}/lines`, {
-          method: 'POST',
-          body: { subject: defaultSubject, location: defaultCity, sort_order: planLines.length + 1 }
-        });
-        pushNavSegment({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich') });
-      } catch (err) {
-        toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
-      }
-    });
+    // (bei einem Behördenplan mit vorhandenem Bericht gibt es den Button nicht)
+    const addLineBtn = document.getElementById('btn-add-line');
+    if (addLineBtn) {
+      addLineBtn.addEventListener('click', async () => {
+        try {
+          const defaultCity = getSelectedCompany()?.city || '';
+          const isAuth = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
+          const defaultSubject = isAuth ? 'Neues Finding' : 'Neuer Themenbereich';
+          const created = await fetchJSON(`/api/audit-plans/${currentPlan.id}/lines`, {
+            method: 'POST',
+            body: { subject: defaultSubject, location: defaultCity, sort_order: planLines.length + 1 }
+          });
+          pushNavSegment({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich') });
+        } catch (err) {
+          toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
+        }
+      });
+    }
 
     // Bind row click → drill-down to line detail
     contentEl.querySelectorAll('.line-row-clickable').forEach(row => {
