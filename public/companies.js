@@ -1451,7 +1451,27 @@
 
     const item = currentFinding;
     const cap = currentFindingCap;
-    headerEl.innerHTML = `<h2>${escapeHtml(findingSegmentName(currentFindingIndex))}</h2>`;
+
+    // ── Teilen ── (CM-003-CAP-PDF genau dieser Beanstandung)
+    // Das Dokument der Beanstandung ist das CAP-PDF: bei einem Behördenaudit
+    // trägt es die 5-Why-Sektion und den Stufen-Klartext bereits (capHasFiveWhy()
+    // und capEvalLabel() in pdf/cap.js), an der Erzeugung ist also nichts zu tun.
+    // Es hängt aber — wie Maßnahme, Ursachenanalyse und Beweismittel — am
+    // CAP-Item, und das entsteht erst mit der Stufe. Statt zu verschwinden bleibt
+    // der Button dann sichtbar und deaktiviert, damit der Grund dort steht, wo
+    // man ihn sucht, genau wie in den sprechenden Leerzuständen der Sektionen.
+    headerEl.innerHTML = `<h2>${escapeHtml(findingSegmentName(currentFindingIndex))}</h2>
+      <span id="finding-share"><button class="btn-icon" id="btn-finding-export" title="${cap ? 'Beanstandung als PDF exportieren' : 'Kein PDF — die Beanstandung hat noch keine Stufe'}"${cap ? '' : ' disabled'}>${ICON_SHARE}</button></span>`;
+    if (cap) {
+      document.getElementById('btn-finding-export').addEventListener('click', () => {
+        // Derselbe Dialog und dieselbe Auswahl-Variable wie auf der CAP-Ebene:
+        // Download, Behördenversand und freier Empfänger sind für eine einzelne
+        // Beanstandung genau das, was sie für ein einzelnes CAP-Item sind.
+        selectedCapIds = [cap.id];
+        capExportEmailSection.style.display = 'none';
+        capExportDialog.showModal();
+      });
+    }
 
     let html = '<div class="audit-detail">';
 
@@ -2076,7 +2096,12 @@
   });
 
   document.getElementById('cap-export-download').addEventListener('click', () => {
-    if (selectedCapIds.length > 0) window.open(`/api/cap-items/pdf?ids=${selectedCapIds.join(',')}`);
+    // Bei genau einem Eintrag zieht die Einzelroute: sie rendert dasselbe CM-003-PDF,
+    // benennt die Datei aber sprechend nach Audit-Nr. und Stufe statt generisch
+    // "Corrective_Actions.pdf" — was die Beanstandungs- und die CAP-Ebene, die immer
+    // genau einen Eintrag teilen, gerade zum Weiterreichen an die Behörde brauchen.
+    if (selectedCapIds.length === 1) window.open(`/api/cap-items/${selectedCapIds[0]}/pdf`);
+    else if (selectedCapIds.length > 0) window.open(`/api/cap-items/pdf?ids=${selectedCapIds.join(',')}`);
     capExportDialog.close();
   });
 

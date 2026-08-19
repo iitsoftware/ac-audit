@@ -467,7 +467,8 @@ body {
   transition: background var(--transition);
 }
 
-.btn-icon:hover { background: var(--primary-tint); color: var(--primary); }
+.btn-icon:hover:not(:disabled) { background: var(--primary-tint); color: var(--primary); }
+.btn-icon:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-icon-danger:hover { background: var(--danger); color: #fff; }
 
 /* ── Modal / Dialog ──────────────────────────────────────── */
