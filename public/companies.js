@@ -230,6 +230,44 @@
     renderAuditPlans();
   }
 
+  // ── Beschriftung eines Behördenaudits ──────────────────────
+  // Ein Behördenaudit wird ausschließlich aus seinem Beanstandungsbericht
+  // beschriftet, nie aus audit_plan.year: das Jahr bleibt Pflicht- und Sortierspalte
+  // der Route, hat in der Oberfläche aber keine Bedeutung — ein frisch angelegter
+  // Besuch hieße sonst schlicht "2026". Quelle sind Datum und Behörde des Berichts;
+  // solange er noch kein Datum trägt, sagt die Beschriftung genau das, statt eine
+  // Jahreszahl zu erfinden.
+  const AUTHORITY_NO_DATE = 'Behördenaudit (ohne Datum)';
+
+  // Titelzeile der Kachel: das Datum des Besuchs — die Behörde steht darunter.
+  function authorityTitle(dateIso) {
+    return formatDateDE(dateIso) || AUTHORITY_NO_DATE;
+  }
+
+  // Breadcrumb-Segment und Überschrift: dasselbe Datum, aber mit dem Wort davor —
+  // außerhalb der Kachel wäre die Beschriftung sonst ein nacktes Datum — und der
+  // Behörde dahinter, soweit sie auf dem Bericht steht.
+  function authorityName(dateIso, auditorTeam) {
+    const date = formatDateDE(dateIso);
+    const head = date ? `Behördenaudit ${date}` : AUTHORITY_NO_DATE;
+    return auditorTeam ? `${head} – ${auditorTeam}` : head;
+  }
+
+  // Die Plan-Liste bringt Datum und Behörde als authority_date /
+  // authority_auditor_team mit. Die Plan-Ebene erreicht nur noch der Altbestand
+  // (0 oder mehrere Berichte — genau der Fall, in dem das Statement die beiden
+  // Spalten NULL liefert); sie hat aber ihre Zeilen geladen und leitet dasselbe
+  // Datum in derselben COALESCE-Reihenfolge daraus ab.
+  function authorityInfoFromLines(lines) {
+    const list = lines || [];
+    const dated = list.find(l => l.performed_date || l.audit_end_date || l.audit_start_date);
+    const teamed = list.find(l => l.auditor_team);
+    return {
+      date: dated ? (dated.performed_date || dated.audit_end_date || dated.audit_start_date) : '',
+      team: teamed ? teamed.auditor_team : '',
+    };
+  }
+
   function renderAuditPlans() {
     if (auditPlans.length === 0) {
       contentEl.innerHTML = '<div class="empty-state-inline">Keine Auditpl\u00e4ne vorhanden</div>';
@@ -257,10 +295,10 @@
       const st = derivePlanStatus(p);
       // Ein Behördenaudit kennt keine Revision: die Kachel zeigt stattdessen Datum
       // und Behörde des Besuchs, soweit sie auf der Beanstandungsberichts-Zeile
-      // stehen (authority_date / authority_auditor_team aus der Plan-Liste). Fehlen
-      // sie, bleibt das Jahr als Titel und die zweite Zeile entfällt.
-      const authorityDate = isAuthority ? formatDateDE(p.authority_date) : '';
-      const tileTitle = authorityDate || String(p.year);
+      // stehen (authority_date / authority_auditor_team aus der Plan-Liste). Fehlt
+      // das Datum, sagt der Titel das — die Jahreszahl taucht bei einem
+      // Behördenaudit nirgends auf; die zweite Zeile entfällt ohne Behörde.
+      const tileTitle = isAuthority ? authorityTitle(p.authority_date) : String(p.year);
       const tileSub = isAuthority ? (p.authority_auditor_team || '') : `Rev. ${p.revision || 0}`;
       return `
       <div class="plan-tile ${st.css}" data-id="${p.id}">
@@ -299,9 +337,9 @@
         // Line. Fehlt die Line-ID (Altbestand mit 0 oder mehreren Zeilen, dann liefert
         // das Statement NULL), bleibt es bei der Plan-Ebene.
         if (isAuthority && plan.authority_line_id) {
-          pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: `Beh\u00f6rdenaudit ${plan.year}` });
+          pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: authorityName(plan.authority_date, plan.authority_auditor_team) });
         } else {
-          const pName = isAuthority ? `Beh\u00f6rdenaudits ${plan.year}` : `Auditplan ${plan.year} Rev. ${plan.revision || 0}`;
+          const pName = isAuthority ? authorityName(plan.authority_date, plan.authority_auditor_team) : `Auditplan ${plan.year} Rev. ${plan.revision || 0}`;
           pushNavSegment({ type: 'audit-plan', id: plan.id, name: pName });
         }
       });
@@ -362,7 +400,12 @@
 
   function confirmDeletePlan(plan) {
     planDeleteTarget = plan;
-    document.getElementById('plan-delete-name').textContent = plan.year;
+    // Der Löschen-Knopf sitzt auf derselben Kachel — der Dialog nennt den Plan
+    // deshalb genauso wie sie: beim Behördenaudit aus dem Bericht, sonst das Jahr.
+    const isAuthority = (plan.plan_type || 'AUDIT') === 'AUTHORITY';
+    document.getElementById('plan-delete-name').textContent = isAuthority
+      ? authorityName(plan.authority_date, plan.authority_auditor_team)
+      : plan.year;
     planDeleteDialog.showModal();
   }
 
@@ -401,8 +444,11 @@
       await loadAuditPlans();
       // Der Plan bringt seinen Beanstandungsbericht mit — direkt hinein springen,
       // statt den Anwender auf die Kachel zu schicken, die genau dorthin führt.
+      // Der frische Bericht trägt noch kein Datum, das Segment heißt deshalb
+      // "ohne Datum" und wird von loadLineData() aus dem geladenen Bericht
+      // nachgezogen, sobald dieser einen Betreff hat.
       if (plan && plan.authority_line_id) {
-        pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: `Behördenaudit ${plan.year}` });
+        pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: authorityName(plan.authority_date, plan.authority_auditor_team) });
       }
     } catch (err) {
       toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
@@ -538,10 +584,13 @@
     try {
       currentPlan = await fetchJSON(`/api/audit-plans/${planId}`);
       planLines = await fetchJSON(`/api/audit-plans/${planId}/lines`);
-      // Update navPath name to include full title
+      // Update navPath name to include full title. Ein Behördenaudit wird dabei aus
+      // seinen Berichten beschriftet statt aus dem Jahr: die Plan-Ebene erreicht nur
+      // der Altbestand, dessen authority_date die Plan-Liste nicht mitliefert.
       const seg = navPath.find(s => s.type === 'audit-plan' && s.id === planId);
       if (seg) {
-        seg.name = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? `Beh\u00f6rdenaudits ${currentPlan.year}` : `Auditplan ${currentPlan.year} Rev. ${currentPlan.revision || 0}`;
+        const info = authorityInfoFromLines(planLines);
+        seg.name = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? authorityName(info.date, info.team) : `Auditplan ${currentPlan.year} Rev. ${currentPlan.revision || 0}`;
         saveNav();
       }
     } catch (e) {
@@ -559,11 +608,14 @@
     }
 
     const isAuthority = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
-    const planTitle = isAuthority ? `Beh\u00f6rdenaudits ${currentPlan.year}` : `Auditplan ${currentPlan.year}`;
+    // Überschrift wie das Breadcrumb-Segment: beim Behördenaudit aus dem Bericht,
+    // beim internen Auditplan aus Jahr und Revision.
+    const authorityInfo = isAuthority ? authorityInfoFromLines(planLines) : null;
+    const planTitle = isAuthority ? authorityName(authorityInfo.date, authorityInfo.team) : `Auditplan ${currentPlan.year}`;
     const planSubtitle = isAuthority ? '' : ` <small style="font-weight:400;color:var(--text-muted)">Rev. ${currentPlan.revision ?? 0}</small>`;
 
     headerEl.innerHTML = `
-      <h2>${planTitle}${planSubtitle}</h2>
+      <h2>${escapeHtml(planTitle)}${planSubtitle}</h2>
     `;
 
     let html = `<div class="plan-detail">`;
