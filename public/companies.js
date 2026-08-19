@@ -993,6 +993,13 @@
   // ── Line Detail Level (Checklist + Audit Summary) ──────────
   let currentLine = null;
   let checklistItems = [];
+  // CAP-Items des Berichts, auf checklist_item_id gematcht. Status, Fortschritt,
+  // Filter und Sammel-Export der Findingliste hängen alle an dieser einen Liste —
+  // sie wird deshalb mit dem Bericht geladen, damit die Tabelle in einem Zug
+  // vollständig gezeichnet werden kann. Nur beim Behördenaudit gefüllt: interne
+  // Pläne lesen ihre CAPs weiterhin ausschließlich in der CAP-Sektion der
+  // Plan-Ebene.
+  let findingCaps = [];
 
   async function renderLineDetailLevel(lineId) {
     headerEl.innerHTML = '';
@@ -1018,6 +1025,14 @@
         currentPlan = await fetchJSON(`/api/audit-plans/${currentLine.audit_plan_id}`);
       }
       checklistItems = await fetchJSON(`/api/audit-plan-lines/${lineId}/checklist-items`);
+      // Die Plan-Route liefert die CAPs des ganzen Plans; der Bericht zeigt genau
+      // die seinen — beim echten Behördenaudit ist das dasselbe, beim Altbestand
+      // mit mehreren Berichten nicht.
+      findingCaps = [];
+      if ((currentPlan.plan_type || 'AUDIT') === 'AUTHORITY') {
+        const caps = await fetchJSON(`/api/audit-plans/${currentLine.audit_plan_id}/cap-items`);
+        findingCaps = (caps.items || []).filter(c => c.audit_plan_line_id === currentLine.id);
+      }
       // Breadcrumb-Label aus dem geladenen Bericht nachziehen — der Sprung von der
       // Kachel kennt den Betreff noch nicht.
       const seg = navPath.find(s => s.type === 'audit-plan-line' && s.id === lineId);
@@ -1031,6 +1046,7 @@
       toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       currentLine = null;
       checklistItems = [];
+      findingCaps = [];
     }
   }
 
@@ -1119,54 +1135,13 @@
 
     // ── Checkliste ──
     // Ein Behördenaudit kennt keine Sektionen: die Behörde übergibt eine flache
-    // Findingliste in der Spaltenfolge ihres Berichts. Sie heißt Findings und nicht
-    // Beanstandungen — die Beanstandung IST das Finding, ein zweites Wort dafür
-    // zerschneidet die Kette Besuch → Finding → 5-Why/Maßnahmen. Die Nr. ist wie
-    // das `Lfd.` der AC-SMS-Tabellen aus dem Zeilenindex abgeleitet und nie
-    // gespeichert, damit sie beim Löschen lückenlos 1..n bleibt.
-    // Der Status ist genauso abgeleitet (capStatus(), aus completion_date), steht
-    // aber am CAP-Item und damit an derselben Liste, welche die Übersicht darunter
-    // lädt. Die Zellen gehen deshalb leer heraus und werden von
-    // paintFindingStatus() gefüllt, sobald loadCapSection() fertig ist — eine
-    // zweite Abfrage derselben Route wäre der Preis dafür, sie sofort zu füllen.
+    // Findingliste in der Spaltenfolge ihres Berichts. Sie ist die EINZIGE Liste
+    // dieses Screens — Inhalt und Verdrahtung stehen in renderFindingsSection(),
+    // weil der Filter genau diesen einen Container für sich allein neu zeichnet
+    // und die Kopffelder des Besuchs dabei stehen bleiben müssen.
     // Interne Pläne behalten die drei Sektionen unverändert.
     if (isAuthorityLine) {
-      html += `<div class="audit-section">
-        <div class="audit-section-header">
-          <h3>Findings</h3>
-          <button class="btn-icon btn-add-section-ci" data-section="THEORETICAL" title="Finding hinzuf\u00fcgen">+</button>
-        </div>`;
-
-      if (checklistItems.length === 0) {
-        html += '<div class="empty-state-inline" style="padding:16px 0">Keine Findings</div>';
-      } else {
-        html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
-          <colgroup>
-            <col style="width:56px"><col style="width:16%"><col style="width:auto"><col style="width:130px"><col style="width:100px"><col style="width:120px"><col style="width:56px">
-          </colgroup>
-          <thead><tr>
-            <th>Nr.</th><th>Referenz Paragraph</th><th>Beschreibung</th><th>Level</th><th>Frist</th><th>Status</th><th></th>
-          </tr></thead><tbody>`;
-        checklistItems.forEach((item, idx) => {
-          const evalClass = item.evaluation ? `eval-${item.evaluation}` : '';
-          // Der Beweis-Clip hängt an der Beschreibung statt in einer eigenen Spalte —
-          // die Spaltenfolge der Findingliste gibt die Behörde vor.
-          const clipIcon = item.evidence_count > 0 ? ` <span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
-          html += `<tr class="ci-row-clickable" data-id="${item.id}">
-            <td>${idx + 1}</td>
-            <td>${escapeHtml(item.regulation_ref)}</td>
-            <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
-            <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</td>
-            <td>${escapeHtml(formatDateDE(item.cap_deadline))}</td>
-            <td data-finding-status="${item.id}"></td>
-            <td class="line-actions">
-              <button class="pane-action-btn danger" data-action="delete-ci" data-id="${item.id}" title="L\u00f6schen">&#128465;</button>
-            </td>
-          </tr>`;
-        });
-        html += '</tbody></table></div>';
-      }
-      html += '</div>';
+      html += '<div class="audit-section" id="findings-section"></div>';
     } else {
       // ── Three Checklist Sections ──
       const sections = [
@@ -1215,18 +1190,8 @@
       });
     }
 
-    // ── Offene Beanstandungen ──
-    // Die CAP-Sektion der Plan-Ebene, die beim Behördenaudit niemand mehr erreicht,
-    // seit die Kachel direkt in den Bericht springt. Sie trägt hier Status, Filter
-    // und den Sammel-Export, die die Beanstandungstabelle darüber nicht kennt.
-    // `audit-section` nur hier: auf der Berichtsebene stehen alle Blöcke in Karten,
-    // auf der Plan-Ebene steht die Sektion frei unter der Zeilenliste.
-    if (isAuthorityLine) html += `<div class="audit-section cap-section" id="cap-section"></div>`;
-
     html += '</div>';
     contentEl.innerHTML = html;
-
-    if (isAuthorityLine) loadCapSection(currentLine.audit_plan_id, currentLine);
 
     // ── Auto-save on blur for all inline fields ──
     // Init date auto-format for all date text inputs
@@ -1307,44 +1272,183 @@
       el.addEventListener(event, saveLineFields);
     });
 
-    // ── Section "+" buttons → open ciDialog with pre-set section ──
-    contentEl.querySelectorAll('.btn-add-section-ci').forEach(btn => {
+    // ── Findingliste / Checkliste verdrahten ──
+    // Beim Behördenaudit zeichnet und verdrahtet renderFindingsSection() ihre eine
+    // Liste selbst: sie wird beim Filterwechsel für sich allein neu gezeichnet und
+    // müsste hier sonst ein zweites Mal verdrahtet werden.
+    if (isAuthorityLine) {
+      renderFindingsSection();
+    } else {
+      // ── Section "+" buttons → open ciDialog with pre-set section ──
+      contentEl.querySelectorAll('.btn-add-section-ci').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const section = btn.dataset.section;
+          const count = checklistItems.filter(ci => ci.section === section).length;
+          openChecklistItemDialog(null, section, count + 1);
+        });
+      });
+
+      // ── Checklist item row click → edit, delete button → delete ──
+      contentEl.querySelectorAll('.ci-row-clickable').forEach(row => {
+        makeRowClickable(row, (e) => {
+          if (e.target.closest('.pane-action-btn')) return;
+          const item = checklistItems.find(ci => ci.id === row.dataset.id);
+          if (item) openChecklistItemDialog(item);
+        });
+      });
+
+      contentEl.querySelectorAll('.pane-action-btn[data-action="delete-ci"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const item = checklistItems.find(ci => ci.id === btn.dataset.id);
+          if (item) confirmDeleteChecklistItem(item);
+        });
+      });
+    }
+  }
+
+  // ── Findingliste (nur Behördenaudit) ──────────────────────
+  // Die eine Liste der Beanstandungen eines Berichts. Sie heißt Findings und nicht
+  // Beanstandungen — die Beanstandung IST das Finding, ein zweites Wort dafür
+  // zerschneidet die Kette Besuch → Finding → 5-Why/Maßnahmen. Genau deshalb steht
+  // unter ihr auch keine zweite Liste derselben Sache mehr: die abgelöste Sektion
+  // "Offene Beanstandungen" war die letzte Stelle, an der das cap_item als eigenes
+  // Objekt durchschlug. Ihre drei Zutaten sind hierher gewandert — der
+  // ALLE/OPEN/CLOSED-Filter, die Fortschrittsanzeige und der Sammel-Export.
+  // Nr. ist wie das `Lfd.` der AC-SMS-Tabellen aus dem Zeilenindex der VOLLEN Liste
+  // abgeleitet und nie gespeichert: dieselbe Beanstandung trägt dieselbe Nummer in
+  // der Tabelle, im Breadcrumb und auf ihrem eigenen Screen, auch unter Filter.
+  // Status, Fortschritt und Checkbox kommen aus findingCaps, das mit dem Bericht
+  // geladen wird (capStatus() ist derselbe Helper und dieselbe completion_date-
+  // Grenze wie überall). Ein Finding ohne Stufe hat kein CAP-Item und damit weder
+  // Status noch PDF noch Checkbox — ein Zustand, kein Fehler.
+  function renderFindingsSection() {
+    const section = document.getElementById('findings-section');
+    if (!section) return;
+
+    const capOf = item => findingCaps.find(c => c.checklist_item_id === item.id) || null;
+    const rows = checklistItems.map((item, idx) => ({ item, idx, cap: capOf(item) }));
+
+    // Nenner sind die Findings mit Stufe: nur sie haben ein CAP-Item und können
+    // überhaupt erledigt werden — ein Finding ohne Stufe wäre ein Rest, der nie
+    // aufgeht. Dieselbe Zählung wie in der abgelösten Sektion.
+    const capped = rows.filter(r => r.cap);
+    const total = capped.length;
+    const closed = capped.filter(r => capStatus(r.cap) === 'CLOSED').length;
+    const pct = total > 0 ? Math.round(closed / total * 100) : 0;
+
+    let html = `<div class="audit-section-header">
+      <h3>Findings</h3>
+      <div class="section-header-actions">
+        <div class="cap-progress">
+          <div class="cap-progress-bar"><div class="cap-progress-fill" style="width:${pct}%"></div></div>
+          <span class="cap-progress-label">${closed}/${total}</span>
+        </div>
+        <button class="btn-icon" id="btn-add-finding" title="Finding hinzuf\u00fcgen">+</button>
+      </div>
+    </div>`;
+
+    html += `<div class="cap-filter-bar">
+      <button class="cap-filter-btn ${capFilter === null ? 'active' : ''}" data-cap-filter="ALL">ALLE</button>
+      <button class="cap-filter-btn ${capFilter === 'OPEN' ? 'active' : ''}" data-cap-filter="OPEN">OPEN</button>
+      <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED">CLOSED</button>
+    </div>`;
+
+    // Ein Finding ohne Stufe hat keinen Status und fällt deshalb aus jeder der
+    // beiden Statusauswahlen heraus — unter ALLE steht es weiter in der Liste.
+    const filtered = capFilter ? rows.filter(r => r.cap && capStatus(r.cap) === capFilter) : rows;
+
+    if (filtered.length === 0) {
+      html += `<div class="empty-state-inline" style="padding:16px 0">${rows.length === 0 ? 'Keine Findings' : 'Keine Findings in dieser Auswahl'}</div>`;
+    } else {
+      html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
+        <colgroup>
+          <col style="width:56px"><col style="width:16%"><col style="width:auto"><col style="width:130px"><col style="width:100px"><col style="width:120px"><col style="width:56px"><col style="width:56px">
+        </colgroup>
+        <thead><tr>
+          <th>Nr.</th><th>Referenz Paragraph</th><th>Beschreibung</th><th>Level</th><th>Frist</th><th>Status</th>
+          <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-finding" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte Findings als PDF exportieren">${ICON_SHARE}</button></span></th>
+          <th></th>
+        </tr></thead><tbody>`;
+      filtered.forEach(({ item, idx, cap }) => {
+        const evalClass = item.evaluation ? `eval-${item.evaluation}` : '';
+        // Der Beweis-Clip hängt an der Beschreibung statt in einer eigenen Spalte —
+        // die Spaltenfolge der Findingliste gibt die Behörde vor.
+        const clipIcon = item.evidence_count > 0 ? ` <span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
+        html += `<tr class="ci-row-clickable" data-id="${escapeAttr(item.id)}">
+          <td>${idx + 1}</td>
+          <td>${escapeHtml(item.regulation_ref)}</td>
+          <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
+          <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</td>
+          <td>${escapeHtml(formatDateDE(item.cap_deadline))}</td>
+          <td>${cap ? `<span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span>` : ''}</td>
+          <td class="col-select">${cap ? `<input type="checkbox" class="finding-select-cb" data-cap-id="${escapeAttr(cap.id)}">` : ''}</td>
+          <td class="line-actions">
+            <button class="pane-action-btn danger" data-action="delete-ci" data-id="${escapeAttr(item.id)}" title="L\u00f6schen">&#128465;</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+
+    section.innerHTML = html;
+
+    // Die flache Findingliste zählt über alle Zeilen — die Sektionsansicht interner
+    // Audits nur innerhalb ihrer Sektion, sonst kollidieren die sort_order-Werte.
+    document.getElementById('btn-add-finding').addEventListener('click', () => {
+      openChecklistItemDialog(null, 'THEORETICAL', checklistItems.length + 1);
+    });
+
+    section.querySelectorAll('[data-cap-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const section = btn.dataset.section;
-        // Die flache Beanstandungsliste zählt über alle Zeilen, die Sektionsansicht
-        // nur innerhalb ihrer Sektion — sonst kollidieren die sort_order-Werte.
-        const count = isAuthorityLine
-          ? checklistItems.length
-          : checklistItems.filter(ci => ci.section === section).length;
-        openChecklistItemDialog(null, section, count + 1);
+        const val = btn.dataset.capFilter;
+        capFilter = val === 'ALL' ? null : val;
+        saveNav();
+        renderFindingsSection();
       });
     });
 
-    // ── Checklist item row click → edit, delete button → delete ──
-    // Eine Beanstandung ist beim Behördenaudit ein eigener Screen (Stammdaten,
-    // Maßnahme, Ursachenanalyse, Nachweise) und passt nicht mehr in einen Dialog —
-    // der Zeilenklick navigiert deshalb eine Ebene tiefer. Interne Audits behalten
-    // den Modal-Dialog.
-    contentEl.querySelectorAll('.ci-row-clickable').forEach(row => {
+    // Eine Beanstandung ist ein eigener Screen (Stammdaten, Maßnahmen,
+    // Ursachenanalyse, Nachweise) und passt nicht in einen Dialog — der Zeilenklick
+    // navigiert deshalb eine Ebene tiefer. Interne Audits behalten den Dialog.
+    section.querySelectorAll('.ci-row-clickable').forEach(row => {
       makeRowClickable(row, (e) => {
-        if (e.target.closest('.pane-action-btn')) return;
+        if (e.target.closest('.pane-action-btn') || e.target.closest('.col-select')) return;
         const idx = checklistItems.findIndex(ci => ci.id === row.dataset.id);
         if (idx < 0) return;
-        if (isAuthorityLine) {
-          pushNavSegment({ type: 'finding', id: checklistItems[idx].id, name: findingSegmentName(idx) });
-        } else {
-          openChecklistItemDialog(checklistItems[idx]);
-        }
+        pushNavSegment({ type: 'finding', id: checklistItems[idx].id, name: findingSegmentName(idx) });
       });
     });
 
-    contentEl.querySelectorAll('.pane-action-btn[data-action="delete-ci"]').forEach(btn => {
+    section.querySelectorAll('.pane-action-btn[data-action="delete-ci"]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const item = checklistItems.find(ci => ci.id === btn.dataset.id);
         if (item) confirmDeleteChecklistItem(item);
       });
     });
+
+    // ── Mehrfachauswahl + Sammel-Export ──
+    // Exportiert wird das CM-003 der ausgewählten Findings, also deren CAP-Items:
+    // die IDs kommen aus derselben Zuordnung, aus der auch die Status-Spalte kommt.
+    const selectAll = section.querySelector('.select-all-finding');
+    if (selectAll) {
+      const header = selectAll.closest('.select-header');
+      const cbs = section.querySelectorAll('.finding-select-cb');
+      const updateSelection = () => {
+        header.classList.toggle('has-selection', [...cbs].some(cb => cb.checked));
+      };
+      selectAll.addEventListener('change', () => {
+        cbs.forEach(cb => { cb.checked = selectAll.checked; });
+        updateSelection();
+      });
+      cbs.forEach(cb => cb.addEventListener('change', updateSelection));
+      header.querySelector('.select-share-btn').addEventListener('click', () => {
+        const ids = [...cbs].filter(cb => cb.checked).map(cb => cb.dataset.capId);
+        if (ids.length === 0) { toast('Keine Findings ausgew\u00e4hlt', 'error'); return; }
+        openCapExportDialog(ids);
+      });
+    }
   }
 
   function renderEvalSummary() {
@@ -1572,15 +1676,17 @@
     currentFinding = checklistItems[idx];
     currentFindingIndex = idx;
 
-    // Das CAP-Item hängt am Checklisten-Eintrag. Die Plan-Route liefert alle CAPs
-    // des Plans in einem Zug — beim Behördenaudit sind das genau die des Berichts.
-    // Ohne Bewertung existiert keines, das ist kein Fehler.
-    try {
-      const caps = await fetchJSON(`/api/audit-plans/${currentLine.audit_plan_id}/cap-items`);
-      currentFindingCap = (caps.items || []).find(c => c.checklist_item_id === findingId) || null;
-      if (currentFindingCap) await loadFindingActions(currentFindingCap);
-    } catch (e) {
-      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
+    // Das CAP-Item hängt am Checklisten-Eintrag und kommt aus derselben Liste, aus
+    // der die Findingliste ihren Status zieht — loadLineData() lädt sie mit dem
+    // Bericht, und der ist oben sichergestellt. Ohne Stufe existiert keines, das
+    // ist kein Fehler.
+    currentFindingCap = findingCaps.find(c => c.checklist_item_id === findingId) || null;
+    if (currentFindingCap) {
+      try {
+        await loadFindingActions(currentFindingCap);
+      } catch (e) {
+        toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
+      }
     }
 
     // Nummer im Breadcrumb nachziehen: der Sprung aus der Tabelle kennt sie zwar,
@@ -1975,10 +2081,10 @@
       // fortgeschrieben, damit der Fokus beim Durchtabben nicht verloren geht.
       const needsCap = ['O', 'L1', 'L2', 'L3'].includes(data.evaluation);
       if (needsCap !== !!currentFindingCap) {
-        // loadLineData() vor loadFinding(): die Frist steht am CAP-Item und kommt
-        // über die Listen-Route des Berichts: eine frisch angelegte Maßnahme hat
-        // sie womöglich selbst gerechnet, eine gelöschte gar keine mehr.
-        // loadFinding() allein würde die Liste aus dem Cache nehmen.
+        // loadLineData() vor loadFinding(): es lädt beides nach, woraus
+        // loadFinding() sein CAP-Item nimmt — die Liste des Berichts (dort steht
+        // die Frist, die eine frisch angelegte Maßnahme womöglich selbst gerechnet
+        // hat) und die CAP-Items des Berichts. loadFinding() allein läse den Cache.
         await loadLineData(currentLine.id);
         await loadFinding(item.id);
         renderFindingDetail();
@@ -2312,14 +2418,8 @@
   // ── CAP Section ──────────────────────────────────────────
   let capItems = [];
   let capSummary = { total: 0, closed: 0 };
-  // Bericht, auf dessen Ebene die Sektion gerade steht — null heißt Plan-Ebene.
-  // Beim Behördenaudit ist die Plan-Ebene kein Navigationsziel mehr, die Sektion
-  // zieht deshalb auf die Berichtsebene um und wird dort zur Übersicht
-  // "Offene Beanstandungen".
-  let capSectionLine = null;
 
-  async function loadCapSection(planId, line = null) {
-    capSectionLine = line;
+  async function loadCapSection(planId) {
     try {
       const data = await fetchJSON(`/api/audit-plans/${planId}/cap-items`);
       capItems = data.items || [];
@@ -2330,41 +2430,22 @@
     }
     // capFilter is preserved from saved state (or null by default)
     renderCapSection();
-    paintFindingStatus();
   }
 
-  // Die Status-Spalte der Findingliste (renderLineDetail(), nur Behördenaudit).
-  // Sie liest dieselben CAP-Items wie die Übersicht darunter und denselben
-  // capStatus()-Helper, damit dieselbe Beanstandung oben und unten nicht
-  // auseinanderlaufen kann. Ein Finding ohne Level hat kein CAP-Item und deshalb
-  // keinen Status — das ist ein Zustand und kein Fehler, die Zelle bleibt leer.
-  function paintFindingStatus() {
-    contentEl.querySelectorAll('[data-finding-status]').forEach(td => {
-      const cap = capItems.find(c => c.checklist_item_id === td.dataset.findingStatus);
-      td.innerHTML = cap ? `<span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span>` : '';
-    });
-  }
-
-  // Auf der Berichtsebene eines Behördenaudits (capSectionLine gesetzt) ist die
-  // Sektion die Übersicht "Offene Beanstandungen": dieselben Zeilen wie die flache
-  // Beanstandungstabelle darüber, aber mit Status, Filter und Sammel-Export — und der
-  // Zeilenklick führt auf den Beanstandungs-Screen statt auf die CAP-Ebene, die beim
-  // Behördenaudit kein Navigationsziel mehr ist. Auf der Plan-Ebene (interne Pläne
-  // und der Behörden-Altbestand ohne eindeutigen Bericht) bleibt sie der CAP.
+  // Die CAP-Sektion der Plan-Ebene — interne Pläne und der Behörden-Altbestand,
+  // der ohne eindeutigen Bericht noch dort landet. Beim echten Behördenaudit
+  // erreicht sie niemand mehr: die Kachel springt direkt in den Bericht, und dort
+  // trägt die Findingliste selbst Status, Filter, Fortschritt und Sammel-Export.
   function renderCapSection() {
     const section = document.getElementById('cap-section');
     if (!section) return;
 
-    const line = capSectionLine;
-    // Die Route liefert die CAPs des ganzen Plans; die Übersicht zeigt genau die
-    // ihres Berichts — beim Altbestand mit mehreren Berichten fällt das auseinander.
-    const scoped = line ? capItems.filter(c => c.audit_plan_line_id === line.id) : capItems;
-    const total = line ? scoped.length : (capSummary.total || 0);
-    const closed = line ? scoped.filter(c => capStatus(c) === 'CLOSED').length : (capSummary.closed || 0);
+    const total = capSummary.total || 0;
+    const closed = capSummary.closed || 0;
     const pct = total > 0 ? Math.round(closed / total * 100) : 0;
 
     let html = `<div class="cap-section-header">
-      <h3>${line ? 'Offene Beanstandungen' : 'Corrective Action Plan (CAP)'}</h3>
+      <h3>Corrective Action Plan (CAP)</h3>
       <div class="cap-progress">
         <div class="cap-progress-bar"><div class="cap-progress-fill" style="width:${pct}%"></div></div>
         <span class="cap-progress-label">${closed}/${total}</span>
@@ -2378,35 +2459,10 @@
       <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED">CLOSED</button>
     </div>`;
 
-    const filtered = capFilter ? scoped.filter(c => capStatus(c) === capFilter) : scoped;
-
-    // Die Beanstandung Nr. ist wie in renderLineDetail() der Zeilenindex im Bericht —
-    // dieselbe Nummer trägt der Breadcrumb und der Beanstandungs-Screen selbst.
-    const findingIndex = cap => checklistItems.findIndex(ci => ci.id === cap.checklist_item_id);
+    const filtered = capFilter ? capItems.filter(c => capStatus(c) === capFilter) : capItems;
 
     if (filtered.length === 0) {
-      html += `<div class="empty-state-inline" style="padding:16px 0">${line ? 'Keine Beanstandungen' : 'Keine Eintr\u00e4ge'}</div>`;
-    } else if (line) {
-      // Audit-Nr., Thema und Referenz Paragraph stehen auf diesem Screen schon oben
-      // bzw. in der Tabelle darüber — die Übersicht trägt nur, was dort fehlt.
-      html += `<div class="lines-table-wrap"><table class="lines-table">
-        <thead><tr>
-          <th>Beanstandung Nr.</th><th>Beanstandung Beschreibung</th><th>Stufe</th><th>Frist</th><th>Status</th>
-          <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-cap" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte Beanstandungen als PDF exportieren">${ICON_SHARE}</button></span></th>
-        </tr></thead><tbody>`;
-      filtered.forEach(cap => {
-        const evalClass = cap.evaluation ? `eval-${cap.evaluation}` : '';
-        const idx = findingIndex(cap);
-        html += `<tr class="cap-row-clickable" data-cap-id="${cap.id}">
-          <td>${idx >= 0 ? idx + 1 : ''}</td>
-          <td class="wrap-cell">${escapeHtml(cap.compliance_check || '')}</td>
-          <td>${cap.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(cap.evaluation, true))}</span>` : ''}</td>
-          <td>${escapeHtml(formatDateDE(cap.deadline))}</td>
-          <td><span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span></td>
-          <td class="col-select"><input type="checkbox" class="cap-select-cb" data-cap-id="${cap.id}"></td>
-        </tr>`;
-      });
-      html += '</tbody></table></div>';
+      html += `<div class="empty-state-inline" style="padding:16px 0">Keine Eintr\u00e4ge</div>`;
     } else {
       html += `<div class="lines-table-wrap"><table class="lines-table">
         <thead><tr>
@@ -2443,21 +2499,11 @@
     });
 
     // Row click → navigate to CAP detail
-    // Beim Behördenaudit liegen Stammdaten, Maßnahme, Ursachenanalyse und
-    // Beweismittel einer Beanstandung auf einem Screen — die CAP-Ebene wird dort nie
-    // mehr angesprungen. Interne Pläne behalten sie unverändert.
     section.querySelectorAll('.cap-row-clickable').forEach(row => {
       makeRowClickable(row, (e) => {
         if (e.target.closest('.col-select')) return;
         const cap = capItems.find(c => c.id === row.dataset.capId);
-        if (!cap) return;
-        if (line) {
-          const idx = findingIndex(cap);
-          if (idx < 0) return;
-          pushNavSegment({ type: 'finding', id: cap.checklist_item_id, name: findingSegmentName(idx) });
-        } else {
-          pushNavSegment({ type: 'cap-item', id: cap.id, name: 'CAP' });
-        }
+        if (cap) pushNavSegment({ type: 'cap-item', id: cap.id, name: 'CAP' });
       });
     });
 
@@ -2477,7 +2523,7 @@
       capCbs.forEach(cb => cb.addEventListener('change', updateCapSelection));
       capHeader.querySelector('.select-share-btn').addEventListener('click', () => {
         const ids = [...capCbs].filter(cb => cb.checked).map(cb => cb.dataset.capId);
-        if (ids.length === 0) { toast(line ? 'Keine Beanstandungen ausgew\u00e4hlt' : 'Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
+        if (ids.length === 0) { toast('Keine CAP-Eintr\u00e4ge ausgew\u00e4hlt', 'error'); return; }
         openCapExportDialog(ids);
       });
     }
