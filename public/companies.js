@@ -720,7 +720,9 @@
         <thead>
           <tr>
             <th>Nr.</th>
-            <th>Finding</th>
+            <!-- Die Zeile ist der Beanstandungsbericht eines Besuchs, nicht ein
+                 Finding — die Findings sind seine Beanstandungen eine Ebene tiefer. -->
+            <th>Beanstandungsbericht</th>
             <th>Vorschriften</th>
             <th>Ort</th>
             <th></th>
@@ -1038,8 +1040,20 @@
       return;
     }
 
+    // Diese Ebene IST beim Behördenaudit der Besuch — ihre Kinder sind die
+    // Beanstandungen. Sie heißt deshalb wie Kachel und Plan-Ebene und nicht mehr
+    // nach dem Betreff, den ein Behördenbericht gar nicht führt (subject bleibt
+    // leer, die Überschrift hieße sonst dauerhaft "Themenbereich"). Datum und
+    // Behörde kommen über denselben Helper und dieselbe COALESCE-Reihenfolge wie
+    // authority_date der Plan-Liste — eine Zeile ist genau ein Besuch.
+    const isAuthorityLine = currentPlan && (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
+    const authorityInfo = isAuthorityLine ? authorityInfoFromLines([currentLine]) : null;
+    const lineTitle = isAuthorityLine
+      ? authorityName(authorityInfo.date, authorityInfo.team)
+      : (currentLine.subject || 'Themenbereich');
+
     headerEl.innerHTML = `
-      <h2>${escapeHtml(currentLine.subject || 'Themenbereich')}</h2>
+      <h2>${escapeHtml(lineTitle)}</h2>
       <button class="btn-icon" title="Audit Checklist PDF" onclick="window.open('/api/audit-plan-lines/${currentLine.id}/pdf')">${ICON_SHARE}</button>
     `;
 
@@ -1051,34 +1065,54 @@
     }
     let html = '<div class="audit-detail">';
 
-    // ── Themenbereich Meta ──
-    const isAuthorityLine = currentPlan && (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
-    const sectionLabel = isAuthorityLine ? 'Finding' : 'Themenbereich';
-    html += `<div class="audit-section">
-      <div class="audit-section-header"><h3>${sectionLabel}</h3></div>
-      <div class="inline-form-grid">
-        <label for="ld-subject">${sectionLabel}</label><input class="inline-input" id="ld-subject" value="${escapeHtml(currentLine.subject || '')}">
-        <label for="ld-regulations">Vorschriften</label><textarea class="inline-input inline-textarea" id="ld-regulations" rows="2">${escapeHtml(currentLine.regulations || '')}</textarea>
-        <label for="ld-location">Ort</label><input class="inline-input" id="ld-location" value="${escapeHtml(currentLine.location || '')}">
-        ${isAuthorityLine ? '' : `<label for="ld-planned-window">Monat geplant</label>${monthSelect('ld-planned-window', currentLine.planned_window)}`}
-      </div>
-    </div>`;
+    // ── Kopfblock ──
+    // Beim Behördenaudit ein einziger Block über den Besuch: Behörde, Datum, Ort.
+    // Der Themenbereich-Kopf (Finding/Vorschriften) und der Block
+    // "Audit-Informationen" (Auditee, Audit Ort, Dokument Ref., Iss/Rev, Rev Datum,
+    // Empfehlung) sind interne Auditfelder — sie beschreiben ein Themenbereichs-
+    // audit, nicht einen Behördenbesuch, und verschwinden deshalb von der
+    // Oberfläche. In der DB bleiben sie stehen und reisen in saveLineFields()
+    // unverändert mit, weil PUT /api/audit-plan-lines/:id die ganze Zeile ersetzt.
+    // Die Überschrift ist dieselbe Beschriftung wie auf Kachel und Plan-Ebene,
+    // ohne die Behörde: die steht als eigenes Feld direkt darunter.
+    // Interne Pläne behalten beide Blöcke unverändert.
+    if (isAuthorityLine) {
+      html += `<div class="audit-section">
+        <div class="audit-section-header"><h3 id="ld-authority-heading">${escapeHtml(authorityName(authorityInfo.date, ''))}</h3></div>
+        <div class="inline-form-grid">
+          <label for="ld-auditor-team">Behörde</label><input class="inline-input" id="ld-auditor-team" value="${escapeHtml(currentLine.auditor_team || '')}">
+          <label for="ld-authority-date">Datum</label><input class="inline-input" id="ld-authority-date" value="${escapeHtml(formatDateDE(authorityInfo.date))}" placeholder="TT.MM.JJJJ">
+          <label for="ld-location">Ort</label><input class="inline-input" id="ld-location" value="${escapeHtml(currentLine.location || '')}">
+        </div>
+      </div>`;
+    } else {
+      // ── Themenbereich Meta ──
+      html += `<div class="audit-section">
+        <div class="audit-section-header"><h3>Themenbereich</h3></div>
+        <div class="inline-form-grid">
+          <label for="ld-subject">Themenbereich</label><input class="inline-input" id="ld-subject" value="${escapeHtml(currentLine.subject || '')}">
+          <label for="ld-regulations">Vorschriften</label><textarea class="inline-input inline-textarea" id="ld-regulations" rows="2">${escapeHtml(currentLine.regulations || '')}</textarea>
+          <label for="ld-location">Ort</label><input class="inline-input" id="ld-location" value="${escapeHtml(currentLine.location || '')}">
+          <label for="ld-planned-window">Monat geplant</label>${monthSelect('ld-planned-window', currentLine.planned_window)}
+        </div>
+      </div>`;
 
-    // ── Audit-Informationen ──
-    html += `<div class="audit-section">
-      <div class="audit-section-header"><h3>Audit-Informationen</h3></div>
-      <div class="inline-form-grid">
-        <label for="ld-auditor-team">Auditor Team</label><input class="inline-input" id="ld-auditor-team" value="${escapeHtml(currentLine.auditor_team || '')}">
-        <label for="ld-auditee">Auditee</label><input class="inline-input" id="ld-auditee" value="${escapeHtml(currentLine.auditee || '')}">
-        <label for="ld-audit-start-date">Start</label><input class="inline-input" id="ld-audit-start-date" value="${escapeHtml(formatDateDE(currentLine.audit_start_date))}" placeholder="TT.MM.JJJJ">
-        <label for="ld-audit-end-date">Ende</label><input class="inline-input" id="ld-audit-end-date" value="${escapeHtml(formatDateDE(currentLine.audit_end_date))}" placeholder="TT.MM.JJJJ">
-        <label for="ld-audit-location">Audit Ort</label><input class="inline-input" id="ld-audit-location" value="${escapeHtml(currentLine.audit_location || '')}">
-        <label for="ld-doc-ref">Dokument Ref.</label><input class="inline-input" id="ld-doc-ref" value="${escapeHtml(currentLine.document_ref || '')}">
-        <label for="ld-doc-iss-rev">Iss/Rev</label><input class="inline-input" id="ld-doc-iss-rev" value="${escapeHtml(currentLine.document_iss_rev || '')}">
-        <label for="ld-doc-rev-date">Rev Datum</label><input class="inline-input" id="ld-doc-rev-date" value="${escapeHtml(formatDateDE(currentLine.document_rev_date))}" placeholder="TT.MM.JJJJ">
-        <label for="ld-recommendation">Empfehlung</label><textarea class="inline-input inline-textarea" id="ld-recommendation" rows="2">${escapeHtml(currentLine.recommendation || '')}</textarea>
-      </div>
-    </div>`;
+      // ── Audit-Informationen ──
+      html += `<div class="audit-section">
+        <div class="audit-section-header"><h3>Audit-Informationen</h3></div>
+        <div class="inline-form-grid">
+          <label for="ld-auditor-team">Auditor Team</label><input class="inline-input" id="ld-auditor-team" value="${escapeHtml(currentLine.auditor_team || '')}">
+          <label for="ld-auditee">Auditee</label><input class="inline-input" id="ld-auditee" value="${escapeHtml(currentLine.auditee || '')}">
+          <label for="ld-audit-start-date">Start</label><input class="inline-input" id="ld-audit-start-date" value="${escapeHtml(formatDateDE(currentLine.audit_start_date))}" placeholder="TT.MM.JJJJ">
+          <label for="ld-audit-end-date">Ende</label><input class="inline-input" id="ld-audit-end-date" value="${escapeHtml(formatDateDE(currentLine.audit_end_date))}" placeholder="TT.MM.JJJJ">
+          <label for="ld-audit-location">Audit Ort</label><input class="inline-input" id="ld-audit-location" value="${escapeHtml(currentLine.audit_location || '')}">
+          <label for="ld-doc-ref">Dokument Ref.</label><input class="inline-input" id="ld-doc-ref" value="${escapeHtml(currentLine.document_ref || '')}">
+          <label for="ld-doc-iss-rev">Iss/Rev</label><input class="inline-input" id="ld-doc-iss-rev" value="${escapeHtml(currentLine.document_iss_rev || '')}">
+          <label for="ld-doc-rev-date">Rev Datum</label><input class="inline-input" id="ld-doc-rev-date" value="${escapeHtml(formatDateDE(currentLine.document_rev_date))}" placeholder="TT.MM.JJJJ">
+          <label for="ld-recommendation">Empfehlung</label><textarea class="inline-input inline-textarea" id="ld-recommendation" rows="2">${escapeHtml(currentLine.recommendation || '')}</textarea>
+        </div>
+      </div>`;
+    }
 
     // ── Eval Summary ──
     html += renderEvalSummary();
@@ -1188,44 +1222,72 @@
 
     // ── Auto-save on blur for all inline fields ──
     // Init date auto-format for all date text inputs
-    ['ld-audit-start-date', 'ld-audit-end-date', 'ld-doc-rev-date'].forEach(id => {
+    const dateInputIds = isAuthorityLine
+      ? ['ld-authority-date']
+      : ['ld-audit-start-date', 'ld-audit-end-date', 'ld-doc-rev-date'];
+    dateInputIds.forEach(id => {
       initDateAutoFormat(document.getElementById(id));
     });
 
     async function saveLineFields() {
-      const startIso = parseDateDE(document.getElementById('ld-audit-start-date').value);
-      const endIso = parseDateDE(document.getElementById('ld-audit-end-date').value);
-      const revDateIso = parseDateDE(document.getElementById('ld-doc-rev-date').value);
+      // Ausgeblendet heißt mitgesendet: PUT /api/audit-plan-lines/:id ersetzt die
+      // ganze Zeile, ein fehlendes Feld leerte also seine Spalte. Was der Screen
+      // nicht rendert, reist deshalb unverändert aus currentLine mit.
+      const fieldVal = (id, stored) => {
+        const el = document.getElementById(id);
+        return el ? el.value.trim() : (stored || '');
+      };
+      // Beim Behördenaudit ist die eine Datumsangabe der Besuch selbst. Sie geht
+      // nach audit_end_date, weil genau diese Spalte das COALESCE des abgeleiteten
+      // Besuchsdatums (performed_date → audit_end_date → audit_start_date) als
+      // erste gefüllte findet — performed_date schreibt keine Oberfläche. Kachel,
+      // Kachelsortierung und die Überschriften hier zeigen dadurch das, was hier
+      // eingetippt wurde; audit_start_date bleibt wie Auditee unangetastet stehen.
+      const startIso = isAuthorityLine
+        ? (currentLine.audit_start_date || null)
+        : parseDateDE(document.getElementById('ld-audit-start-date').value);
+      const endIso = parseDateDE(document.getElementById(isAuthorityLine ? 'ld-authority-date' : 'ld-audit-end-date').value);
+      const revDateIso = isAuthorityLine
+        ? (currentLine.document_rev_date || null)
+        : parseDateDE(document.getElementById('ld-doc-rev-date').value);
       // Skip save if any date is invalid format
       if (startIso === undefined || endIso === undefined || revDateIso === undefined) return;
 
       const data = {
-        subject: document.getElementById('ld-subject').value.trim(),
-        regulations: document.getElementById('ld-regulations').value.trim(),
-        location: document.getElementById('ld-location').value.trim(),
+        subject: fieldVal('ld-subject', currentLine.subject),
+        regulations: fieldVal('ld-regulations', currentLine.regulations),
+        location: fieldVal('ld-location', currentLine.location),
         planned_window: (document.getElementById('ld-planned-window') || {}).value || '',
-        auditor_team: document.getElementById('ld-auditor-team').value.trim(),
-        auditee: document.getElementById('ld-auditee').value.trim(),
+        auditor_team: fieldVal('ld-auditor-team', currentLine.auditor_team),
+        auditee: fieldVal('ld-auditee', currentLine.auditee),
         audit_start_date: startIso,
         audit_end_date: endIso,
-        audit_location: document.getElementById('ld-audit-location').value.trim(),
-        document_ref: document.getElementById('ld-doc-ref').value.trim(),
-        document_iss_rev: document.getElementById('ld-doc-iss-rev').value.trim(),
+        audit_location: fieldVal('ld-audit-location', currentLine.audit_location),
+        document_ref: fieldVal('ld-doc-ref', currentLine.document_ref),
+        document_iss_rev: fieldVal('ld-doc-iss-rev', currentLine.document_iss_rev),
         document_rev_date: revDateIso,
-        recommendation: document.getElementById('ld-recommendation').value.trim(),
+        recommendation: fieldVal('ld-recommendation', currentLine.recommendation),
       };
 
       try {
         currentLine = await fetchJSON(`/api/audit-plan-lines/${currentLine.id}`, { method: 'PUT', body: data });
-        // Update breadcrumb name
+        // Der Screen wird nach dem Speichern gepatcht, nicht neu gezeichnet — ein
+        // Re-Render auf blur verlöre den Fokus des gerade angesprungenen Feldes.
+        const info = isAuthorityLine ? authorityInfoFromLines([currentLine]) : null;
+        const title = isAuthorityLine
+          ? authorityName(info.date, info.team)
+          : (data.subject || 'Themenbereich');
+        // Update breadcrumb name — dieselbe Regel wie in loadLineData()
         const lastSeg = navPath[navPath.length - 1];
         if (lastSeg && lastSeg.type === 'audit-plan-line') {
-          lastSeg.name = data.subject || 'Themenbereich';
+          lastSeg.name = data.subject || (isAuthorityLine ? 'Beanstandungsbericht' : 'Themenbereich');
           saveNav();
           paintBreadcrumb();
         }
         // Update header
-        headerEl.querySelector('h2').textContent = data.subject || 'Themenbereich';
+        headerEl.querySelector('h2').textContent = title;
+        const authorityHeading = document.getElementById('ld-authority-heading');
+        if (authorityHeading) authorityHeading.textContent = authorityName(info.date, '');
       } catch (err) {
         toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
       }
