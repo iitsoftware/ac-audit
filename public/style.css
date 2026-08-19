@@ -1293,11 +1293,57 @@ dialog.dialog-wide {
   font-weight: 700;
 }
 
+/* Die Gruppen-Kopfzeile traegt den 44x44-"+"-Button (.btn-icon wie in jeder
+   anderen Abschnitts-Kopfzeile). Der ist hoeher als die Ueberschrift und bringt
+   damit schon Luft mit — die vollen 12px der Sektion darunter liessen ueber
+   jeder Liste eine halbleere Zeile stehen. */
+.cap-action-group .audit-section-header {
+  margin-bottom: 4px;
+}
+
+/* Die Massnahmenliste ist die Beanstandungstabelle als Formular: dieselbe
+   .lines-table-Optik, aber Eingabefelder statt Text. Sechs Spalten davon werden
+   unterhalb dieser Breite unlesbar schmal — der .lines-table-wrap darum scrollt
+   dann waagerecht, statt Zieldatum und Erledigt am zusammenzuquetschen. */
+.cap-action-group .lines-table {
+  min-width: 640px;
+}
+
+/* Knapperes Zellpolster als in der Lesetabelle: die Felder bringen ihr eigenes
+   Innenpolster mit, doppeltes Polster zoege die Zeile auseinander. Die
+   Kopfzeile bekommt dasselbe, sonst stuende ihre Beschriftung neben der
+   Spalte statt ueber ihr. */
+.cap-action-group .lines-table th,
+.cap-action-group .lines-table td {
+  padding: 6px;
+}
+
+/* Kein Zeilen-Hover: die Zeile ist ein Formular und kein Navigationsziel, der
+   Tint der Lesetabellen las sich als "hier klicken". */
+.cap-action-group .lines-table tbody tr:hover {
+  background: transparent;
+}
+
+/* Laufende Nr. — abgeleitet aus dem Zeilenindex, nur angezeigt. Der Text im
+   Feld daneben beginnt um dessen Rahmen (1px) und Innenpolster (4px) tiefer;
+   ohne diesen Ausgleich stuende die Zahl ueber der ersten Textzeile statt auf
+   ihr. tabular-nums haelt die Spalte ab der 10. Massnahme ruhig. */
+.cap-action-group .lines-table tbody td:first-child {
+  padding-top: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* Der Loeschen-Knopf einer Massnahme bleibt sichtbar — die Zeile ist ein
-   Formular, kein Navigationsziel, das erst beim Ueberfahren Aktionen zeigt. */
-.cap-action-remove {
+   Formular, kein Navigationsziel, das erst beim Ueberfahren Aktionen zeigt.
+   Das 44x44-Ziel von .pane-action-btn fuellt die Spalte allein aus, deshalb
+   nur so viel Polster, dass es die 48px nicht sprengt — mitsamt dem Kontext
+   davor, sonst gewaenne das Zellpolster der Gruppe oben nach Spezifitaet. */
+.cap-action-group .lines-table td.cap-action-remove {
   text-align: right;
   white-space: nowrap;
+  padding: 2px;
 }
 
 /* ── Clickable checklist item rows ──────────────────────── */
