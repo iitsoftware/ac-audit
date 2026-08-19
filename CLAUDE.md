@@ -251,18 +251,26 @@ never offers this pot in the UI: a Beanstandung has exactly one evidence pot,
 ### CAP Actions (die n Maßnahmen einer Beanstandung)
 - `GET /api/cap-items/:id/actions` — Maßnahmen des CAP-Items, `ORDER BY kind, sort_order, created_at`
 - `POST /api/cap-items/:id/actions` — Create (`kind` = `CORRECTIVE` | `PREVENTIVE`, default `CORRECTIVE`; `sort_order` = max+1 **innerhalb der eigenen `kind`-Gruppe** über `getMaxCapActionSortOrder`, das für eine leere Gruppe `-1` liefert)
-- `PUT /api/cap-actions/:id` — Update
+- `PUT /api/cap-actions/:id` — Update (partiell: ausgelassene Felder behalten ihren Wert, wie `PUT /api/sms-meetings/:id`; ein leerer String bei `target_date` / `completion_date` räumt dagegen auf NULL, dieselbe Konvention wie bei `cap_item.deadline`)
 - `DELETE /api/cap-actions/:id` — Delete
 
 Sie hängen am CAP-Item, nicht am `audit_checklist_item`: `cap_item` bleibt der
 Speicher alles Korrektiven (siehe Key Patterns), und `ON DELETE CASCADE` räumt
-die Maßnahmen mit der Beanstandung ab. Von der Tabelle stehen heute
-`schema.sql`, der Index `idx_cap_action_cap_item` und die sechs Prepared
-Statements in `db.js` (`getCapActionsByCapItem`, `getCapAction`,
-`createCapAction`, `updateCapAction`, `deleteCapAction`,
-`getMaxCapActionSortOrder`) — die vier Routen, der CM-003-Join und der
-Maßnahmen-Block des Beanstandungs-Screens folgen darauf und sind noch nicht
-implementiert.
+die Maßnahmen mit der Beanstandung ab. Die vier Routen liegen in
+`routes/cap-items.js` neben den Evidence- und 5-Why-Routen: `/api/cap-actions/:id`
+ist ein **eigener Pfad** und kollidiert deshalb nicht mit der
+Batch-vor-`:id`-Regel von `/api/cap-items/pdf`. Beide Ebenen laden ihren Datensatz
+über `loadResource` (`getCapItem` bzw. `getCapAction`), ein fehlender liefert also
+wie überall 404, und ein `kind` außerhalb der zwei Werte ist 400 statt einer
+stillen dritten Gruppe, welche die Sortierung und die abgeleitete Nummerierung
+zerlegen würde. Der Firmen-/Abteilungskontext jeder Log-Zeile kommt aus
+`capContext(checklistItemId)` in derselben Datei — der Weg
+`checklist_item → line → plan → dept → company`, den auch der Papierkorb-Snapshot
+des CAP-Items geht (der ihn seither nicht mehr ein zweites Mal ausschreibt); er
+ist best effort und liefert leere Strings statt zu werfen, weil eine halb
+gelöschte Kette kein Grund ist, das Schreiben scheitern zu lassen. Der
+CM-003-Join und der Maßnahmen-Block des Beanstandungs-Screens folgen darauf und
+sind noch nicht implementiert.
 
 ### CAP Evidence
 - `GET /api/cap-items/:id/evidence-files` — List

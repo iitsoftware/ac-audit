@@ -23,6 +23,27 @@ function capPdfFilename(prefix, cap) {
   return `${prefix}_${cap.audit_no ? safe(cap.audit_no) : 'X'}_${safe(cap.evaluation)}.pdf`;
 }
 
+// Firmen-/Abteilungskontext einer Beanstandung fürs Audit-Log: cap_item hängt
+// über checklist_item → line → plan an der Abteilung, also läuft jede Leserstelle
+// denselben Weg. Jeder Schritt kann fehlen (Altbestand, halb gelöschte Kette), das
+// Log ist deshalb best effort und liefert leere Strings statt zu werfen.
+function capContext(checklistItemId) {
+  const out = { companyName: '', deptName: '', lineName: '' };
+  const checkItem = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?').get(checklistItemId);
+  if (!checkItem) return out;
+  const line = stmts.getAuditPlanLine.get(checkItem.audit_plan_line_id);
+  if (!line) return out;
+  out.lineName = line.subject || line.audit_no || '';
+  const plan = stmts.getAuditPlan.get(line.audit_plan_id);
+  if (!plan) return out;
+  const dept = stmts.getDepartment.get(plan.department_id);
+  if (!dept) return out;
+  out.deptName = dept.name;
+  const comp = stmts.getCompany.get(dept.company_id);
+  if (comp) out.companyName = comp.name;
+  return out;
+}
+
 // ── Recalculate all CAP deadlines (ORDER: before :id routes) ──
 router.post('/api/cap-items/recalc-deadlines', (req, res) => {
   getCapDeadlineDays();
@@ -154,20 +175,8 @@ router.delete('/api/cap-items/:id', (req, res) => {
   try {
     const cap = snapshotCapItem(req.params.id);
     if (cap) {
-      const checkItem = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?').get(cap.checklist_item_id);
-      let compName = '', deptName = '', entityName = '';
-      if (checkItem) {
-        const line = stmts.getAuditPlanLine.get(checkItem.audit_plan_line_id);
-        if (line) {
-          entityName = line.subject || line.audit_no || '';
-          const plan = stmts.getAuditPlan.get(line.audit_plan_id);
-          if (plan) {
-            const dept = stmts.getDepartment.get(plan.department_id);
-            if (dept) { deptName = dept.name; const comp = stmts.getCompany.get(dept.company_id); if (comp) compName = comp.name; }
-          }
-        }
-      }
-      stmts.createTrashItem.run(uuidv4(), 'cap_item', req.params.id, entityName, compName, deptName, cap.checklist_item_id, 'audit_checklist_item', JSON.stringify(cap));
+      const { companyName, deptName, lineName } = capContext(cap.checklist_item_id);
+      stmts.createTrashItem.run(uuidv4(), 'cap_item', req.params.id, lineName, companyName, deptName, cap.checklist_item_id, 'audit_checklist_item', JSON.stringify(cap));
     }
   } catch (e) { console.error('Trash snapshot failed:', e.message); }
   stmts.deleteCapItem.run(req.params.id);
@@ -248,6 +257,96 @@ router.get('/api/cap-items/:id/five-why/pdf',
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+// ── CAP Actions (die n Maßnahmen einer Beanstandung) ─────
+// Sie hängen am CAP-Item, nicht am audit_checklist_item, und ON DELETE CASCADE
+// räumt sie mit der Beanstandung ab. /api/cap-actions/:id ist ein eigener Pfad und
+// kollidiert deshalb nicht mit der Batch-vor-:id-Regel von /api/cap-items/pdf.
+// Ein kind außerhalb dieser zwei Werte wird abgewiesen statt gespeichert: eine
+// dritte Gruppe würde die Gruppierung und die daraus abgeleitete laufende Nummer
+// zerlegen, die nirgends gespeichert ist.
+const CAP_ACTION_KINDS = ['CORRECTIVE', 'PREVENTIVE'];
+
+// Log-Zeile einer Maßnahme: Kontext, Beschriftung und Detailtext sind fürs
+// Anlegen, Ändern und Löschen dieselben, also steht der Weg zum CAP-Item genau
+// einmal hier. Die Beschreibung ist Freitext beliebiger Länge — das Log braucht
+// nur ihren Anfang. `cap` reicht durch, wer die Beanstandung ohnehin geladen hat.
+function logCapAction(verb, action, cap) {
+  const capItem = cap || stmts.getCapItem.get(action.cap_item_id);
+  const { companyName, deptName } = capItem
+    ? capContext(capItem.checklist_item_id)
+    : { companyName: '', deptName: '' };
+  const desc = (action.description || '').trim();
+  const finding = capItem ? `${capItem.audit_no || ''} ${capItem.evaluation || ''}`.trim() : '';
+  logAction(`Maßnahme ${verb}`, 'cap_action', action.id,
+    desc.length > 60 ? desc.slice(0, 60) + '…' : desc,
+    finding ? `${action.kind} — ${finding}` : action.kind,
+    companyName, deptName);
+}
+
+router.get('/api/cap-items/:id/actions',
+  loadResource('getCapItem', 'id', 'CAP item not found'),
+  (req, res) => {
+    res.json(stmts.getCapActionsByCapItem.all(req.params.id));
+  });
+
+router.post('/api/cap-items/:id/actions',
+  loadResource('getCapItem', 'id', 'CAP item not found'),
+  (req, res) => {
+    const b = req.body;
+    const kind = b.kind || 'CORRECTIVE';
+    if (!CAP_ACTION_KINDS.includes(kind)) return res.status(400).json({ error: 'Invalid kind' });
+
+    // sort_order zählt innerhalb der eigenen kind-Gruppe: getMaxCapActionSortOrder
+    // liefert für eine leere Gruppe -1, die erste Maßnahme bekommt also 0.
+    const { max_sort } = stmts.getMaxCapActionSortOrder.get(req.params.id, kind);
+    const id = uuidv4();
+    stmts.createCapAction.run(
+      id, req.params.id, max_sort + 1, kind,
+      b.description || '', b.responsible_person || '',
+      b.target_date || null, b.completion_date || null
+    );
+
+    const action = stmts.getCapAction.get(id);
+    logCapAction('angelegt', action, req.resource);
+    res.status(201).json(action);
+  });
+
+// Partielles Update wie PUT /api/sms-meetings/:id — ausgelassene Felder behalten
+// ihren Wert. Ein leerer String bei den Datumsfeldern räumt dagegen auf NULL,
+// dieselbe Konvention wie bei cap_item.deadline.
+router.put('/api/cap-actions/:id',
+  loadResource('getCapAction', 'id', 'CAP action not found'),
+  (req, res) => {
+    const b = req.body;
+    const existing = req.resource;
+    const kind = b.kind !== undefined ? b.kind : existing.kind;
+    if (!CAP_ACTION_KINDS.includes(kind)) return res.status(400).json({ error: 'Invalid kind' });
+
+    stmts.updateCapAction.run(
+      b.sort_order !== undefined ? b.sort_order : existing.sort_order,
+      kind,
+      b.description !== undefined ? b.description : existing.description,
+      b.responsible_person !== undefined ? b.responsible_person : existing.responsible_person,
+      b.target_date !== undefined ? (b.target_date || null) : existing.target_date,
+      b.completion_date !== undefined ? (b.completion_date || null) : existing.completion_date,
+      req.params.id
+    );
+
+    const action = stmts.getCapAction.get(req.params.id);
+    logCapAction('geändert', action);
+    res.json(action);
+  });
+
+router.delete('/api/cap-actions/:id',
+  loadResource('getCapAction', 'id', 'CAP action not found'),
+  (req, res) => {
+    // Kein Nachziehen der sort_order: die gedruckte Nummer ist der Index in der
+    // sortierten Liste und bleibt dadurch von selbst lückenlos 1..n.
+    stmts.deleteCapAction.run(req.params.id);
+    logCapAction('gelöscht', req.resource);
+    res.status(204).end();
   });
 
 // ── CAP Evidence Files ───────────────────────────────────
