@@ -256,10 +256,17 @@ never offers this pot in the UI: a Beanstandung has exactly one evidence pot,
 ### 5-Why Analysis (internal: L1/L2 only — authority: every Beanstandung)
 - `GET /api/cap-items/:id/five-why` — Get 5-Why record
 - `PUT /api/cap-items/:id/five-why` — Create/update (syncs root_cause to CAP item)
+- `GET /api/cap-items/:id/five-why/pdf` — Eigenständiges CM-002-Formular (file name `Ursachenanalyse_<Audit-Nr.>_<Stufe>.pdf`)
 
-Neither route is gated — the boundary lives in the two readers: `capHasFiveWhy()`
-in `pdf/cap.js` for the CM-003 PDF and the frontend gate on the CAP level. The
-Beanstandungs-Ebene of an authority plan shows the block unconditionally.
+None of the three routes is gated — the boundary lives in the two readers:
+`capHasFiveWhy()` in `pdf/cap.js` for the CM-003 PDF and the frontend gate on the
+CAP level. The Beanstandungs-Ebene of an authority plan shows the block
+unconditionally, and the CM-002 form is a document of its own: a CAP **without** a
+`five_why` record yields the empty, hand-fillable form, not a 404 (only a missing
+CAP item is one, via `loadResource`). The route loads nothing itself — record,
+Abteilung, Firma, Logo and the QM as signer all come out of
+`generateFiveWhyPdfBuffer()` (`pdf/five-why.js`), so a later Versand cannot drift
+apart from the download.
 
 ### PDF Export
 - `GET /api/audit-plans/:id/pdf` — Audit plan PDF (query: type=open|closed, filter=planned)
@@ -267,6 +274,12 @@ Beanstandungs-Ebene of an authority plan shows the block unconditionally.
 - `GET /api/audit-plan-lines/:id/pdf` — Single Einzelaudit PDF
 - `GET /api/cap-items/pdf` — Multi-select CAP PDF (query: ids=id1,id2,...)
 - `GET /api/cap-items/:id/pdf` — Single CAP PDF (5-Why per `capHasFiveWhy()`; file name `CAP_<Audit-Nr.>_<Stufe>.pdf`)
+- `GET /api/cap-items/:id/five-why/pdf` — CM-002 root-cause form of the same CAP (see 5-Why Analysis above)
+
+Both single-CAP file names come from `capPdfFilename(prefix, cap)` in
+`routes/cap-items.js` — CAP report and Ursachenanalyse belong to one record and have
+to match on the recipient's desk. Audit-Nr. and Stufe are user input, so the helper
+sanitizes both before they reach the `Content-Disposition` header.
 
 ### Email Sending
 - `POST /api/audit-plans/:id/send-email` — Send PDF via email (body: to, type, authority?)

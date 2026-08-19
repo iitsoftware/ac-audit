@@ -7,9 +7,21 @@ const { getCapDeadlineDays, calcCapDeadline } = require('../services/cap-deadlin
 const { snapshotCapItem } = require('../services/trash');
 const { getQmForDepartment, buildAuthoritySalutation, sendDocumentEmail } = require('../services/email');
 const { renderCapItemPdf, generateCapItemsPdfBuffer, capHasFiveWhy } = require('../pdf/cap');
+const { generateFiveWhyPdfBuffer } = require('../pdf/five-why');
 const { addPdfFooter } = require('../pdf/common');
+const { loadResource } = require('../middleware/load-resource');
 
 const router = express.Router();
+
+// Dateinamenskonvention der Einzeldokumente einer Beanstandung:
+// <Präfix>_<Audit-Nr.>_<Stufe>.pdf — CAP-Bericht und Ursachenanalyse gehören zum
+// selben Datensatz und müssen beim Empfänger nebeneinander zusammenpassen.
+// Audit-Nr. und Stufe sind Nutzereingaben, daher entschärft, bevor sie in den
+// Content-Disposition-Header wandern.
+function capPdfFilename(prefix, cap) {
+  const safe = value => String(value || '').replace(/[^a-zA-Z0-9]/g, '_');
+  return `${prefix}_${cap.audit_no ? safe(cap.audit_no) : 'X'}_${safe(cap.evaluation)}.pdf`;
+}
 
 // ── Recalculate all CAP deadlines (ORDER: before :id routes) ──
 router.post('/api/cap-items/recalc-deadlines', (req, res) => {
@@ -178,7 +190,7 @@ router.get('/api/cap-items/:id/pdf', (req, res) => {
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
   res.set('Content-Type', 'application/pdf');
-  res.set('Content-Disposition', `attachment; filename="CAP_${cap.audit_no || 'X'}_${(cap.evaluation || '').replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
+  res.set('Content-Disposition', `attachment; filename="${capPdfFilename('CAP', cap)}"`);
   doc.pipe(res);
 
   renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, evidenceFiles, startY: 50 });
@@ -214,6 +226,29 @@ router.put('/api/cap-items/:id/five-why', (req, res) => {
   }
   res.json(stmts.getFiveWhyByCapItem.get(req.params.id));
 });
+
+// Eigenständiges CM-002-Formular der Beanstandung — das zweite Dokument zum selben
+// Datensatz neben dem CM-003-CAP-Bericht. Alles, was das Formular braucht (five_why,
+// Abteilung, Firma, Logo und den QM als Unterzeichner), liest
+// generateFiveWhyPdfBuffer() selbst, damit Download und ein späterer Versand nicht
+// auseinanderlaufen können. Ein fehlender five_why-Datensatz ist dabei kein Fehler,
+// sondern das leere, von Hand ausfüllbare Formular — die Papierpraxis der Behörde.
+router.get('/api/cap-items/:id/five-why/pdf',
+  loadResource('getCapItem', 'id', 'CAP item not found'),
+  async (req, res) => {
+    const cap = req.resource;
+    try {
+      const { buffer, dept, company } = await generateFiveWhyPdfBuffer(cap.id);
+      logAction('Ursachenanalyse exportiert', 'cap_item', cap.id,
+        `${cap.audit_no || ''} ${cap.evaluation || ''}`.trim(), 'CM-002 PDF',
+        company ? company.name : '', dept ? dept.name : '');
+      res.set('Content-Type', 'application/pdf');
+      res.set('Content-Disposition', `attachment; filename="${capPdfFilename('Ursachenanalyse', cap)}"`);
+      res.send(buffer);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
 
 // ── CAP Evidence Files ───────────────────────────────────
 router.get('/api/cap-items/:id/evidence-files', (req, res) => {
