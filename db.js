@@ -307,6 +307,34 @@ const stmts = {
      WHERE (c.completion_date IS NULL OR c.completion_date = '')`
   ),
 
+  // CAP Actions — mehrere durchnummerierte Maßnahmen je Beanstandung.
+  // ORDER BY kind, sort_order, created_at hält Behebungs- und Präventivmaßnahmen
+  // getrennt und innerhalb ihrer Gruppe stabil: genau die Reihenfolge, aus deren
+  // Index das CM-003-PDF und der Screen ihre Nummer ("1. … 2. …") ableiten.
+  getCapActionsByCapItem: db.prepare(
+    'SELECT * FROM cap_action WHERE cap_item_id = ? ORDER BY kind, sort_order, created_at'
+  ),
+  getCapAction: db.prepare(
+    'SELECT * FROM cap_action WHERE id = ?'
+  ),
+  createCapAction: db.prepare(
+    `INSERT INTO cap_action (id, cap_item_id, sort_order, kind, description, responsible_person, target_date, completion_date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  updateCapAction: db.prepare(
+    `UPDATE cap_action SET sort_order = ?, kind = ?, description = ?, responsible_person = ?,
+                           target_date = ?, completion_date = ?, updated_at = datetime('now')
+     WHERE id = ?`
+  ),
+  deleteCapAction: db.prepare(
+    'DELETE FROM cap_action WHERE id = ?'
+  ),
+  // -1 als Default, damit der Aufrufer beim Anlegen wie beim Zielkatalog mit
+  // max+1 rechnet und die erste Maßnahme einer Gruppe sort_order 0 bekommt.
+  getMaxCapActionSortOrder: db.prepare(
+    'SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM cap_action WHERE cap_item_id = ? AND kind = ?'
+  ),
+
   // CAP Evidence Files
   getEvidenceFilesByCapItem: db.prepare(
     'SELECT id, filename, mime_type FROM cap_evidence_file WHERE cap_item_id = ? ORDER BY created_at'
