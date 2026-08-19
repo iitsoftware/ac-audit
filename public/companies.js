@@ -118,6 +118,13 @@
     renderCompanyTabsLocal();
   }
 
+  // Eine Ebene tiefer springen: Segment anhängen und neu rendern. renderCurrentLevel()
+  // schreibt den Nav-Pfad selbst weg, deshalb bleibt hier nur der Push.
+  function pushNavSegment(segment) {
+    navPath.push(segment);
+    return renderCurrentLevel();
+  }
+
   async function navigateTo(index) {
     if (index < 0) {
       navPath = [];
@@ -163,6 +170,8 @@
       await renderAuditPlanDetailLevel(lastSegment.id);
     } else if (lastSegment.type === 'audit-plan-line') {
       await renderLineDetailLevel(lastSegment.id);
+    } else if (lastSegment.type === 'finding') {
+      await renderFindingLevel(lastSegment.id);
     } else if (lastSegment.type === 'cap-item') {
       await renderCapDetailLevel(lastSegment.id);
     }
@@ -290,12 +299,11 @@
         // Line. Fehlt die Line-ID (Altbestand mit 0 oder mehreren Zeilen, dann liefert
         // das Statement NULL), bleibt es bei der Plan-Ebene.
         if (isAuthority && plan.authority_line_id) {
-          navPath.push({ type: 'audit-plan-line', id: plan.authority_line_id, name: `Beh\u00f6rdenaudit ${plan.year}` });
+          pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: `Beh\u00f6rdenaudit ${plan.year}` });
         } else {
           const pName = isAuthority ? `Beh\u00f6rdenaudits ${plan.year}` : `Auditplan ${plan.year} Rev. ${plan.revision || 0}`;
-          navPath.push({ type: 'audit-plan', id: plan.id, name: pName });
+          pushNavSegment({ type: 'audit-plan', id: plan.id, name: pName });
         }
-        renderCurrentLevel();
       });
     });
 
@@ -394,8 +402,7 @@
       // Der Plan bringt seinen Beanstandungsbericht mit — direkt hinein springen,
       // statt den Anwender auf die Kachel zu schicken, die genau dorthin führt.
       if (plan && plan.authority_line_id) {
-        navPath.push({ type: 'audit-plan-line', id: plan.authority_line_id, name: `Behördenaudit ${plan.year}` });
-        renderCurrentLevel();
+        pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: `Behördenaudit ${plan.year}` });
       }
     } catch (err) {
       toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
@@ -812,8 +819,7 @@
           method: 'POST',
           body: { subject: defaultSubject, location: defaultCity, sort_order: planLines.length + 1 }
         });
-        navPath.push({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich') });
-        renderCurrentLevel();
+        pushNavSegment({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich') });
       } catch (err) {
         toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
       }
@@ -826,8 +832,7 @@
         const lineId = row.dataset.id;
         const line = planLines.find(l => l.id === lineId);
         if (!line) return;
-        navPath.push({ type: 'audit-plan-line', id: line.id, name: line.subject || 'Themenbereich' });
-        renderCurrentLevel();
+        pushNavSegment({ type: 'audit-plan-line', id: line.id, name: line.subject || 'Themenbereich' });
       });
     });
 
@@ -914,6 +919,13 @@
   }
 
   async function loadLineDetail(lineId) {
+    await loadLineData(lineId);
+    renderLineDetail();
+  }
+
+  // Reines Laden ohne Rendern: die Beanstandungsebene braucht dieselben Daten
+  // (Bericht, Plan, Beanstandungsliste), zeichnet daraus aber ihren eigenen Screen.
+  async function loadLineData(lineId) {
     try {
       currentLine = await fetchJSON(`/api/audit-plan-lines/${lineId}`);
       // Die Behörden-Kachel springt die Plan-Ebene über, und ein Reload landet über
@@ -938,7 +950,6 @@
       currentLine = null;
       checklistItems = [];
     }
-    renderLineDetail();
   }
 
   function renderLineDetail() {
@@ -1150,11 +1161,20 @@
     });
 
     // ── Checklist item row click → edit, delete button → delete ──
+    // Eine Beanstandung ist beim Behördenaudit ein eigener Screen (Stammdaten,
+    // Maßnahme, Ursachenanalyse, Nachweise) und passt nicht mehr in einen Dialog —
+    // der Zeilenklick navigiert deshalb eine Ebene tiefer. Interne Audits behalten
+    // den Modal-Dialog.
     contentEl.querySelectorAll('.ci-row-clickable').forEach(row => {
-      row.addEventListener('click', (e) => {
+      makeRowClickable(row, (e) => {
         if (e.target.closest('.pane-action-btn')) return;
-        const item = checklistItems.find(ci => ci.id === row.dataset.id);
-        if (item) openChecklistItemDialog(item);
+        const idx = checklistItems.findIndex(ci => ci.id === row.dataset.id);
+        if (idx < 0) return;
+        if (isAuthorityLine) {
+          pushNavSegment({ type: 'finding', id: checklistItems[idx].id, name: findingSegmentName(idx) });
+        } else {
+          openChecklistItemDialog(checklistItems[idx]);
+        }
       });
     });
 
@@ -1340,6 +1360,126 @@
       toast(err?.message || 'L\u00f6schen fehlgeschlagen', 'error');
     } finally { btn.disabled = false; }
   });
+
+  // ── Finding Level (eine Beanstandung eines Behördenaudits) ──
+  // Die flache Beanstandungstabelle drillt in einen eigenen Screen statt in einen
+  // Dialog: Stammdaten, Maßnahme, Ursachenanalyse und Nachweise einer Beanstandung
+  // gehören auf eine Seite. Hier steht das Gerüst — die Sektions-Container füllen
+  // die Folge-Tasks.
+  let currentFinding = null;      // audit_checklist_item
+  let currentFindingIndex = -1;   // Zeilenindex im Bericht → abgeleitete Beanstandung Nr.
+  let currentFindingCap = null;   // cap_item der Beanstandung, null solange keine Stufe gesetzt ist
+
+  // Die Beanstandung Nr. ist wie in renderLineDetail() aus dem Zeilenindex abgeleitet
+  // und nie gespeichert — sie bleibt beim Löschen lückenlos 1..n.
+  function findingSegmentName(idx) {
+    return `Beanstandung ${idx + 1}`;
+  }
+
+  // Der Breadcrumb der Ebene ist Abteilung → Bericht → Beanstandung; die Abteilung
+  // steht wie auf allen anderen Ebenen als aktiver Tab über dem Breadcrumb
+  // (paintBreadcrumb() filtert sie heraus), die beiden übrigen Segmente kommen aus
+  // dem Nav-Pfad — renderCurrentLevel() zeichnet ihn vor dem Laden.
+  async function renderFindingLevel(findingId) {
+    headerEl.innerHTML = '';
+    contentEl.innerHTML = '<div class="empty-state-inline">Lade...</div>';
+    await loadFinding(findingId);
+    renderFindingDetail();
+  }
+
+  async function loadFinding(findingId) {
+    currentFinding = null;
+    currentFindingIndex = -1;
+    currentFindingCap = null;
+
+    // Eine Beanstandung hängt immer unter ihrem Bericht, dessen Segment im
+    // persistierten Nav-Pfad steht — so findet auch ein Reload direkt auf dieser
+    // Ebene die Zeile wieder. Die Liste des Berichts wird ohnehin gebraucht: die
+    // Beanstandung Nr. ist aus dem Zeilenindex abgeleitet.
+    const lineSeg = [...navPath].reverse().find(s => s.type === 'audit-plan-line');
+    if (!lineSeg) return;
+
+    if (!currentLine || currentLine.id !== lineSeg.id) await loadLineData(lineSeg.id);
+    if (!currentLine) return;
+
+    const idx = checklistItems.findIndex(ci => ci.id === findingId);
+    if (idx < 0) return;
+    currentFinding = checklistItems[idx];
+    currentFindingIndex = idx;
+
+    // Das CAP-Item hängt am Checklisten-Eintrag. Die Plan-Route liefert alle CAPs
+    // des Plans in einem Zug — beim Behördenaudit sind das genau die des Berichts.
+    // Ohne Bewertung existiert keines, das ist kein Fehler.
+    try {
+      const caps = await fetchJSON(`/api/audit-plans/${currentLine.audit_plan_id}/cap-items`);
+      currentFindingCap = (caps.items || []).find(c => c.checklist_item_id === findingId) || null;
+    } catch (e) {
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
+    }
+
+    // Nummer im Breadcrumb nachziehen: der Sprung aus der Tabelle kennt sie zwar,
+    // ein Reload auf dem gespeicherten Pfad aber nicht — und nach dem Löschen einer
+    // vorangehenden Beanstandung stimmt sie ohnehin neu.
+    const seg = navPath[navPath.length - 1];
+    if (seg && seg.type === 'finding' && seg.id === findingId && seg.name !== findingSegmentName(idx)) {
+      seg.name = findingSegmentName(idx);
+      saveNav();
+      paintBreadcrumb();
+    }
+  }
+
+  function renderFindingDetail() {
+    if (!currentFinding) {
+      headerEl.innerHTML = '';
+      contentEl.innerHTML = '<div class="empty-state-inline">Beanstandung nicht gefunden</div>';
+      return;
+    }
+
+    const item = currentFinding;
+    const cap = currentFindingCap;
+    headerEl.innerHTML = `<h2>${escapeHtml(findingSegmentName(currentFindingIndex))}</h2>`;
+
+    let html = '<div class="audit-detail">';
+
+    // ── Beanstandung ── (Stammdaten, vorerst lesend)
+    html += `<div class="audit-section">
+      <div class="audit-section-header"><h3>Beanstandung</h3></div>
+      <div id="finding-fields" class="cap-info-block">
+        <div class="cap-info-row"><span class="cap-info-label">Referenz Paragraph</span><span>${escapeHtml(item.regulation_ref || '')}</span></div>
+        <div class="cap-info-row"><span class="cap-info-label">Beschreibung</span><span>${escapeHtml(item.compliance_check || '')}</span></div>
+        <div class="cap-info-row"><span class="cap-info-label">Stufe</span><span>${item.evaluation ? `<span class="eval-badge eval-${item.evaluation}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</span></div>
+        <div class="cap-info-row"><span class="cap-info-label">Frist</span><span>${escapeHtml(formatDateDE(item.cap_deadline))}</span></div>
+      </div>
+    </div>`;
+
+    // ── Maßnahme ── (CAP-Item der Beanstandung)
+    html += `<div class="audit-section">
+      <div class="audit-section-header"><h3>Maßnahme</h3></div>
+      <div id="finding-cap-fields">`;
+    html += cap
+      ? `<div class="cap-info-block">
+          <div class="cap-info-row"><span class="cap-info-label">Frist</span><span>${escapeHtml(formatDateDE(cap.deadline))}</span></div>
+          <div class="cap-info-row"><span class="cap-info-label">Verantwortlich</span><span>${escapeHtml(cap.responsible_person || '')}</span></div>
+          <div class="cap-info-row"><span class="cap-info-label">Status</span><span class="cap-status-${cap.completion_date ? 'CLOSED' : 'OPEN'}">${cap.completion_date ? 'CLOSED' : 'OPEN'}</span></div>
+        </div>`
+      : '<div class="empty-state-inline" style="padding:16px 0">Keine Maßnahme — die Beanstandung hat noch keine Stufe</div>';
+    html += '</div></div>';
+
+    // ── Ursachenanalyse ── (5-Why, CM-002)
+    html += `<div class="audit-section">
+      <div class="audit-section-header"><h3>5-Why Analyse</h3></div>
+      <div id="finding-five-why"></div>
+    </div>`;
+
+    // ── Nachweise ── (checklist_evidence_file)
+    html += `<div class="audit-section">
+      <div class="audit-section-header"><h3>Nachweise</h3></div>
+      <div id="finding-evidence"></div>
+    </div>`;
+
+    html += '</div>';
+    contentEl.innerHTML = html;
+  }
 
   // ── Import .docx ────────────────────────────────────────────
   document.getElementById('import-file-input').addEventListener('change', async (e) => {
@@ -1676,8 +1816,7 @@
         if (e.target.closest('.col-select')) return;
         const cap = capItems.find(c => c.id === row.dataset.capId);
         if (cap) {
-          navPath.push({ type: 'cap-item', id: cap.id, name: 'CAP' });
-          renderCurrentLevel();
+          pushNavSegment({ type: 'cap-item', id: cap.id, name: 'CAP' });
         }
       });
     });
