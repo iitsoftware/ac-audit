@@ -66,8 +66,25 @@ const stmts = {
   ),
 
   // Audit Plan
+  // Bei plan_type = 'AUTHORITY' ist die Plan-Ebene kein eigenes Navigationsziel:
+  // die Kachel springt direkt in den Beanstandungsbericht. Damit das ohne
+  // Zwischen-Fetch geht, liefert der LEFT JOIN die (einzige) audit_plan_line samt
+  // Datum und Behörde mit. Der COUNT-Guard hält den Join einzeilig — bei internen
+  // Plänen und bei 0 oder >1 Zeilen bleibt authority_line_id NULL, worauf der
+  // Klick-Handler auf die heutige Plan-Ebene zurückfällt.
   getAuditPlansByDepartment: db.prepare(
-    'SELECT id, department_id, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, plan_type, created_at, updated_at FROM audit_plan WHERE department_id = ? ORDER BY year DESC'
+    `SELECT ap.id, ap.department_id, ap.year, ap.status, ap.revision, ap.approved_by, ap.approved_at,
+            ap.submitted_to, ap.submitted_planned_at, ap.submitted_at, ap.plan_type, ap.created_at, ap.updated_at,
+            al.id AS authority_line_id,
+            COALESCE(NULLIF(al.performed_date, ''), NULLIF(al.audit_end_date, ''), NULLIF(al.audit_start_date, '')) AS authority_date,
+            al.auditor_team AS authority_auditor_team
+     FROM audit_plan ap
+     LEFT JOIN audit_plan_line al
+            ON ap.plan_type = 'AUTHORITY'
+           AND al.audit_plan_id = ap.id
+           AND (SELECT COUNT(*) FROM audit_plan_line x WHERE x.audit_plan_id = ap.id) = 1
+     WHERE ap.department_id = ?
+     ORDER BY ap.year DESC`
   ),
   getAuditPlanProgress: db.prepare(
     `SELECT audit_plan_id,

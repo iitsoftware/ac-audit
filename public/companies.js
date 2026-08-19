@@ -246,10 +246,17 @@
            </div>`
         : '';
       const st = derivePlanStatus(p);
+      // Ein Behördenaudit kennt keine Revision: die Kachel zeigt stattdessen Datum
+      // und Behörde des Besuchs, soweit sie auf der Beanstandungsberichts-Zeile
+      // stehen (authority_date / authority_auditor_team aus der Plan-Liste). Fehlen
+      // sie, bleibt das Jahr als Titel und die zweite Zeile entfällt.
+      const authorityDate = isAuthority ? formatDateDE(p.authority_date) : '';
+      const tileTitle = authorityDate || String(p.year);
+      const tileSub = isAuthority ? (p.authority_auditor_team || '') : `Rev. ${p.revision || 0}`;
       return `
       <div class="plan-tile ${st.css}" data-id="${p.id}">
-        <div class="plan-tile-year">${p.year}</div>
-        ${isAuthority ? '' : `<div class="plan-tile-rev">Rev. ${p.revision || 0}</div>`}
+        <div class="plan-tile-year">${escapeHtml(tileTitle)}</div>
+        ${tileSub ? `<div class="plan-tile-rev">${escapeHtml(tileSub)}</div>` : ''}
         <div class="plan-tile-status">${st.label}</div>
         ${progressHtml}
         <div class="plan-tile-actions">
@@ -277,8 +284,17 @@
         const id = card.dataset.id;
         const plan = auditPlans.find(p => p.id === id);
         if (!plan) return;
-        const pName = (plan.plan_type || 'AUDIT') === 'AUTHORITY' ? `Beh\u00f6rdenaudits ${plan.year}` : `Auditplan ${plan.year} Rev. ${plan.revision || 0}`;
-        navPath.push({ type: 'audit-plan', id: plan.id, name: pName });
+        const isAuthority = (plan.plan_type || 'AUDIT') === 'AUTHORITY';
+        // Ein Behördenaudit hat genau einen Beanstandungsbericht — die Plan-Ebene
+        // wäre eine Liste mit einer Zeile. Der Klick springt deshalb direkt auf die
+        // Line. Fehlt die Line-ID (Altbestand mit 0 oder mehreren Zeilen, dann liefert
+        // das Statement NULL), bleibt es bei der Plan-Ebene.
+        if (isAuthority && plan.authority_line_id) {
+          navPath.push({ type: 'audit-plan-line', id: plan.authority_line_id, name: `Beh\u00f6rdenaudit ${plan.year}` });
+        } else {
+          const pName = isAuthority ? `Beh\u00f6rdenaudits ${plan.year}` : `Auditplan ${plan.year} Rev. ${plan.revision || 0}`;
+          navPath.push({ type: 'audit-plan', id: plan.id, name: pName });
+        }
         renderCurrentLevel();
       });
     });
@@ -894,7 +910,23 @@
   async function loadLineDetail(lineId) {
     try {
       currentLine = await fetchJSON(`/api/audit-plan-lines/${lineId}`);
+      // Die Behörden-Kachel springt die Plan-Ebene über, und ein Reload landet über
+      // den gespeicherten Nav-Pfad ebenfalls direkt hier. Ohne dieses Nachladen wäre
+      // currentPlan null und der Beanstandungsbericht würde stillschweigend als
+      // internes Audit mit drei Sektionen rendern.
+      if (!currentPlan || currentPlan.id !== currentLine.audit_plan_id) {
+        currentPlan = await fetchJSON(`/api/audit-plans/${currentLine.audit_plan_id}`);
+      }
       checklistItems = await fetchJSON(`/api/audit-plan-lines/${lineId}/checklist-items`);
+      // Breadcrumb-Label aus dem geladenen Bericht nachziehen — der Sprung von der
+      // Kachel kennt den Betreff noch nicht.
+      const seg = navPath.find(s => s.type === 'audit-plan-line' && s.id === lineId);
+      const segName = currentLine.subject || ((currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? 'Beanstandungsbericht' : 'Themenbereich');
+      if (seg && seg.name !== segName) {
+        seg.name = segName;
+        saveNav();
+        paintBreadcrumb();
+      }
     } catch (e) {
       toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
       currentLine = null;
