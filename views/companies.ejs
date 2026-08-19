@@ -213,10 +213,16 @@
 <dialog id="cap-export-dialog" aria-labelledby="cap-export-dialog-title">
   <div class="dialog-header" id="cap-export-dialog-title">CAP exportieren</div>
   <div class="dialog-body">
-    <!-- Dokumentwahl: wirkt allein auf den Download genau einer Beanstandung.
+    <!-- Dokumentwahl: wirkt allein auf den Download genau eines CAP-Items —
+         auf dem Beh&ouml;rdenaudit ist das genau ein Finding.
          Das CM-002 ist ein Einzelformular (GET /api/cap-items/:id/five-why/pdf)
          ohne Batch-Route, bei einer Mehrfachauswahl ist die Gruppe deshalb
          ausgeblendet und der Dialog bleibt beim CM-003 wie bisher.
+         Die Grenze ist die Einfachauswahl und nicht der Screen: &Uuml;bersicht,
+         CAP-Ebene und Finding-Screen teilen sich diesen Dialog. Seine
+         sichtbaren Texte bleiben deshalb neutral &mdash; die Beh&ouml;rden-Sprache
+         (Finding / Level) setzt public/companies.js, wo der Plantyp bekannt
+         ist; hartkodiert w&auml;re sie f&uuml;r interne Audits schlicht falsch.
          Bare label + aria-labelledby wie bei der CM-006-Bewertung in
          views/safety.ejs: die Gruppe hat keine eigene Control. -->
     <div class="form-group" id="cap-export-doc-group" style="display:none">
