@@ -221,10 +221,11 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('  → sein Unterzeichner bleibt leer, statt den Bogen zu sprengen',
     (noQm.calls[0] || {}).signer === undefined || !noQm.calls[0].signer,
     String((noQm.calls[0] || {}).signer));
-  // Deckblatt + die vier Seiten des einen Findings. Ohne 5-Why-Satz bleibt es bei
-  // dessen leerem, von Hand ausfüllbarem Formular, und die vierte Seite trägt die
-  // beiden Überschriften mit „Keine Maßnahmen“ — das Finding hat ein CAP-Item, wir
-  // haben darauf nur noch nicht geantwortet.
+  // Deckblatt + die vier Seiten des einen Findings (Findingdaten | CM-002 Seite 1 |
+  // CM-002 Seite 2 | Maßnahmen). Ohne 5-Why-Satz bleibt es bei dessen leerem, von
+  // Hand ausfüllbarem Formular, und die Maßnahmenseite steht auch ohne eine einzige
+  // Maßnahme: sie trägt dann die beiden Überschriften samt "Keine Maßnahmen" — das
+  // Finding hat ein CAP-Item, wir haben darauf nur noch nicht geantwortet.
   check('  → die Findingseiten stehen trotzdem',
     noQm.pages === 5, `${noQm.pages} Seite(n)`);
 
