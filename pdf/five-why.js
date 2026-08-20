@@ -14,19 +14,27 @@ const TITLE = 'GRUNDURSACHENANALYSE / ROOT CAUSE ANALYSIS';
 // Die Frageüberschriften des CM-002-Formulars sind Konstanten des Renderers, keine
 // Spalten: five_why bleibt why1..why5 + root_cause (schema.sql), das Formular
 // beschriftet die fünf Stufen. Deshalb kostet dieses PDF keine Migration.
-// Zweite Fundstelle derselben fünf Titel: fiveWhyHtml() in public/companies.js
-// beschriftet die Eingabefelder der Ursachenanalyse damit. Frontend und Renderer
-// teilen sich kein Modul, die Liste steht also zwangsläufig zweimal — wie die
-// Stufen-Klartexte bei evalLabel() (public/companies.js) und capEvalLabel()
-// (pdf/cap.js). Wer hier ein Titelwort ändert, ändert es dort mit: Schirm und
-// Blatt beschriften dasselbe Feld.
+// Die Kopfzeile folgt dem Original: über Kasten 1 steht die Einstiegsfrage der
+// 5W-Kette, über 2–5 jeweils deren Wiederholung. Der deutsche Titel steht dahinter
+// in Klammern statt allein im Kopf, weil der Feldinhalt selbst mit 'Auswirkung: …'
+// beginnt und das Wort sonst zweimal überm selben Text stünde.
+// Zweite Fundstelle derselben fünf Überschriften: fiveWhyHtml() in
+// public/companies.js beschriftet die Eingabefelder der Ursachenanalyse damit.
+// Frontend und Renderer teilen sich kein Modul, die Liste steht also zwangsläufig
+// zweimal — wie die Stufen-Klartexte bei evalLabel() (public/companies.js) und
+// capEvalLabel() (pdf/cap.js). Wer hier ein Wort ändert, ändert es dort mit:
+// Schirm und Blatt beschriften dasselbe Feld.
 const WHY_STEPS = [
-  { field: 'why1', title: 'Auswirkung' },
-  { field: 'why2', title: 'Direkte Ursache' },
-  { field: 'why3', title: 'Tiefere Ursache' },
-  { field: 'why4', title: 'Organisationsmangel' },
-  { field: 'why5', title: 'Systemmangel' }
+  { field: 'why1', question: 'Why is it happening?', title: 'Auswirkung' },
+  { field: 'why2', question: 'Why is that?', title: 'Direkte Ursache' },
+  { field: 'why3', question: 'Why is that?', title: 'Tiefere Ursache' },
+  { field: 'why4', question: 'Why is that?', title: 'Organisationsmangel' },
+  { field: 'why5', question: 'Why is that?', title: 'Systemmangel' }
 ];
+// Beide Seiten setzen ihre Kastenköpfe hier zusammen — laufende Nummer, Frage,
+// deutscher Titel in Klammern —, damit der Seitenschnitt die Überschriften nicht
+// in zwei Schreibweisen auseinanderlaufen lässt.
+const whyHeading = (step, n) => `${n}. ${step.question} (${step.title})`;
 // Seite 1 trägt Why 1–3 unter PRIMARY CAUSE, Seite 2 die restlichen unter
 // WHY IS THIS A PROBLEM? — der Schnitt des echten zweiseitigen Formulars.
 const PRIMARY_CAUSE_STEPS = 3;
@@ -226,7 +234,7 @@ function renderFiveWhyPdf(doc, { cap, fiveWhy, department, company, logoRow, sig
 
   drawBand('PRIMARY CAUSE');
   WHY_STEPS.slice(0, PRIMARY_CAUSE_STEPS).forEach((step, i) => {
-    drawBox(`Why ${i + 1} – ${step.title}`, fiveWhy ? fiveWhy[step.field] : '', { indent: i * STEP_INDENT });
+    drawBox(whyHeading(step, i + 1), fiveWhy ? fiveWhy[step.field] : '', { indent: i * STEP_INDENT });
   });
 
   // ── Seite 2: die dahinterliegenden Ursachen und das Statement ──
@@ -238,7 +246,7 @@ function renderFiveWhyPdf(doc, { cap, fiveWhy, department, company, logoRow, sig
   // über den rechten Rand hinaus, obwohl das Band den Abschnitt ohnehin neu öffnet.
   WHY_STEPS.slice(PRIMARY_CAUSE_STEPS).forEach((step, i) => {
     const n = PRIMARY_CAUSE_STEPS + i + 1;
-    drawBox(`Why ${n} – ${step.title}`, fiveWhy ? fiveWhy[step.field] : '', { indent: i * STEP_INDENT });
+    drawBox(whyHeading(step, n), fiveWhy ? fiveWhy[step.field] : '', { indent: i * STEP_INDENT });
   });
 
   drawBand('FINAL ROOT CAUSE STATEMENT');
