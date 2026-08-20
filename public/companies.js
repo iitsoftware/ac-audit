@@ -1579,6 +1579,11 @@
     // dem Finding-Screen nachtragen zu müssen.
     document.querySelector('label[for="ci-form-doc-ref"]').textContent =
       isAuthorityPlan ? 'Findingbericht Nr.' : 'Dokument Ref.';
+    // Dieselbe Grenze wie die Beschriftungen, nur für die Reihenfolge: mit der
+    // Klasse zeigt der Dialog die Spaltenfolge der Findingliste (Beschreibung →
+    // Findingbericht Nr. → Referenz Paragraph → Level → Frist), ohne sie die
+    // interne Reihenfolge des Markups. Die `order`-Werte stehen in style.css.
+    document.getElementById('checklist-item-form').classList.toggle('ci-form-authority', isAuthorityPlan);
     // Ein Behördenaudit hat keine Sektionen: jedes Finding wird als 'THEORETICAL'
     // gespeichert, damit Sortier- und Speicherlogik unverändert bleiben. Sektion und
     // Sortierung wären dort ohne Bedeutung, deshalb verschwindet ihre ganze Zeile —
@@ -1614,7 +1619,9 @@
       evSection.style.display = 'none';
     }
     ciDialog.showModal();
-    document.getElementById('ci-form-regulation-ref').focus();
+    // Der Fokus sitzt auf dem ersten Feld, das die jeweilige Folge zeigt: beim
+    // Behördenaudit die Beschreibung, intern der Regulation Ref.
+    document.getElementById(isAuthorityPlan ? 'ci-form-compliance-check' : 'ci-form-regulation-ref').focus();
   }
 
   document.getElementById('ci-btn-cancel').addEventListener('click', () => ciDialog.close());

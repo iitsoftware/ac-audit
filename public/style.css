@@ -625,6 +625,26 @@ dialog.dialog-wide {
   padding: 6px 8px;
 }
 
+/* Anlage-Dialog eines Findings: auf einem Behoerdenplan zeigt er dieselbe Folge
+   wie Findingliste, Stammdaten und PDF — Beschreibung, Findingbericht Nr.,
+   Referenz Paragraph, Level, Frist. Ohne die Klasse ci-form-authority, die
+   openChecklistItemDialog() neben den Behoerden-Beschriftungen setzt, bleibt die
+   Dokumentenreihenfolge des Markups die interne Reihenfolge — deshalb `order`
+   statt zweier Markup-Varianten. Die Sektions-/Sortierungszeile braucht keinen
+   Wert: sie ist auf Behoerdenplaenen ausgeblendet und damit kein Flex-Item. */
+#checklist-item-form .dialog-body {
+  display: flex;
+  flex-direction: column;
+}
+
+#checklist-item-form.ci-form-authority #ci-form-compliance-check-group { order: 1; }
+#checklist-item-form.ci-form-authority #ci-form-doc-ref-group { order: 2; }
+#checklist-item-form.ci-form-authority #ci-form-regulation-ref-group { order: 3; }
+#checklist-item-form.ci-form-authority #ci-form-evaluation-group { order: 4; }
+#checklist-item-form.ci-form-authority #ci-form-deadline-group { order: 5; }
+#checklist-item-form.ci-form-authority #ci-form-comment-group { order: 6; }
+#checklist-item-form.ci-form-authority #ci-evidence-section { order: 7; }
+
 .logo-preview {
   margin-top: 8px;
   max-width: 120px;

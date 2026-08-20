@@ -109,38 +109,41 @@
           <input type="number" id="ci-form-sort-order" min="0" value="0">
         </div>
       </div>
-      <div class="form-group">
+      <!-- Die Dokumentenreihenfolge ist die interne Reihenfolge; der Beh&ouml;rdenplan
+           zeigt dieselben Felder in der Spaltenfolge der Findingliste, gesteuert
+           &uuml;ber die Klasse ci-form-authority und `order` (public/style.css).
+           Bewertung und Dokument Ref. teilen sich deshalb keine .form-row mehr:
+           in der Beh&ouml;rden-Folge stehen sie nicht nebeneinander. -->
+      <div class="form-group" id="ci-form-regulation-ref-group">
         <label for="ci-form-regulation-ref">Regulation Ref.</label>
         <input type="text" id="ci-form-regulation-ref">
       </div>
-      <div class="form-group">
+      <div class="form-group" id="ci-form-compliance-check-group">
         <label for="ci-form-compliance-check">Compliance Check</label>
         <input type="text" id="ci-form-compliance-check">
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="ci-form-evaluation">Bewertung</label>
-          <select id="ci-form-evaluation">
-            <option value="">--</option>
-            <option value="C">C (Compliant)</option>
-            <option value="NA">NA (Not Applicable)</option>
-            <option value="O">O (Observation)</option>
-            <option value="L1">L1 (Level 1)</option>
-            <option value="L2">L2 (Level 2)</option>
-            <option value="L3">L3 (Level 3)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="ci-form-doc-ref">Dokument Ref.</label>
-          <input type="text" id="ci-form-doc-ref">
-        </div>
+      <div class="form-group" id="ci-form-evaluation-group">
+        <label for="ci-form-evaluation">Bewertung</label>
+        <select id="ci-form-evaluation">
+          <option value="">--</option>
+          <option value="C">C (Compliant)</option>
+          <option value="NA">NA (Not Applicable)</option>
+          <option value="O">O (Observation)</option>
+          <option value="L1">L1 (Level 1)</option>
+          <option value="L2">L2 (Level 2)</option>
+          <option value="L3">L3 (Level 3)</option>
+        </select>
+      </div>
+      <div class="form-group" id="ci-form-doc-ref-group">
+        <label for="ci-form-doc-ref">Dokument Ref.</label>
+        <input type="text" id="ci-form-doc-ref">
       </div>
       <!-- Frist: nur bei Beh&ouml;rdenaudits sichtbar, wird als cap_deadline gespeichert -->
       <div class="form-group" id="ci-form-deadline-group" style="display:none">
         <label for="ci-form-deadline">Frist</label>
         <input type="text" id="ci-form-deadline" placeholder="TT.MM.JJJJ" pattern="\d{2}\.\d{2}\.\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
       </div>
-      <div class="form-group">
+      <div class="form-group" id="ci-form-comment-group">
         <label for="ci-form-comment">Kommentar</label>
         <textarea id="ci-form-comment" rows="2"></textarea>
       </div>
