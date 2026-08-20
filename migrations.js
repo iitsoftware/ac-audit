@@ -186,6 +186,11 @@ function runMigrations(db) {
     { name: 'document_rev_date', sql: "ALTER TABLE audit_plan_line ADD COLUMN document_rev_date TEXT" },
     { name: 'recommendation', sql: "ALTER TABLE audit_plan_line ADD COLUMN recommendation TEXT DEFAULT ''" },
     { name: 'audit_status', sql: "ALTER TABLE audit_plan_line ADD COLUMN audit_status TEXT DEFAULT 'OPEN'" },
+    // Der zuständige Bearbeiter der Behörde — auditor_team ist ab dem
+    // fünfzeiligen Kopfblock die Behörde selbst (siehe schema.sql). Rein
+    // additiv: bestehende Zeilen bekommen den Default '' und behalten ihr
+    // auditor_team unverändert, es wird nichts umgeschichtet.
+    { name: 'authority_auditor', sql: "ALTER TABLE audit_plan_line ADD COLUMN authority_auditor TEXT DEFAULT ''" },
   ];
 
   for (const col of planLineMigrations) {

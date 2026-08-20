@@ -49,6 +49,17 @@ CREATE TABLE IF NOT EXISTS audit_plan (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Auf einem Behördenaudit (audit_plan.plan_type = 'AUTHORITY') ist diese Zeile
+-- der Bericht EINES Besuchs, und sein Kopfblock ist fünfzeilig:
+-- Behörde | Auditor | Auditee | Datum | Ort. auditor_team trägt dabei die
+-- Behörde, authority_auditor den zuständigen Bearbeiter — den Wert, den
+-- views/organization.ejs als "Zuständige Aufsichtsperson Behörde"
+-- (department.authority_name) pflegt. Die Vorbelegung 'LBA' der Behörde hängt
+-- an authorityLineDefaults() und bewusst NICHT am Spalten-Default: der gälte
+-- sonst auch für das Auditorenteam eines internen Audits. Additiv und ohne
+-- Datenumschichtung: die Spalte kommt leer dazu, bestehende Zeilen behalten
+-- ihr auditor_team unverändert. Ein interner Auditplan liest auditor_team
+-- weiter als sein Auditorenteam und lässt authority_auditor leer.
 CREATE TABLE IF NOT EXISTS audit_plan_line (
   id TEXT PRIMARY KEY,
   audit_plan_id TEXT NOT NULL REFERENCES audit_plan(id) ON DELETE CASCADE,
@@ -63,6 +74,7 @@ CREATE TABLE IF NOT EXISTS audit_plan_line (
   audit_subject TEXT DEFAULT '',
   audit_title TEXT DEFAULT '',
   auditor_team TEXT DEFAULT '',
+  authority_auditor TEXT DEFAULT '',
   auditee TEXT DEFAULT '',
   audit_start_date TEXT,
   audit_end_date TEXT,
