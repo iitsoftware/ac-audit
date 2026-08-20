@@ -103,6 +103,15 @@ function renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWh
   doc.strokeColor('#d0d0d0').lineWidth(0.5);
   drawInfoRow('Auditplan', `${plan.year || ''} – ${plan.name || ''}`);
   drawInfoRow('Audit-Nr.', cap.audit_no);
+  // Die Bezugsnummer, unter der die Behörde das Finding in IHREM Bericht führt
+  // (audit_checklist_item.document_ref) — sie steht hier gleich hinter der Audit-Nr.,
+  // damit der CAP dem Findingbericht zugeordnet werden kann, aus dem er stammt.
+  // Nur wenn gefüllt: ein Finding ohne Bezugsnummer hätte eine leere Zeile im Kopf.
+  // Die Beschriftung hängt wie im Frontend am plan_type und nicht am Wert — auf einem
+  // internen Plan heißt dieselbe Spalte weiter "Dokument Ref.".
+  if (cap.document_ref) {
+    drawInfoRow(isAuthorityCap(cap) ? 'Findingbericht Nr.' : 'Dokument Ref.', cap.document_ref);
+  }
   drawInfoRow('Thema', cap.subject);
   drawInfoRow('Finding', cap.compliance_check);
   drawInfoRow('Level', capEvalLabel(cap), { evalHighlight: cap.evaluation, bold: true });

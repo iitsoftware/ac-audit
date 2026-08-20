@@ -301,6 +301,7 @@ const stmts = {
   ),
   getCapItem: db.prepare(
     `SELECT c.*, ci.regulation_ref, ci.compliance_check, ci.evaluation, ci.auditor_comment,
+            ci.document_ref,
             pl.subject, pl.audit_no, p.plan_type
      FROM cap_item c
      JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
