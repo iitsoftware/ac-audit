@@ -1466,18 +1466,20 @@
 
   // Die Zusammenfassung eines Beh\u00f6rdenaudits kennt nur die Stufen, die auch im
   // Auswahlmen\u00fc stehen (authorityEvalValues): C/NA sind kein Urteil einer
-  // Findingliste und L3 kennt die Beh\u00f6rde nicht \u2014 dieselbe Grenze, die die
-  // Z\u00e4hlzeile des Audit-Line-PDF (pdf/audit.js) l\u00e4ngst zieht. Beschriftung ist
-  // das Ganze: gez\u00e4hlt, gef\u00e4rbt und gespeichert wird weiter der Rohwert
-  // O/L1/L2, die Badge-Klasse bleibt `eval-${key}` und evalHighlight, die
-  // Eval-Statistik und die CAP-Anlage lesen unver\u00e4ndert weiter.
+  // Findingliste, L3 dagegen vergibt die Beh\u00f6rde und z\u00e4hlt deshalb als vierte
+  // Spalte mit. (Die Z\u00e4hlzeile des Audit-Line-PDF in pdf/audit.js zieht die
+  // Grenze noch bei L2 \u2014 sie geh\u00f6rt nachgezogen, liegt aber au\u00dferhalb dieses
+  // Frontend-Schnitts.) Beschriftung ist das Ganze: gez\u00e4hlt, gef\u00e4rbt und
+  // gespeichert wird weiter der Rohwert O/L1/L2/L3, die Badge-Klasse bleibt
+  // `eval-${key}` und evalHighlight, die Eval-Statistik und die CAP-Anlage lesen
+  // unver\u00e4ndert weiter.
   // Der Klartext steht im Badge und nicht daneben, weil die Findingliste direkt
   // darunter genau dasselbe tut (renderFindingsSection()) \u2014 ein Badge "O" \u00fcber
   // einer Zeile "Bemerkung" w\u00e4re derselbe Wert in zwei Sprachen. Interne Audits
   // behalten Kurzform + Langform exakt wie bisher.
   function renderEvalSummary(isAuthority) {
     const internalLabels = { C: 'Compliant', NA: 'Not Applicable', O: 'Observation', L1: 'Level 1', L2: 'Level 2', L3: 'Level 3' };
-    const keys = isAuthority ? ['O', 'L1', 'L2'] : Object.keys(internalLabels);
+    const keys = isAuthority ? ['O', 'L1', 'L2', 'L3'] : Object.keys(internalLabels);
     const counts = {};
     keys.forEach(key => { counts[key] = 0; });
     checklistItems.forEach(item => {
@@ -1515,11 +1517,14 @@
     { value: 'L2', label: 'L2 (Level 2)' },
     { value: 'L3', label: 'L3 (Level 3)' },
   ];
-  // Authority audits only know Bemerkung/Level 1/Level 2 — C/NA/L3 are no categories there
-  const authorityEvalValues = ['', 'O', 'L1', 'L2'];
-  const authorityEvalLabels = { O: 'Bemerkung', L1: 'Level 1', L2: 'Level 2' };
+  // Die Behörde vergibt Bemerkung, Level 1, Level 2 und Level 3 — nur C/NA sind
+  // kein Urteil einer Findingliste. 'L3' ist damit ein regulärer Wert des Menüs
+  // und braucht keine Sonderbehandlung mehr, die ihn als Altbestand nachträglich
+  // in die Optionsliste zurückholt.
+  const authorityEvalValues = ['', 'O', 'L1', 'L2', 'L3'];
+  const authorityEvalLabels = { O: 'Bemerkung', L1: 'Level 1', L2: 'Level 2', L3: 'Level 3' };
 
-  // Labeling only: the stored value stays 'O'/'L1'/'L2', just the wording follows
+  // Labeling only: the stored value stays 'O'/'L1'/'L2'/'L3', just the wording follows
   // the authority's language. No migration, no effect on badge classes or statistics.
   function evalLabel(value, isAuthority) {
     if (isAuthority && authorityEvalLabels[value]) return authorityEvalLabels[value];
@@ -1533,13 +1538,7 @@
 
     // Filter evaluation options for authority plans
     const evalSelect = document.getElementById('ci-form-evaluation');
-    // An already stored value stays selectable even after it left the menu (legacy 'L3' on an
-    // authority plan) — otherwise it would silently collapse to '' on the next save.
-    const allowedValues = isAuthorityPlan
-      ? (isEdit && item.evaluation && !authorityEvalValues.includes(item.evaluation)
-        ? [...authorityEvalValues, item.evaluation]
-        : authorityEvalValues)
-      : allEvalOptions.map(o => o.value);
+    const allowedValues = isAuthorityPlan ? authorityEvalValues : allEvalOptions.map(o => o.value);
     evalSelect.innerHTML = allEvalOptions
       .filter(o => allowedValues.includes(o.value))
       .map(o => `<option value="${o.value}">${evalLabel(o.value, isAuthorityPlan)}</option>`)
@@ -1770,12 +1769,10 @@
     let html = '<div class="audit-detail">';
 
     // ── Stammdaten ──
-    // Das Level kennt beim Behördenaudit nur '', 'O', 'L1', 'L2' und wird über
-    // evalLabel(value, true) beschriftet — gespeichert bleibt der rohe Wert. Ein
-    // bereits gespeicherter Wert außerhalb der Liste (Altbestand 'L3') bleibt
-    // wählbar, sonst fiele er beim nächsten Speichern still auf '' zurück.
+    // Das Level kennt beim Behördenaudit '', 'O', 'L1', 'L2' und 'L3' und wird
+    // über evalLabel(value, true) beschriftet — gespeichert bleibt der rohe Wert.
     const evalOptionsHtml = allEvalOptions
-      .filter(o => authorityEvalValues.includes(o.value) || o.value === item.evaluation)
+      .filter(o => authorityEvalValues.includes(o.value))
       .map(o => `<option value="${escapeAttr(o.value)}"${o.value === (item.evaluation || '') ? ' selected' : ''}>${escapeHtml(evalLabel(o.value, true))}</option>`)
       .join('');
 
