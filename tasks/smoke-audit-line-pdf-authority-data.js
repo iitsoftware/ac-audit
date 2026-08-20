@@ -163,12 +163,12 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('  → der Bogen läuft vollständig durch (%%EOF)',
     single.tail.includes('%%EOF'), single.tail.trim().slice(-12));
   // Die Findingseiten hängen an dem, was die Route lädt: ohne caps bliebe es beim
-  // einseitigen Deckblatt. Fünf Seiten = Deckblatt + Findingdaten des Findings mit
-  // Level + dessen CM-002 (2 Seiten, auf einer eigenen beginnend) + der Datenblock
-  // des Findings ohne Level. Die Aufteilung selbst prüft
-  // tasks/smoke-authority-finding-pages.js.
+  // einseitigen Deckblatt. Sechs Seiten = Deckblatt + Findingdaten des Findings mit
+  // Level + dessen CM-002 (2 Seiten, auf einer eigenen beginnend) + dessen
+  // Maßnahmen (ebenfalls auf einer eigenen) + der Datenblock des Findings ohne
+  // Level. Die Aufteilung selbst prüft tasks/smoke-authority-finding-pages.js.
   check('  → die geladenen Daten erzeugen die Findingseiten',
-    single.pages === 5, `${single.pages} Seite(n)`);
+    single.pages === 6, `${single.pages} Seite(n)`);
 
   // ── 2. Interner Plan: keine einzige Zusatzangabe ──
   const internal = await pdf(`/api/audit-plan-lines/${intLine.id}/pdf`);
@@ -221,10 +221,12 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('  → sein Unterzeichner bleibt leer, statt den Bogen zu sprengen',
     (noQm.calls[0] || {}).signer === undefined || !noQm.calls[0].signer,
     String((noQm.calls[0] || {}).signer));
-  // Deckblatt + Findingdaten + die zwei CM-002-Seiten; ohne Maßnahmen und ohne
-  // 5-Why-Satz bleibt es bei dessen leerem, von Hand ausfüllbarem Formular.
+  // Deckblatt + Findingdaten + die zwei CM-002-Seiten + die Maßnahmenseite; ohne
+  // 5-Why-Satz bleibt es bei dessen leerem, von Hand ausfüllbarem Formular. Die
+  // Maßnahmenseite steht auch ohne eine einzige Maßnahme: sie trägt dann die beiden
+  // Überschriften samt "Keine Maßnahmen" — der Bogen hat je Finding dieselbe Gestalt.
   check('  → die Findingseiten stehen trotzdem',
-    noQm.pages === 4, `${noQm.pages} Seite(n)`);
+    noQm.pages === 5, `${noQm.pages} Seite(n)`);
 
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
   console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

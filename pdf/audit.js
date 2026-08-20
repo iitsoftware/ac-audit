@@ -683,7 +683,14 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     y = renderFiveWhyPdf(doc, {
       cap, fiveWhy: entry.fiveWhy || null, department: dept, company, logoRow, signer, startY: y,
     });
-    y += 15;
+
+    // Die Maßnahmen beginnen ihrerseits auf einer eigenen Seite. Direkt unter dem
+    // zurückgegebenen y klebten sie an der Zeile Name / Position / Datum der zweiten
+    // CM-002-Seite, und "Behebungsmaßnahmen" las sich wie eine weitere Rubrik des
+    // Unterzeichnerblocks — das Formular ist mit seiner Unterschrift zu Ende. Je
+    // Finding gilt damit die Folge Findingdaten | CM-002 S.1 | CM-002 S.2 | Maßnahmen.
+    doc.addPage();
+    y = 50;
 
     for (const group of CAP_ACTION_GROUPS) drawActionTable(group.label, actionRows(entry, group));
   }

@@ -103,8 +103,17 @@ check('Why 4–5 stehen auf CM-002 Seite 2',
   ['4. Why is that?', '5. Why is that?'].every(s => on(p + 2, s)));
 check('Statement und Unterzeichnerzeile stehen auf CM-002 Seite 2',
   on(p + 2, 'FINAL ROOT CAUSE STATEMENT') && on(p + 2, 'Compliance Monitoring Manager'));
-check('die Maßnahmen folgen hinter dem Formular',
-  ['Behebungsmaßnahmen', 'Präventivmaßnahmen'].every(s => pageOf(s) >= p + 2));
+// Die Maßnahmen beginnen ihrerseits auf einer eigenen Seite: unmittelbar unter der
+// Unterzeichnerzeile las sich "Behebungsmaßnahmen" wie eine weitere Rubrik des
+// Formulars. Geprüft wird deshalb die Seite selbst und nicht bloß "irgendwo
+// dahinter" — die Präventivmaßnahmen dürfen bei vielen Zeilen weiterwandern,
+// die erste Tabelle nicht.
+check('die Maßnahmen beginnen auf einer eigenen Seite hinter dem Formular',
+  pageOf('Behebungsmaßnahmen') === p + 3, `Seite ${pageOf('Behebungsmaßnahmen')} statt ${p + 3}`);
+check('auf der Unterschriftenseite des CM-002 steht keine Maßnahmentabelle',
+  !on(p + 2, 'Behebungsmaßnahmen') && !on(p + 2, 'Präventivmaßnahmen'));
+check('die Präventivmaßnahmen folgen den Behebungsmaßnahmen',
+  pageOf('Präventivmaßnahmen') >= p + 3);
 
 // Ein Finding ohne Level hat kein CAP-Item — seine Seite bleibt der Datenblock.
 const p2 = pageOf('Finding 3');
