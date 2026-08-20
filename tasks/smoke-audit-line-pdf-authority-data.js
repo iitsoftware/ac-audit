@@ -163,9 +163,12 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('  → der Bogen läuft vollständig durch (%%EOF)',
     single.tail.includes('%%EOF'), single.tail.trim().slice(-12));
   // Die Findingseiten hängen an dem, was die Route lädt: ohne caps bliebe es beim
-  // einseitigen Deckblatt. Vier Seiten = Deckblatt + Findingdaten + CM-002 (2).
+  // einseitigen Deckblatt. Fünf Seiten = Deckblatt + Findingdaten des Findings mit
+  // Level + dessen CM-002 (2 Seiten, auf einer eigenen beginnend) + der Datenblock
+  // des Findings ohne Level. Die Aufteilung selbst prüft
+  // tasks/smoke-authority-finding-pages.js.
   check('  → die geladenen Daten erzeugen die Findingseiten',
-    single.pages === 4, `${single.pages} Seite(n)`);
+    single.pages === 5, `${single.pages} Seite(n)`);
 
   // ── 2. Interner Plan: keine einzige Zusatzangabe ──
   const internal = await pdf(`/api/audit-plan-lines/${intLine.id}/pdf`);
@@ -221,7 +224,7 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   // Deckblatt + Findingdaten + die zwei CM-002-Seiten; ohne Maßnahmen und ohne
   // 5-Why-Satz bleibt es bei dessen leerem, von Hand ausfüllbarem Formular.
   check('  → die Findingseiten stehen trotzdem',
-    noQm.pages >= 3, `${noQm.pages} Seite(n)`);
+    noQm.pages === 4, `${noQm.pages} Seite(n)`);
 
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
   console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
