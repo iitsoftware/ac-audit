@@ -1805,11 +1805,11 @@
     // Die Sektion heißt Stammdaten und nicht noch einmal "Finding": die
     // Überschrift des Screens trägt den Namen bereits, und die Spalten der
     // Findingliste stehen hier ohne den Zusatz, den sie dort ebenfalls nicht mehr
-    // tragen — dieselben sechs Felder Nr., Findingbericht Nr., Referenz Paragraph,
-    // Beschreibung, Level und Frist. Ihre Reihenfolge ist bewusst die des Formulars
-    // und nicht die der Tabelle: die Liste zieht die Beschreibung nach vorn, weil man
-    // an ihr eine Zeile wiedererkennt, das aufgestellte Formular lässt die mehrzeilige
-    // Beschreibung hinter den einzeiligen Bezugsnummern stehen.
+    // tragen — dieselben sechs Felder in derselben Folge wie die Spalten der Liste:
+    // Nr., Beschreibung, Findingbericht Nr., Referenz Paragraph, Level und Frist.
+    // Die Stammdaten sind die Findingliste hochkant, also führt auch hier die
+    // Beschreibung — man erkennt ein Finding an ihr wieder — und die beiden
+    // Bezugsnummern dahinter sind ihre Fundstelle.
     // Die Nr. ist vergeben und nicht abgeleitet, also ist sie hier ein echtes
     // Eingabefeld: sie geht als `sort_order` mit. Die Findingbericht Nr. daneben ist
     // die Bezugsnummer aus dem Schreiben der Behörde und geht als `document_ref` mit
@@ -1818,9 +1818,9 @@
       <div class="audit-section-header"><h3>Stammdaten</h3></div>
       <div id="finding-basics" class="inline-form-grid">
         <label for="fd-sort-order">Nr.</label><input class="inline-input finding-field" id="fd-sort-order" type="number" min="0" step="1" value="${escapeAttr(String(item.sort_order ?? 0))}">
+        <label for="fd-compliance-check">Beschreibung</label><textarea class="inline-input inline-textarea finding-field" id="fd-compliance-check" rows="4">${escapeHtml(item.compliance_check || '')}</textarea>
         <label for="fd-document-ref">Findingbericht Nr.</label><input class="inline-input finding-field" id="fd-document-ref" value="${escapeAttr(item.document_ref || '')}">
         <label for="fd-regulation-ref">Referenz Paragraph</label><input class="inline-input finding-field" id="fd-regulation-ref" value="${escapeAttr(item.regulation_ref || '')}">
-        <label for="fd-compliance-check">Beschreibung</label><textarea class="inline-input inline-textarea finding-field" id="fd-compliance-check" rows="4">${escapeHtml(item.compliance_check || '')}</textarea>
         <label for="fd-evaluation">Level</label><select class="inline-input finding-field" id="fd-evaluation">${evalOptionsHtml}</select>
         <label for="fd-deadline">Frist</label><input class="inline-input finding-field" id="fd-deadline" value="${escapeAttr(formatDateDE(item.cap_deadline))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ">
       </div>
