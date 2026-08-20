@@ -50,7 +50,7 @@ const BOX_GAP = 14;
 // nach außen zeichnet (routes/cap-items.js, Unterschriftenzeile in pdf/audit.js).
 const SIGNER_POSITION = 'Compliance Monitoring Manager';
 
-// Das eigenständige CM-002-Formular einer Beanstandung. `fiveWhy` darf fehlen: die
+// Das eigenständige CM-002-Formular eines Findings. `fiveWhy` darf fehlen: die
 // Kästen behalten ihre Mindesthöhe, das Formular ist dann von Hand ausfüllbar —
 // dieselbe Begründung wie bei den Blöcken des CM-025 (pdf/safety.js).
 function renderFiveWhyPdf(doc, { cap, fiveWhy, department, company, logoRow, signer, startY }) {
@@ -85,7 +85,7 @@ function renderFiveWhyPdf(doc, { cap, fiveWhy, department, company, logoRow, sig
     doc.text(TITLE, x0, y, { width: CONTENT_W });
     y += titleH + 6;
 
-    // Zuordnung der Analyse zur Beanstandung — das Formular steht als eigenes
+    // Zuordnung der Analyse zum Finding — das Formular steht als eigenes
     // Dokument bei der Behörde und muss ohne den CAP-Bericht daneben lesbar sein.
     const context = [
       cap.audit_no ? `Audit-Nr. ${cap.audit_no}` : '',
@@ -234,7 +234,10 @@ function renderFiveWhyPdf(doc, { cap, fiveWhy, department, company, logoRow, sig
   drawHeader();
 
   drawBand('DEFINE THE PROBLEM');
-  drawBox('Beanstandung', cap.compliance_check, { minHeight: 70 });
+  // Beschriftet wie die Kette Besuch → Finding → 5-Why/Maßnahmen: der Kasten trägt
+  // die `compliance_check` des Findings, und `Beanstandung` steht auf keinem
+  // Behördenblatt mehr (dieselbe Sprachregelung wie Findingliste und Finding-Screen).
+  drawBox('Finding', cap.compliance_check, { minHeight: 70 });
 
   drawBand('PRIMARY CAUSE');
   WHY_STEPS.slice(0, PRIMARY_CAUSE_STEPS).forEach((step, i) => {
