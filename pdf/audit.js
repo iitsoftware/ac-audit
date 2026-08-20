@@ -351,7 +351,7 @@ function renderInternalSections(doc, { checklistItems, startY, tableRight }) {
 // dem Papier dieselbe Nummer tragen wie auf dem Schirm — samt der Lücke, die nach
 // dem Löschen eines vorangehenden Findings stehen bleibt.
 // Gibt das neue y zurück, wie es die Sektionsschleife interner Pläne hinterlässt.
-function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight }) {
+function renderAuthorityFindings(doc, { checklistItems, capDeadlines = {}, startY, tableRight }) {
   let y = startY;
 
   const colX = [50, 82, 297, 369, 451, 499];
@@ -373,11 +373,10 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
   const headerH = 16;
 
   // Die Frist wird am CAP-Item gepflegt, gehört in der Findings-Liste aber in die
-  // Zeile — einmal pro Audit-Zeile nachgeschlagen statt pro Finding ein CAP zu laden,
-  // genau wie GET /api/audit-plan-lines/:lineId/checklist-items es fürs UI anreichert.
-  const capDeadlines = {};
-  for (const c of stmts.getCapDeadlinesByLine.all(line.id)) capDeadlines[c.checklist_item_id] = c.deadline;
-
+  // Zeile. Nachgeschlagen hat sie der Aufrufer und übergibt sie als
+  // checklist_item_id → deadline — eine Abfrage je Audit-Zeile statt eines
+  // CAP-Reads je Finding, und der Renderer liest nichts selbst.
+  //
   // In der Reihenfolge der Kopfzeile, ohne die Nr., die aus sort_order kommt und
   // eigens gesetzt wird. Die Findingbericht Nr. ist die Bezugsnummer der Behörde
   // (document_ref) und steht neben der eigenen, vergebenen Nr. — die eine zählt
@@ -465,7 +464,9 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
 }
 
 // ── PDF Helper: Render single audit line into doc ────────────
-function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY }) {
+// capDeadlines (checklist_item_id → deadline) lädt der Aufrufer, wie jedes andere
+// Behörden-Beiwerk in routes/audit-plan-lines.js; interne Pläne brauchen es nicht.
+function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, capDeadlines, startY }) {
   const pageW = 595.28;
   const tableRight = pageW - 50;
 
@@ -525,7 +526,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   const isAuthority = (plan.plan_type || 'AUDIT') === 'AUTHORITY';
 
   y = isAuthority
-    ? renderAuthorityFindings(doc, { line, checklistItems, startY: y, tableRight })
+    ? renderAuthorityFindings(doc, { checklistItems, capDeadlines, startY: y, tableRight })
     : renderInternalSections(doc, { checklistItems, startY: y, tableRight });
 
   if (y + 50 > 740) { doc.addPage(); y = 50; }

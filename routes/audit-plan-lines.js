@@ -7,6 +7,7 @@ const { logAction } = require('../services/audit-log');
 const { calcCapDeadline } = require('../services/cap-deadlines');
 const { snapshotAuditPlanLine } = require('../services/trash');
 const { authorityLineDefaults } = require('../services/audit-lines');
+const { getQmForDepartment } = require('../services/email');
 const { renderAuditLinePdf } = require('../pdf/audit');
 const { addPdfFooter } = require('../pdf/common');
 const { parseAuditChecklist } = require('../imports/audit');
@@ -72,6 +73,43 @@ router.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
   res.status(201).json(stmts.getAuditPlanLine.get(id));
 });
 
+// Alles, was das Blatt eines Behördenaudits über die Findingliste hinaus trägt:
+// die CAP-Items des Berichts, je CAP die Ursachenanalyse und ihre Maßnahmen, die
+// Fristen der Line und den QM als Unterzeichner des eingebetteten CM-002.
+// Geladen wird es HIER und dem Renderer übergeben — der Renderer liest nichts
+// selbst, dieselbe Hausregel, nach der routes/cap-items.js fiveWhy und capActions
+// fürs CM-003 lädt. Für interne Pläne bleibt es bei genau den Abfragen, die der
+// Aufruf schon immer gemacht hat: die Funktion gibt nichts zurück.
+function authorityPdfData(line, plan, dept, company) {
+  if ((plan.plan_type || 'AUDIT') !== 'AUTHORITY') return {};
+
+  // Wie loadLineData() im Frontend: die Abfrage liefert die CAPs des ganzen Plans,
+  // gebraucht werden die dieses einen Berichts (Altbestand kann mehrere haben).
+  // Die Zeilen bringen compliance_check, regulation_ref und audit_no schon mit.
+  const capItems = stmts.getCapItemsByPlan.all(plan.id).filter(c => c.audit_plan_line_id === line.id);
+
+  // Ohne Gate: auf einem Behördenplan verlangt die Behörde die Ursachenanalyse zu
+  // jedem Finding — capHasFiveWhy() wäre hier durchweg wahr. Ein CAP ohne Satz
+  // ergibt das leere, von Hand ausfüllbare Formular, keinen Fehler.
+  const fiveWhys = {};
+  const capActions = {};
+  for (const cap of capItems) {
+    fiveWhys[cap.id] = stmts.getFiveWhyByCapItem.get(cap.id) || null;
+    capActions[cap.id] = stmts.getCapActionsByCapItem.all(cap.id);
+  }
+
+  // Die Frist wird am CAP-Item gepflegt, gehört in der Findingliste aber in die
+  // Zeile — eine Abfrage je Line statt eines CAP-Reads je Finding, genau wie
+  // GET /api/audit-plan-lines/:lineId/checklist-items es fürs UI anreichert.
+  const capDeadlines = {};
+  for (const c of stmts.getCapDeadlinesByLine.all(line.id)) capDeadlines[c.checklist_item_id] = c.deadline;
+
+  // Unterzeichner des CM-002 — dieselbe Quelle wie jede andere AC-Audit-Signatur.
+  const qm = getQmForDepartment(company.id, dept.id);
+
+  return { capItems, fiveWhys, capActions, capDeadlines, qm };
+}
+
 // Multi-select Audit Checklist PDF (must be before :id routes)
 router.get('/api/audit-plan-lines/pdf', (req, res) => {
   const ids = (req.query.ids || '').split(',').filter(Boolean);
@@ -96,7 +134,11 @@ router.get('/api/audit-plan-lines/pdf', (req, res) => {
     const personsAll = stmts.getPersonsByCompany.all(company.id);
 
     if (idx > 0) doc.addPage();
-    renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY: 50 });
+    renderAuditLinePdf(doc, {
+      line, plan, dept, company, logoRow, checklistItems, personsAll,
+      ...authorityPdfData(line, plan, dept, company),
+      startY: 50,
+    });
   }
 
   addPdfFooter(doc);
@@ -126,7 +168,11 @@ router.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
   res.set('Content-Disposition', `attachment; filename="Audit_${line.audit_no || 'X'}_${(line.subject || 'Checklist').replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
   doc.pipe(res);
 
-  renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY: 50 });
+  renderAuditLinePdf(doc, {
+    line, plan, dept, company, logoRow, checklistItems, personsAll,
+    ...authorityPdfData(line, plan, dept, company),
+    startY: 50,
+  });
   addPdfFooter(doc);
   doc.end();
 });
