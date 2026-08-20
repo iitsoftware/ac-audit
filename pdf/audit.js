@@ -1,6 +1,9 @@
 const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
 const { createPdfDoc, authorityEvalLabel } = require('./common');
+// Die Findingseiten drucken das vollständige CM-002 mit — zyklenfrei, weil
+// five-why.js nur ./common und db zieht und nichts aus dieser Datei.
+const { renderFiveWhyPdf } = require('./five-why');
 
 // ── Internal: render audit plan PDF content ─────────────────
 function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed, titleLabel }) {
@@ -233,6 +236,25 @@ const EVAL_COLORS = {
   'L1': '#f8d7da', 'L2': '#f5c6cb', 'L3': '#f1b0b7'
 };
 
+// Die zwei Maßnahmenarten eines Findings samt ihrer Überschrift und der Spalte,
+// aus der ein CAP-Item ohne cap_action-Zeilen gedruckt wird. Zweite Fundstelle
+// derselben Liste: CAP_ACTION_GROUPS in public/companies.js beschriftet damit die
+// beiden Tabellen des Finding-Screens — Schirm und Blatt zeigen dieselben Gruppen
+// in derselben Folge, wer hier ein Wort ändert, ändert es dort mit.
+const CAP_ACTION_GROUPS = [
+  { kind: 'CORRECTIVE', label: 'Behebungsmaßnahmen', legacy: 'corrective_action' },
+  { kind: 'PREVENTIVE', label: 'Präventivmaßnahmen', legacy: 'preventive_action' },
+];
+
+// Die Überschrift eines Behördenberichts — dieselbe Regel wie authorityName(date, '')
+// im Frontend: ohne Datum sagt die Beschriftung genau das, statt eine Jahreszahl zu
+// erfinden. Steht hier einmal, weil Deckblatt und Findingseiten denselben Besuch
+// benennen müssen.
+function authorityVisitLabel(line) {
+  const visitDate = formatDateDE(line.audit_end_date);
+  return visitDate ? `Behördenaudit ${visitDate}` : 'Behördenaudit (ohne Datum)';
+}
+
 // ── PDF Helper: dreigeteilte Checklistentabelle eines internen Audits ─────
 // Gibt das neue y zurück. Unverändertes Verhalten — nur aus renderAuditLinePdf
 // herausgezogen, damit die Behördenvariante als gleichrangige Schwester danebensteht.
@@ -464,8 +486,209 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
   return y + 12;
 }
 
+// ── PDF Helper: eine Seite je Finding eines Behördenaudits ──────────
+// Die flache Tabelle von renderAuthorityFindings() bleibt das Inhaltsverzeichnis
+// des Berichts, direkt hinter dem Kopfblock; hier bekommt jedes Finding sein
+// eigenes Blatt mit allem, was an ihm hängt — Findingdaten, das vollständige
+// zweiseitige CM-002 und die beiden Maßnahmentabellen. Die Kette Besuch → Finding
+// → 5-Why/Maßnahmen, die der Finding-Screen zeigt, steht damit auch auf dem Papier,
+// das zur Behörde zurückgeht.
+//
+// Geladen wird nichts — Hausregel wie in pdf/cap.js, das Laden gehört in die Route:
+//   caps      checklist_item_id → { cap, fiveWhy, capActions }
+//             (cap ist eine getCapItem-Zeile, die Ursache dafür, dass das CM-002
+//             Audit-Nr., Referenz und Beschreibung im Kopf führen kann)
+//   deadlines checklist_item_id → ISO-Datum, dieselbe Karte, aus der die
+//             Übersichtstabelle ihre Frist zieht
+// Fehlt `caps`, zeichnet der Renderer nichts und liefert null: ein Aufrufer ohne
+// die neuen Felder bekommt exakt das Dokument von vorher.
+function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, company, logoRow, signer, deadlines }) {
+  if (!caps || checklistItems.length === 0) return null;
+
+  const tableRight = 595.28 - 50;
+  const contentW = tableRight - 50;
+  const capDeadlines = deadlines || {};
+  const visitLabel = authorityVisitLabel(line);
+
+  let y = 50;
+
+  // Zwilling von drawInfoRow() in renderCapItemPdf (pdf/cap.js): dieselbe
+  // Label/Wert-Optik, damit Findingseite und CM-003 denselben Datensatz nicht in
+  // zwei Anmutungen zeigen. Die Funktion wohnt dort in einem Closure über dessen
+  // `y`, ist also nicht zu importieren.
+  function drawInfoRow(label, value, { evalHighlight, bold } = {}) {
+    const labelW = 130;
+    const valW = contentW - labelW;
+    const textVal = value || '';
+    doc.fontSize(8).font('Helvetica');
+    const rowH = Math.max(16, doc.heightOfString(textVal, { width: valW - 8 }) + 6);
+    if (y + rowH > 740) { doc.addPage(); y = 50; }
+
+    doc.strokeColor('#d0d0d0').lineWidth(0.5);
+    doc.rect(50, y, labelW, rowH).fill('#f0f4ff');
+    doc.rect(50, y, labelW, rowH).stroke();
+    // Die Farbe liest den Rohwert 'O'/'L1'/'L2'/'L3' wie in der Tabelle darüber —
+    // beschriftet wird nur die Zelle.
+    if (EVAL_COLORS[evalHighlight]) doc.rect(50 + labelW, y, valW, rowH).fill(EVAL_COLORS[evalHighlight]);
+    doc.rect(50 + labelW, y, valW, rowH).stroke();
+    doc.fillColor('#000000').font('Helvetica-Bold').text(label, 54, y + 3, { width: labelW - 8 });
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').text(textVal, 50 + labelW + 4, y + 3, { width: valW - 8 });
+    y += rowH;
+  }
+
+  // Der Satzspiegel der Maßnahmentabelle tilt dieselben 50 → 545.28 wie die
+  // Findingtabelle: Nr. druckt Zahlen, Zieldatum und Erledigt am je ein Datum
+  // (35pt bei 7pt), der Verantwortliche einen Namen — der Rest gehört der Maßnahme.
+  const actColX = [50, 82, 325.28, 425.28, 485.28];
+  const actColW = [32, 243.28, 100, 60, 60];
+  const actHeaders = ['Nr.', 'Maßnahme', 'Verantwortlich', 'Zieldatum', 'Erledigt am'];
+  const actHeaderH = 16;
+
+  function drawActionHeader() {
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.rect(50, y, tableRight - 50, actHeaderH).fill('#2563eb');
+    doc.fillColor('#ffffff');
+    for (let c = 0; c < actHeaders.length; c++) {
+      doc.text(actHeaders[c], actColX[c] + 3, y + 3, { width: actColW[c] - 6 });
+    }
+    doc.fillColor('#000000');
+    y += actHeaderH;
+    doc.font('Helvetica').fontSize(7);
+  }
+
+  // Die gedruckten Zeilen einer Gruppe. Wie in capActionCell() (pdf/cap.js) zählt
+  // eine Maßnahme ohne Beschreibung nicht mit — sie hat nichts zu drucken, und die
+  // abgeleitete Nummer bliebe sonst nicht lückenlos. Ausschlaggebend ist auch hier
+  // die leere Liste, nicht der leere Text: gibt es keine cap_action-Zeilen, ist der
+  // alte Textwert des CAP-Items die eine Maßnahme dieser Art. Anders als das CM-003
+  // joint diese Ansicht aber nicht zu "1. … 2. …", sondern druckt eine echte Zeile
+  // je Maßnahme — dafür ist sie eine Tabelle und keine Formularzelle.
+  function actionRows(entry, group) {
+    const rows = (entry.capActions || [])
+      .filter(a => a.kind === group.kind)
+      .map(a => ({ ...a, description: (a.description || '').trim() }))
+      .filter(a => a.description);
+    if (rows.length > 0) return rows;
+    // Der Altbestand kennt Verantwortlichen und Zieldatum je Maßnahme nicht — die
+    // beiden hängen dort am CAP-Item und stehen bereits im Datenblock oben.
+    const legacy = (entry.cap[group.legacy] || '').trim();
+    return legacy ? [{ description: legacy }] : [];
+  }
+
+  function drawActionTable(label, rows) {
+    // Überschrift, Tabellenkopf und erste Zeile bleiben zusammen auf einer Seite.
+    if (y + 16 + actHeaderH + 14 > 740) { doc.addPage(); y = 50; }
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text(label, 50, y);
+    y += 16;
+
+    if (rows.length === 0) {
+      doc.fontSize(8).font('Helvetica').fillColor('#888888').text('Keine Maßnahmen', 50, y);
+      doc.fillColor('#000000');
+      y += 18 + 12;
+      return;
+    }
+
+    drawActionHeader();
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const cells = [
+        row.description,
+        row.responsible_person || '',
+        formatDateDE(row.target_date),
+        formatDateDE(row.completion_date),
+      ];
+      doc.font('Helvetica').fontSize(7);
+      const rowH = Math.max(14, ...cells.map((t, c) => doc.heightOfString(t, { width: actColW[c + 1] - 6 }) + 6));
+
+      if (y + rowH > 740) { doc.addPage(); y = 50; drawActionHeader(); }
+
+      if (i % 2 === 0) {
+        doc.rect(50, y, tableRight - 50, rowH).fill('#f8f9fa');
+        doc.fillColor('#000000');
+      }
+
+      doc.strokeColor('#d0d0d0').lineWidth(0.5);
+      doc.rect(50, y, tableRight - 50, rowH).stroke();
+      for (let c = 1; c < actColX.length; c++) {
+        doc.moveTo(actColX[c], y).lineTo(actColX[c], y + rowH).stroke();
+      }
+
+      // Die laufende Nummer einer Maßnahme ist der Zeilenindex ihrer Gruppe und wird
+      // nie gespeichert — sie darf sich beim Löschen einer Nachbarzeile schließen.
+      // Ausdrücklich anders als die Nr. des Findings darüber, auf die ein
+      // LBA-Schreiben verweist und die deshalb ihre Lücken behält.
+      doc.text(String(i + 1), actColX[0] + 3, y + 3, { width: actColW[0] - 6 });
+      cells.forEach((t, c) => doc.text(t, actColX[c + 1] + 3, y + 3, { width: actColW[c + 1] - 6 }));
+
+      y += rowH;
+    }
+    y += 12;
+  }
+
+  for (const item of checklistItems) {
+    doc.addPage();
+    y = 50;
+
+    const entry = caps[item.id];
+    const cap = entry && entry.cap ? entry.cap : null;
+    // Die vergebene Nummer aus sort_order, nicht der Zeilenindex — `?? 0` wie in der
+    // Übersichtstabelle: eine ausdrückliche 0 ist eine Nummer, nur ein fehlender Wert
+    // (Altbestand) fällt darauf zurück.
+    const nr = String(item.sort_order ?? 0);
+
+    // Kein Briefkopf: renderFiveWhyPdf() zeichnet ihn ein paar Zeilen weiter unten
+    // selbst, und zweimal Logo und Firma auf einer Seite wäre genau das doppelt.
+    doc.fillColor('#000000').fontSize(14).font('Helvetica-Bold').text(`Finding ${nr}`, 50, y);
+    y += 20;
+    doc.fontSize(9).font('Helvetica').text(visitLabel, 50, y);
+    y += 25;
+
+    // Die Reihenfolge der ersten sechs Felder ist die Spaltenfolge der Findingliste
+    // (Nr. | Beschreibung | Findingbericht Nr. | Referenz Paragraph | Level | Frist),
+    // an die Liste, Stammdaten, Anlage-Dialog und Übersichtstabelle gebunden sind.
+    doc.strokeColor('#d0d0d0').lineWidth(0.5);
+    drawInfoRow('Nr.', nr);
+    drawInfoRow('Beschreibung', item.compliance_check);
+    // Nur wenn gefüllt, wie im Kopfblock des CM-003: die Bezugsnummer der Behörde ist
+    // kein Zustand, den jedes Finding hat, und stünde sonst als leere Zeile da.
+    if (item.document_ref) drawInfoRow('Findingbericht Nr.', item.document_ref);
+    drawInfoRow('Referenz Paragraph', item.regulation_ref);
+    drawInfoRow('Level', authorityEvalLabel(item.evaluation), {
+      evalHighlight: (item.evaluation || '').trim().toUpperCase(), bold: true,
+    });
+    drawInfoRow('Frist', formatDateDE(capDeadlines[item.id]));
+    // Die beiden letzten Felder wohnen am CAP-Item — ohne Level gibt es keins, und
+    // zwei leere Zeilen wären eine Angabe, die dieses Finding gar nicht kennt.
+    if (cap) {
+      drawInfoRow('Verantwortlicher', cap.responsible_person);
+      drawInfoRow('Erledigt am', formatDateDE(cap.completion_date));
+    }
+    y += 15;
+
+    // Ein Finding ohne Level hat kein cap_item und damit weder Ursachenanalyse noch
+    // Maßnahmen — ein Zustand, kein Fehler: die Seite bleibt der Datenblock.
+    if (!cap) continue;
+
+    // Das vollständige CM-002 als eingebettetes Dokument: es zeichnet seinen Kopf auf
+    // jeder neuen Seite selbst und liefert das neue y zurück. Ein fehlender
+    // five_why-Datensatz ist dort kein Fehler, sondern das leere, von Hand
+    // ausfüllbare Formular.
+    y = renderFiveWhyPdf(doc, {
+      cap, fiveWhy: entry.fiveWhy || null, department: dept, company, logoRow, signer, startY: y,
+    });
+    y += 15;
+
+    for (const group of CAP_ACTION_GROUPS) drawActionTable(group.label, actionRows(entry, group));
+  }
+
+  return y;
+}
+
 // ── PDF Helper: Render single audit line into doc ────────────
-function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY }) {
+// `caps`, `deadlines` und `signer` sind die Daten der Findingseiten und dürfen
+// fehlen: ohne sie bleibt es beim Deckblatt samt Übersichtstabelle wie bisher.
+function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklistItems, personsAll, startY, caps, deadlines, signer }) {
   const pageW = 595.28;
   const tableRight = pageW - 50;
 
@@ -497,9 +720,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   // die eine Zeile darunter ihr eigenes Feld hat): ohne Datum sagt die
   // Beschriftung genau das, statt eine Jahreszahl zu erfinden.
   const visitDate = formatDateDE(line.audit_end_date);
-  const title = isAuthority
-    ? (visitDate ? `Behördenaudit ${visitDate}` : 'Behördenaudit (ohne Datum)')
-    : 'Audit Checklist';
+  const title = isAuthority ? authorityVisitLabel(line) : 'Audit Checklist';
   doc.fontSize(14).font('Helvetica-Bold').text(title, 50, y);
   y += 25;
 
@@ -689,6 +910,22 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
     y += doc.heightOfString(item, { width: tableRight - 58 }) + 2;
   }
   doc.fillColor('#000000');
+
+  // Erst hier, nach Summary, Empfehlung, Unterschriften und Legende: die gehören zur
+  // Übersicht, nicht zwischen die Findingseiten. Die flache Tabelle bleibt damit das
+  // Inhaltsverzeichnis direkt hinter dem Kopfblock, und die Blätter der einzelnen
+  // Findings folgen dem vollständigen Deckblatt.
+  if (isAuthority) {
+    const pagesY = renderAuthorityFindingPages(doc, {
+      line, checklistItems, caps, dept, company, logoRow, deadlines,
+      // Unterzeichner des CM-002 ist der QM der Abteilung — dieselbe Zeile, die
+      // getQmForDepartment() findet und die hier schon aus dem übergebenen
+      // personsAll steht. Der Fallback kostet also keinen Read und kann nicht
+      // gegen den eigenständigen CM-002-Download driften.
+      signer: signer || qmPerson,
+    });
+    if (pagesY !== null) y = pagesY;
+  }
 
   return y;
 }
