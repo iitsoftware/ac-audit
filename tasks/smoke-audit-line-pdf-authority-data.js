@@ -1,9 +1,10 @@
 // Smoke test für die Daten, die die beiden Audit-Line-PDF-Routen einem
 // Behördenbericht mitgeben (authorityPdfData() in routes/audit-plan-lines.js).
 // Geprüft wird genau die Hausregel: der Renderer liest nichts selbst, also muss
-// alles — CAP-Items der Line, je CAP der 5-Why-Satz und seine Maßnahmen, die
-// Fristen und der QM als Unterzeichner — schon im Aufruf stehen. Und für interne
-// Pläne darf davon nichts mitreisen.
+// alles — die CAPs der Line mit je ihrem 5-Why-Satz und ihren Maßnahmen, die
+// Fristen und der QM als Unterzeichner — schon im Aufruf stehen, und zwar in der
+// Form, die renderAuditLinePdf() liest. Für interne Pläne darf davon nichts
+// mitreisen.
 //
 // Der Test bootet den echten Server IN-PROCESS und legt sich vor dem Laden der
 // Routen einen Spy auf renderAuditLinePdf: die Routen destrukturieren die Funktion
@@ -54,7 +55,9 @@ const check = (name, ok, info) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`);
   if (!ok) failures++;
 };
-const AUTHORITY_KEYS = ['capItems', 'fiveWhys', 'capActions', 'capDeadlines', 'qm'];
+// Genau die drei Felder, die renderAuditLinePdf() für ein Behördenblatt entgegennimmt:
+// caps (checklist_item_id → { cap, fiveWhy, capActions }), deadlines und signer.
+const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
 
 (async () => {
   await new Promise(r => setTimeout(r, 400));
@@ -116,36 +119,42 @@ const AUTHORITY_KEYS = ['capItems', 'fiveWhys', 'capActions', 'capDeadlines', 'q
     single.status === 200 && single.isPdf && single.bytes > 1000,
     `${single.status}, ${single.bytes} bytes`);
   const opts = single.calls[0] || {};
-  check('  → alle fünf Zusatzangaben stehen im Aufruf',
+  check('  → alle drei Zusatzangaben stehen im Aufruf',
     AUTHORITY_KEYS.every(k => opts[k] !== undefined),
     AUTHORITY_KEYS.filter(k => opts[k] === undefined).join(', ') || 'vollständig');
-  check('  → nur die CAP-Items DIESES Berichts, nicht die des ganzen Plans',
-    (opts.capItems || []).length === 1 && opts.capItems[0].id === cap.id,
-    `${(opts.capItems || []).length} CAP(s), fremdes Finding: ${otherFinding.id.slice(0, 8)}…`);
+  const entry = (opts.caps || {})[withLevel.id] || {};
+  check('  → caps ist auf die checklist_item_id geschlüsselt, wie der Renderer liest',
+    !!entry.cap && entry.cap.id === cap.id, Object.keys(opts.caps || {}).length + ' Eintrag/Einträge');
+  check('  → nur die CAPs DIESES Berichts, nicht die des ganzen Plans',
+    Object.keys(opts.caps || {}).length === 1 && !(opts.caps || {})[otherFinding.id],
+    `fremdes Finding: ${otherFinding.id.slice(0, 8)}…`);
   check('  → die CAP-Zeile bringt compliance_check / regulation_ref / audit_no mit',
-    opts.capItems[0].compliance_check === 'Werkzeugkontrolle unvollständig'
-      && opts.capItems[0].regulation_ref === '145.A.30'
-      && !!opts.capItems[0].audit_no,
-    opts.capItems[0].audit_no);
-  check('  → der 5-Why-Satz des CAP hängt unter seiner id',
-    (opts.fiveWhys[cap.id] || {}).root_cause === 'Fehlender Kontrollprozess',
-    (opts.fiveWhys[cap.id] || {}).why1);
-  check('  → beide Maßnahmen hängen unter derselben id',
-    (opts.capActions[cap.id] || []).length === 2,
-    (opts.capActions[cap.id] || []).map(a => a.kind).join(', '));
+    entry.cap.compliance_check === 'Werkzeugkontrolle unvollständig'
+      && entry.cap.regulation_ref === '145.A.30'
+      && !!entry.cap.audit_no,
+    entry.cap.audit_no);
+  check('  → der 5-Why-Satz hängt am selben Eintrag',
+    (entry.fiveWhy || {}).root_cause === 'Fehlender Kontrollprozess',
+    (entry.fiveWhy || {}).why1);
+  check('  → beide Maßnahmen hängen am selben Eintrag',
+    (entry.capActions || []).length === 2,
+    (entry.capActions || []).map(a => a.kind).join(', '));
+  check('  → ein Finding ohne Level hat keinen caps-Eintrag (Zustand, kein Fehler)',
+    (opts.caps || {})[noLevel.id] === undefined, String((opts.caps || {})[noLevel.id]));
   check('  → die Frist steht unter der checklist_item_id des Findings',
-    opts.capDeadlines[withLevel.id] === '2026-03-31', opts.capDeadlines[withLevel.id]);
-  check('  → ein Finding ohne Level hat keine Frist (Zustand, kein Fehler)',
-    opts.capDeadlines[noLevel.id] === undefined, String(opts.capDeadlines[noLevel.id]));
+    opts.deadlines[withLevel.id] === '2026-03-31', opts.deadlines[withLevel.id]);
+  check('  → ein Finding ohne Level hat keine Frist',
+    opts.deadlines[noLevel.id] === undefined, String(opts.deadlines[noLevel.id]));
   check('  → der QM der Abteilung ist der Unterzeichner des CM-002',
-    opts.qm && opts.qm.id === qm.id, opts.qm && `${opts.qm.first_name} ${opts.qm.last_name}`);
+    opts.signer && opts.signer.id === qm.id,
+    opts.signer && `${opts.signer.first_name} ${opts.signer.last_name}`);
 
   // ── 2. Interner Plan: keine einzige Zusatzangabe ──
   const internal = await pdf(`/api/audit-plan-lines/${intLine.id}/pdf`);
   check('Einzel-PDF eines internen Audits wird ausgeliefert',
     internal.status === 200 && internal.isPdf, `${internal.status}, ${internal.bytes} bytes`);
   const intOpts = internal.calls[0] || {};
-  check('  → der Aufruf ist unverändert: keine der fünf Angaben reist mit',
+  check('  → der Aufruf ist unverändert: keine der drei Angaben reist mit',
     AUTHORITY_KEYS.every(k => intOpts[k] === undefined),
     AUTHORITY_KEYS.filter(k => intOpts[k] !== undefined).join(', ') || 'keine');
 
@@ -156,8 +165,8 @@ const AUTHORITY_KEYS = ['capItems', 'fiveWhys', 'capActions', 'capDeadlines', 'q
     `${batch.status}, ${batch.calls.length} Aufruf(e)`);
   check('  → die Behördenzeile bekommt ihre Zusatzangaben',
     AUTHORITY_KEYS.every(k => batch.calls[0][k] !== undefined)
-      && batch.calls[0].capItems.length === 1,
-    String((batch.calls[0].capItems || []).length));
+      && Object.keys(batch.calls[0].caps).length === 1,
+    String(Object.keys(batch.calls[0].caps || {}).length));
   check('  → die interne Zeile im selben Aufruf bekommt keine',
     AUTHORITY_KEYS.every(k => batch.calls[1][k] === undefined),
     AUTHORITY_KEYS.filter(k => batch.calls[1][k] !== undefined).join(', ') || 'keine');
@@ -167,7 +176,7 @@ const AUTHORITY_KEYS = ['capItems', 'fiveWhys', 'capActions', 'capDeadlines', 'q
     { year: 2027, plan_type: 'AUTHORITY' })).payload;
   const empty = await pdf(`/api/audit-plan-lines/${emptyPlan.authority_line_id}/pdf`);
   check('ein Behördenbericht ohne Findings rendert weiterhin',
-    empty.status === 200 && empty.isPdf && (empty.calls[0].capItems || []).length === 0,
+    empty.status === 200 && empty.isPdf && Object.keys(empty.calls[0].caps || {}).length === 0,
     `${empty.status}, ${empty.bytes} bytes`);
 
   fs.rmSync(DATA_DIR, { recursive: true, force: true });

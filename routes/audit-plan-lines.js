@@ -78,36 +78,45 @@ router.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
 // Fristen der Line und den QM als Unterzeichner des eingebetteten CM-002.
 // Geladen wird es HIER und dem Renderer übergeben — der Renderer liest nichts
 // selbst, dieselbe Hausregel, nach der routes/cap-items.js fiveWhy und capActions
-// fürs CM-003 lädt. Für interne Pläne bleibt es bei genau den Abfragen, die der
-// Aufruf schon immer gemacht hat: die Funktion gibt nichts zurück.
+// fürs CM-003 lädt. Beide PDF-Routen spreizen dasselbe Ergebnis in denselben
+// renderAuditLinePdf()-Aufruf, statt die Ladeschritte zweimal auszuschreiben.
+// Für interne Pläne bleibt es bei genau den Abfragen, die der Aufruf schon immer
+// gemacht hat: die Funktion steigt am plan_type aus und gibt nichts zurück.
 function authorityPdfData(line, plan, dept, company) {
   if ((plan.plan_type || 'AUDIT') !== 'AUTHORITY') return {};
 
   // Wie loadLineData() im Frontend: die Abfrage liefert die CAPs des ganzen Plans,
-  // gebraucht werden die dieses einen Berichts (Altbestand kann mehrere haben).
-  // Die Zeilen bringen compliance_check, regulation_ref und audit_no schon mit.
-  const capItems = stmts.getCapItemsByPlan.all(plan.id).filter(c => c.audit_plan_line_id === line.id);
-
-  // Ohne Gate: auf einem Behördenplan verlangt die Behörde die Ursachenanalyse zu
-  // jedem Finding — capHasFiveWhy() wäre hier durchweg wahr. Ein CAP ohne Satz
-  // ergibt das leere, von Hand ausfüllbare Formular, keinen Fehler.
-  const fiveWhys = {};
-  const capActions = {};
-  for (const cap of capItems) {
-    fiveWhys[cap.id] = stmts.getFiveWhyByCapItem.get(cap.id) || null;
-    capActions[cap.id] = stmts.getCapActionsByCapItem.all(cap.id);
+  // gebraucht werden die dieses einen Berichts (ein Altbestand kann mehrere Lines
+  // haben). Die Zeilen bringen compliance_check, regulation_ref und audit_no schon
+  // mit — genau die drei, aus denen renderFiveWhyPdf() seinen Kopf schreibt.
+  //
+  // Ohne Gate auf capHasFiveWhy(): auf einem Behördenplan verlangt die Behörde die
+  // Ursachenanalyse zu jedem Finding, das Prädikat wäre durchweg wahr, und ein CAP
+  // ohne Satz ergibt das leere, von Hand ausfüllbare Formular statt eines Fehlers.
+  const caps = {};
+  for (const cap of stmts.getCapItemsByPlan.all(plan.id)) {
+    if (cap.audit_plan_line_id !== line.id) continue;
+    caps[cap.checklist_item_id] = {
+      cap,
+      fiveWhy: stmts.getFiveWhyByCapItem.get(cap.id) || null,
+      capActions: stmts.getCapActionsByCapItem.all(cap.id),
+    };
   }
 
   // Die Frist wird am CAP-Item gepflegt, gehört in der Findingliste aber in die
   // Zeile — eine Abfrage je Line statt eines CAP-Reads je Finding, genau wie
-  // GET /api/audit-plan-lines/:lineId/checklist-items es fürs UI anreichert.
-  const capDeadlines = {};
-  for (const c of stmts.getCapDeadlinesByLine.all(line.id)) capDeadlines[c.checklist_item_id] = c.deadline;
+  // GET /api/audit-plan-lines/:lineId/checklist-items es fürs UI anreichert. Es ist
+  // die EINE Karte für Übersichtstabelle und Findingseiten; hätte der Renderer sie
+  // weiter selbst gelesen, liefe die Abfrage zweimal je Bogen.
+  const deadlines = {};
+  for (const c of stmts.getCapDeadlinesByLine.all(line.id)) deadlines[c.checklist_item_id] = c.deadline;
 
-  // Unterzeichner des CM-002 — dieselbe Quelle wie jede andere AC-Audit-Signatur.
-  const qm = getQmForDepartment(company.id, dept.id);
+  // Unterzeichner des eingebetteten CM-002 — dieselbe Quelle, aus der
+  // generateFiveWhyPdfBuffer() ihn zieht, damit eingebettetes und eigenständiges
+  // Formular nicht verschiedene Namen tragen.
+  const signer = getQmForDepartment(company.id, dept.id);
 
-  return { capItems, fiveWhys, capActions, capDeadlines, qm };
+  return { caps, deadlines, signer };
 }
 
 // Multi-select Audit Checklist PDF (must be before :id routes)
