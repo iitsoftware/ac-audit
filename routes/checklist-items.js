@@ -9,8 +9,12 @@ router.put('/api/checklist-items/:id', (req, res) => {
   const existing = stmts.getChecklistItem.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Checklist item not found' });
   const b = req.body;
+  // Die vergebene laufende Nummer ist editierbar: ein ausdrücklich gesendeter
+  // Wert — die 0 eingeschlossen — schreibt durch, ein ausgelassenes Feld behält
+  // dagegen die gespeicherte Nummer, statt sie auf 0 zurückzusetzen (dieselbe
+  // Regel wie bei `authority_auditor` in `PUT /api/audit-plan-lines/:id`).
   stmts.updateChecklistItem.run(
-    b.section || 'THEORETICAL', b.sort_order || 0,
+    b.section || 'THEORETICAL', b.sort_order ?? existing.sort_order ?? 0,
     b.regulation_ref || '', b.compliance_check || '',
     b.evaluation || '', b.auditor_comment || '', b.document_ref || '',
     req.params.id

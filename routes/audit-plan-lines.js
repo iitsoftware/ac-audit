@@ -216,9 +216,14 @@ router.post('/api/audit-plan-lines/:lineId/checklist-items', (req, res) => {
   if (!line) return res.status(404).json({ error: 'Audit plan line not found' });
   const b = req.body;
   const id = uuidv4();
+  // Die laufende Nummer wird vergeben, nicht abgeleitet: ohne mitgeschickte
+  // sort_order zählt die Line weiter (max+1), wie die Maßnahmen eines Findings.
+  // Ein ausdrücklich gesendeter Wert gewinnt — interne Audits schicken ihre
+  // Sortierung aus dem Dialog und bleiben deshalb unverändert.
+  const sortOrder = b.sort_order ?? (stmts.getMaxChecklistItemSortOrder.get(req.params.lineId).max_sort + 1);
   stmts.createChecklistItem.run(
     id, req.params.lineId,
-    b.section || 'THEORETICAL', b.sort_order || 0,
+    b.section || 'THEORETICAL', sortOrder,
     b.regulation_ref || '', b.compliance_check || '',
     b.evaluation || '', b.auditor_comment || '', b.document_ref || ''
   );

@@ -213,6 +213,13 @@ const stmts = {
                                      auditor_comment = ?, document_ref = ?, updated_at = datetime('now')
      WHERE id = ?`
   ),
+  // -1 als Default, damit der Aufrufer beim Anlegen wie bei den Maßnahmen mit
+  // max+1 rechnet und das erste Finding einer Line sort_order 0 bekommt. Der
+  // Bezug ist die Line und nicht die Sektion: die laufende Nummer eines
+  // Behördenaudits zählt über den ganzen Bericht, der nur eine Sektion kennt.
+  getMaxChecklistItemSortOrder: db.prepare(
+    'SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM audit_checklist_item WHERE audit_plan_line_id = ?'
+  ),
   getChecklistItem: db.prepare(
     'SELECT * FROM audit_checklist_item WHERE id = ?'
   ),
