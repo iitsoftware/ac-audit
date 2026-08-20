@@ -636,8 +636,23 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     // (Altbestand) fällt darauf zurück.
     const nr = String(item.sort_order ?? 0);
 
-    // Kein Briefkopf: renderFiveWhyPdf() zeichnet ihn ein paar Zeilen weiter unten
-    // selbst, und zweimal Logo und Firma auf einer Seite wäre genau das doppelt.
+    // Briefkopf wie ihn renderFiveWhyPdf() auf seine Seiten zeichnet — Logo, Firma,
+    // Abteilungszeile mit EASA-Nummer. Er stand hier nicht, solange das CM-002 ein
+    // paar Zeilen darunter auf demselben Blatt begann und seinen Kopf dort selbst
+    // zog; seit die beiden getrennte Seiten haben, treffen sie sich nicht mehr und
+    // dies wäre sonst die einzige Seite des Bogens ohne Absender.
+    if (logoRow && logoRow.logo) {
+      try { doc.image(logoRow.logo, 50, y, { height: 45 }); y += 55; } catch { y += 10; }
+    }
+    doc.fillColor('#000000').fontSize(14).font('Helvetica-Bold').text(company.name, 50, y);
+    y += 20;
+    doc.fontSize(9).font('Helvetica');
+    let subLine = dept.name;
+    if (dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
+    if (dept.regulation) subLine += `  |  ${dept.regulation}`;
+    doc.text(subLine, 50, y);
+    y += 25;
+
     doc.fillColor('#000000').fontSize(14).font('Helvetica-Bold').text(`Finding ${nr}`, 50, y);
     y += 20;
     doc.fontSize(9).font('Helvetica').text(visitLabel, 50, y);
@@ -675,16 +690,24 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     // hinter dem Datenblock beginnend passten ab y ≈ 250 nur Why 1+2: Why 3 rutschte
     // allein auf eine fast leere Seite und der harte newPage() schöbe Why 4/5 noch
     // eine weiter. Je Finding gilt damit: Seite 1 Findingdaten, Seite 2 CM-002 Seite 1,
-    // Seite 3 CM-002 Seite 2. Es zeichnet seinen Kopf auf jeder neuen Seite selbst und
-    // liefert das neue y zurück; ein fehlender five_why-Datensatz ist dort kein Fehler,
-    // sondern das leere, von Hand ausfüllbare Formular.
+    // Seite 3 CM-002 Seite 2, Seite 4 die Maßnahmen. Es zeichnet seinen Kopf auf jeder
+    // neuen Seite selbst; ein fehlender five_why-Datensatz ist dort kein Fehler,
+    // sondern das leere, von Hand ausfüllbare Formular. Sein Rückgabe-y bleibt hier
+    // ungenutzt, weil die Maßnahmen ohnehin auf einem frischen Blatt beginnen.
     doc.addPage();
     y = 50;
-    y = renderFiveWhyPdf(doc, {
+    renderFiveWhyPdf(doc, {
       cap, fiveWhy: entry.fiveWhy || null, department: dept, company, logoRow, signer, startY: y,
     });
-    y += 15;
 
+    // Auch die Maßnahmen bekommen ihre eigene Seite: die Zeile Name / Position / Datum
+    // schließt das CM-002 ab, und eine Tabelle darunter auf demselben Blatt läse sich
+    // als ein weiterer Abschnitt des unterschriebenen Formulars statt als das, was sie
+    // ist — unsere Antwort auf das Finding. Innerhalb der beiden Tabellen bleibt der
+    // Umbruch dagegen gerechnet (drawActionTable), denn wie viele Blätter n Maßnahmen
+    // brauchen, gibt kein Formular vor.
+    doc.addPage();
+    y = 50;
     for (const group of CAP_ACTION_GROUPS) drawActionTable(group.label, actionRows(entry, group));
   }
 

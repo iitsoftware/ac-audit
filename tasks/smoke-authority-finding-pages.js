@@ -1,13 +1,14 @@
 // Smoke test für die Seitenaufteilung je Finding im Behördenaudit-PDF
 // (renderAuthorityFindingPages() in pdf/audit.js).
 //
-// Geprüft wird genau die Regel: je Finding steht der Datenblock auf einer eigenen
-// Seite, das eingebettete CM-002 beginnt auf der nächsten, und sein gesetzter
-// Seitenschnitt bleibt heil — Why 1–3 (PRIMARY_CAUSE_STEPS = 3 in pdf/five-why.js)
-// auf CM-002 Seite 1, Why 4–5 samt Final Root Cause Statement und
-// Unterzeichnerzeile auf CM-002 Seite 2. Hinter dem Datenblock beginnend passten
-// nur Why 1+2 auf die erste Formularseite, Why 3 rutschte allein auf eine fast
-// leere und der harte newPage() schob Why 4/5 noch eine weiter.
+// Geprüft wird genau die Regel: je Finding vier Seiten — Findingdaten (mit
+// Briefkopf) | CM-002 Seite 1 | CM-002 Seite 2 | Maßnahmentabellen —, jeder Block
+// auf einer frischen Seite. Der gesetzte Seitenschnitt des Formulars bleibt dabei
+// heil — Why 1–3 (PRIMARY_CAUSE_STEPS = 3 in pdf/five-why.js) auf CM-002 Seite 1,
+// Why 4–5 samt Final Root Cause Statement und Unterzeichnerzeile auf CM-002
+// Seite 2. Hinter dem Datenblock beginnend passten nur Why 1+2 auf die erste
+// Formularseite, Why 3 rutschte allein auf eine fast leere und der harte
+// newPage() schob Why 4/5 noch eine weiter.
 //
 // Anders als seine beiden Nachbarn bootet dieser Test keinen Server: die Regel
 // wohnt im Renderer, geladen wird nichts dafür. Gerendert wird deshalb direkt in
@@ -103,8 +104,18 @@ check('Why 4–5 stehen auf CM-002 Seite 2',
   ['4. Why is that?', '5. Why is that?'].every(s => on(p + 2, s)));
 check('Statement und Unterzeichnerzeile stehen auf CM-002 Seite 2',
   on(p + 2, 'FINAL ROOT CAUSE STATEMENT') && on(p + 2, 'Compliance Monitoring Manager'));
-check('die Maßnahmen folgen hinter dem Formular',
-  ['Behebungsmaßnahmen', 'Präventivmaßnahmen'].every(s => pageOf(s) >= p + 2));
+// Die Maßnahmen dürfen nicht unter der Unterschriftenzeile des Formulars kleben:
+// eine Tabelle auf demselben Blatt läse sich als ein weiterer Abschnitt des
+// unterschriebenen CM-002 statt als unsere Antwort auf das Finding.
+check('die Maßnahmen stehen auf einer eigenen Seite hinter dem Formular',
+  ['Behebungsmaßnahmen', 'Präventivmaßnahmen'].every(s => pageOf(s) === p + 3));
+check('auf der Maßnahmenseite steht keine Unterzeichnerzeile mehr',
+  !on(p + 3, 'FINAL ROOT CAUSE STATEMENT') && !on(p + 3, 'Compliance Monitoring Manager'));
+// Der Briefkopf stand hier nicht, solange das CM-002 auf demselben Blatt begann und
+// ihn selbst zog. Seit die beiden getrennte Seiten haben, wäre die Findingdatenseite
+// sonst die einzige Seite des Bogens ohne Absender.
+check('die Findingdatenseite trägt den Briefkopf',
+  on(p, 'Muster GmbH') && on(p, 'CAMO'));
 
 // Ein Finding ohne Level hat kein CAP-Item — seine Seite bleibt der Datenblock.
 const p2 = pageOf('Finding 3');
