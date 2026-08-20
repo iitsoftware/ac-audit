@@ -354,16 +354,22 @@ function renderInternalSections(doc, { checklistItems, startY, tableRight }) {
 function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight }) {
   let y = startY;
 
-  const colX = [50, 82, 154, 236, 451, 499];
-  const colW = [32, 72, 82, 215, 48, 46.28];
-  const headers = ['Nr.', 'Findingbericht Nr.', 'Referenz Paragraph', 'Beschreibung', 'Level', 'Frist'];
-  // Der Satzspiegel der sechs Spalten: die Beschreibung behält ihre 215pt, die
-  // Findingbericht Nr. kommt aus dem, was Nr. (nur Zahlen), Level ("Bemerkung",
-  // 35.9pt bei 7pt) und Frist (ein Datum, 35pt) über ihrem Inhalt zu breit waren.
-  // Jede Überschrift passt damit weiter in eine Zeile — die breiteste
-  // ("Referenz Paragraph", 65.8pt bei 7pt fett) bleibt unter den 82pt ihrer
-  // Spalte, die neue (59.8pt) unter den 72pt ihrer — also dieselben 16pt
-  // Kopfhöhe wie in der internen Tabelle.
+  const colX = [50, 82, 297, 369, 451, 499];
+  const colW = [32, 215, 72, 82, 48, 46.28];
+  const headers = ['Nr.', 'Beschreibung', 'Findingbericht Nr.', 'Referenz Paragraph', 'Level', 'Frist'];
+  // Die Spaltenfolge ist die der Findingliste: die Beschreibung steht zweite,
+  // gleich hinter der Nr., die beiden Bezugsnummern dahinter. Ein Finding trägt
+  // damit auf dem Blatt, das zur Behörde zurückgeht, dieselbe Folge wie in der
+  // App — die Nummer, unter der die Behörde es führt, darf nicht auf jedem der
+  // beiden an anderer Stelle stehen.
+  // Der Satzspiegel ist dabei nur neu getilet, nicht neu gerechnet: die
+  // Beschreibung behält ihre 215pt, die Findingbericht Nr. ihre 72pt aus dem,
+  // was Nr. (nur Zahlen), Level ("Bemerkung", 35.9pt bei 7pt) und Frist (ein
+  // Datum, 35pt) über ihrem Inhalt zu breit waren — die Tabelle endet weiter bei
+  // 545.28 und tilt ohne Lücke. Jede Überschrift passt weiter in eine Zeile —
+  // die breiteste ("Referenz Paragraph", 65.8pt bei 7pt fett) bleibt unter den
+  // 82pt ihrer Spalte, "Findingbericht Nr." (59.8pt) unter den 72pt ihrer —
+  // also dieselben 16pt Kopfhöhe wie in der internen Tabelle.
   const headerH = 16;
 
   // Die Frist wird am CAP-Item gepflegt, gehört in der Findings-Liste aber in die
@@ -372,13 +378,14 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
   const capDeadlines = {};
   for (const c of stmts.getCapDeadlinesByLine.all(line.id)) capDeadlines[c.checklist_item_id] = c.deadline;
 
-  // Die Findingbericht Nr. ist die Bezugsnummer der Behörde (document_ref) und
-  // steht neben der eigenen, vergebenen Nr. — die eine zählt diesen Bericht
-  // durch, die andere zitiert den der Behörde.
+  // In der Reihenfolge der Kopfzeile, ohne die Nr., die aus sort_order kommt und
+  // eigens gesetzt wird. Die Findingbericht Nr. ist die Bezugsnummer der Behörde
+  // (document_ref) und steht neben der eigenen, vergebenen Nr. — die eine zählt
+  // diesen Bericht durch, die andere zitiert den der Behörde.
   const cellText = item => [
+    item.compliance_check || '',
     item.document_ref || '',
     item.regulation_ref || '',
-    item.compliance_check || '',
     authorityEvalLabel(item.evaluation),
     formatDateDE(capDeadlines[item.id]),
   ];
