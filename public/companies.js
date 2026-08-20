@@ -2260,18 +2260,35 @@
   // zwangsläufig zweimal — wie die Stufen-Klartexte bei evalLabel() (hier) und
   // capEvalLabel() (pdf/cap.js). Wer hier ein Wort ändert, ändert es dort mit:
   // Schirm und Blatt beschriften dasselbe Feld.
-  // Die fünf Why-Felder tragen bewusst keinen placeholder mehr: drei von ihnen
-  // zeigten wörtlich denselben Satz ('Warum war das so?'), und der Fragetext des
-  // Originals gehört nicht neben, sondern in das Feld — dort ist er ein
-  // editierbarer Defaultwert und landet auf dem Blatt, das zur Behörde geht,
-  // während ein placeholder nur auf dem Schirm gestanden hätte.
+  // Die WHY_DEFAULTS sind die Fragetexte des echten CM-002, die der Bearbeiter
+  // dort von Hand mit ins Feld getippt hat — das Formular nimmt ihm das ab. Sie
+  // stehen deshalb als editierbarer Feldinhalt da und ausdrücklich nicht als
+  // placeholder: nur so landen sie auf dem Blatt, das zur Behörde geht, statt
+  // bloß auf dem Schirm gestanden zu haben. Der Klammertitel des Kastenkopfs
+  // wiederholt sich im Default als erstes Wort, weil er dort die Antwort
+  // einleitet ('Auswirkung: …').
+  // Zwei bewusst in Kauf genommene Folgen: ein absichtlich geleertes Feld steht
+  // beim nächsten Öffnen wieder auf seinem Default — ein Leerstring ist ohne
+  // Markerspalte von 'noch nie ausgefüllt' nicht zu unterscheiden, und die
+  // Spalte wäre die Migration, die der Fall nicht wert ist —, und ohne jede
+  // Interaktion wird nichts geschrieben: gespeichert wird auf Blur, ein CAP ohne
+  // five_why-Satz bleibt also das leere, handausfüllbare CM-002, dieselbe Grenze
+  // wie im Renderer.
+  const WHY_DEFAULTS = [
+    'Auswirkung: Was ist das aufgetretene Problem? Welche Störungen treten auf?',
+    'Direkte Ursache: Warum tritt das Problem auf? Was ist die direkte Ursache des Problems?',
+    'Tiefere Ursache: Warum gibt es zur direkten Ursache noch ein Problem (weitere Ursache) im Hintergrund?',
+    'Organisationsmangel: was hätte präventiv getan werden müssen, um das Problem zu verhindern?',
+    'Systemmangel: durch welche systematische Lösung würde die Präventivmaßnahme sichergestellt werden?'
+  ];
+
   function fiveWhyHtml() {
     return `<div class="inline-form-grid" id="five-why-grid">
-      <label for="fw-why1">1. Why is it happening? (Auswirkung)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2"></textarea>
-      <label for="fw-why2">2. Why is that? (Direkte Ursache)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2"></textarea>
-      <label for="fw-why3">3. Why is that? (Tiefere Ursache)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2"></textarea>
-      <label for="fw-why4">4. Why is that? (Organisationsmangel)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2"></textarea>
-      <label for="fw-why5">5. Why is that? (Systemmangel)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2"></textarea>
+      <label for="fw-why1">1. Why is it happening? (Auswirkung)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2">${escapeHtml(WHY_DEFAULTS[0])}</textarea>
+      <label for="fw-why2">2. Why is that? (Direkte Ursache)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2">${escapeHtml(WHY_DEFAULTS[1])}</textarea>
+      <label for="fw-why3">3. Why is that? (Tiefere Ursache)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2">${escapeHtml(WHY_DEFAULTS[2])}</textarea>
+      <label for="fw-why4">4. Why is that? (Organisationsmangel)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2">${escapeHtml(WHY_DEFAULTS[3])}</textarea>
+      <label for="fw-why5">5. Why is that? (Systemmangel)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2">${escapeHtml(WHY_DEFAULTS[4])}</textarea>
       <label for="fw-root-cause">Root Cause</label><textarea class="inline-input inline-textarea five-why-field" id="fw-root-cause" rows="3" placeholder="Grundursache (wird als Ursache übernommen)"></textarea>
     </div>`;
   }
@@ -2294,7 +2311,11 @@
         // Felder bereits einem anderen CAP-Item und dürfen nicht überschrieben
         // werden. Kein Datensatz ist kein Fehler: die leeren Felder sind der Stand.
         if (!fw || !grid.isConnected) return;
-        ids.forEach((id, i) => { field(id).value = fw[`why${i + 1}`] || ''; });
+        // Ein leer gespeichertes Why fällt auf seinen Default zurück, statt das
+        // Feld zu leeren: ohne Markerspalte ist der Leerstring nicht von 'noch
+        // nie ausgefüllt' zu unterscheiden, und der Fragetext ist genau das,
+        // was dort dann stehen soll.
+        ids.forEach((id, i) => { field(id).value = fw[`why${i + 1}`] || WHY_DEFAULTS[i]; });
         field('fw-root-cause').value = fw.root_cause || '';
         if (onRootCause) onRootCause(fw.root_cause || '');
       } catch (e) { toast('5-Why konnte nicht geladen werden', 'error'); }
