@@ -255,6 +255,37 @@ function authorityVisitLabel(line) {
   return visitDate ? `Behördenaudit ${visitDate}` : 'Behördenaudit (ohne Datum)';
 }
 
+// Der Briefkopf eines Blatts: Logo, Firmenname, Abteilungszeile mit
+// EASA-Genehmigungsnummer und Regulation. Nimmt `y` und liefert das neue zurück,
+// wie die beiden Findingtabellen-Renderer — Deckblatt und Findingseiten des
+// Behördenbogens zeichnen damit denselben Kopf, statt ihn zweimal auszuschreiben.
+// Dritte Fundstelle derselben Mechanik: drawHeader() in renderFiveWhyPdf
+// (pdf/five-why.js), das ihn auf jeder Seite seines Formulars selbst setzt — die
+// beiden Dateien teilen kein Modul, das CM-002 ist als eigenständiges Dokument
+// aber nicht auf diesen Renderer angewiesen.
+// Das fillColor gehört dazu: eine Findingseite beginnt mitten im Bogen, wo die
+// Füllfarbe der zuletzt gezeichneten Tabelle noch steht.
+function drawLetterhead(doc, { company, dept, logoRow, y }) {
+  if (logoRow && logoRow.logo) {
+    try {
+      doc.image(logoRow.logo, 50, y, { height: 45 });
+      y += 55;
+    } catch { y += 10; }
+  }
+
+  doc.fillColor('#000000').fontSize(14).font('Helvetica-Bold').text(company.name, 50, y);
+  y += 20;
+
+  doc.fontSize(9).font('Helvetica');
+  let subLine = dept.name;
+  if (dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
+  if (dept.regulation) subLine += `  |  ${dept.regulation}`;
+  doc.text(subLine, 50, y);
+  y += 25;
+
+  return y;
+}
+
 // ── PDF Helper: dreigeteilte Checklistentabelle eines internen Audits ─────
 // Gibt das neue y zurück. Unverändertes Verhalten — nur aus renderAuditLinePdf
 // herausgezogen, damit die Behördenvariante als gleichrangige Schwester danebensteht.
@@ -636,8 +667,14 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     // (Altbestand) fällt darauf zurück.
     const nr = String(item.sort_order ?? 0);
 
-    // Kein Briefkopf: renderFiveWhyPdf() zeichnet ihn ein paar Zeilen weiter unten
-    // selbst, und zweimal Logo und Firma auf einer Seite wäre genau das doppelt.
+    // Briefkopf wie auf dem Deckblatt: die Findingdatenseite ist ein Blatt des
+    // Bogens und trägt Logo und Firmenzeile wie jedes andere. Sie verzichtete
+    // darauf, solange das CM-002 auf derselben Seite begann und seinen eigenen Kopf
+    // ein paar Zeilen weiter unten setzte — zweimal Logo und Firma auf einer Seite.
+    // Seit das Formular auf einer eigenen Seite beginnt, stünde die Datenseite sonst
+    // als einzige des Bogens ohne Kopf da.
+    y = drawLetterhead(doc, { company, dept, logoRow, y });
+
     doc.fillColor('#000000').fontSize(14).font('Helvetica-Bold').text(`Finding ${nr}`, 50, y);
     y += 20;
     doc.fontSize(9).font('Helvetica').text(visitLabel, 50, y);
@@ -717,21 +754,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
 
   let y = startY || 50;
 
-  if (logoRow && logoRow.logo) {
-    try {
-      doc.image(logoRow.logo, 50, y, { height: 45 });
-      y += 55;
-    } catch { y += 10; }
-  }
-
-  doc.fontSize(14).font('Helvetica-Bold').text(company.name, 50, y);
-  y += 20;
-  doc.fontSize(9).font('Helvetica');
-  let subLine = dept.name;
-  if (dept.easa_permission_number) subLine += `  |  ${dept.easa_permission_number}`;
-  if (dept.regulation) subLine += `  |  ${dept.regulation}`;
-  doc.text(subLine, 50, y);
-  y += 25;
+  y = drawLetterhead(doc, { company, dept, logoRow, y });
 
   // Titel wie die Überschrift der Berichtsebene (authorityName() ohne Behörde,
   // die eine Zeile darunter ihr eigenes Feld hat): ohne Datum sagt die

@@ -37,7 +37,7 @@ const line = {
   auditee: 'Herr QM', audit_end_date: '2026-03-04', location: 'Berlin',
 };
 const plan = { id: 'plan-1', plan_type: 'AUTHORITY', year: 2026, revision: 0 };
-const dept = { id: 'dept-1', name: 'CAMO', company_id: 'c-1' };
+const dept = { id: 'dept-1', name: 'CAMO', easa_permission_number: 'DE.MG.0815', company_id: 'c-1' };
 const company = { id: 'c-1', name: 'Muster GmbH' };
 
 const checklistItems = [
@@ -88,6 +88,7 @@ doc.end();
 
 const on = (p, needle) => (perPage[p] || []).some(t => t.includes(needle));
 const pageOf = needle => Object.keys(perPage).map(Number).find(p => on(p, needle));
+const indexOf = (p, needle) => (perPage[p] || []).findIndex(t => t.includes(needle));
 
 // Die Übersichtstabelle steht auf dem Deckblatt und listet jede Beschreibung
 // ebenfalls — gesucht wird deshalb die Überschrift der Findingseite.
@@ -96,6 +97,12 @@ const p = pageOf('Finding 1');
 check('die Findingdaten stehen auf einer eigenen Seite',
   p !== undefined && on(p, 'Beschreibung des ersten Findings') && on(p, 'Findingbericht Nr.'), `Seite ${p}`);
 check('auf der Findingseite steht noch kein CM-002', !on(p, 'DEFINE THE PROBLEM'));
+// Der Briefkopf steht über der Überschrift, nicht irgendwo auf dem Blatt: sie
+// verzichtete darauf, solange das CM-002 auf derselben Seite seinen eigenen Kopf
+// zeichnete, und stünde seit dessen eigener Seite als einzige des Bogens ohne da.
+check('die Findingseite trägt den Briefkopf über der Überschrift',
+  on(p, 'Muster GmbH') && on(p, 'CAMO  |  DE.MG.0815')
+    && indexOf(p, 'Muster GmbH') < indexOf(p, 'Finding 1'));
 check('das CM-002 beginnt auf der Folgeseite', on(p + 1, 'DEFINE THE PROBLEM'));
 check('Why 1–3 stehen auf CM-002 Seite 1',
   ['1. Why is it happening?', '2. Why is that?', '3. Why is that?'].every(s => on(p + 1, s)));
@@ -120,6 +127,8 @@ const p2 = pageOf('Finding 3');
 check('ein Finding ohne Level bekommt eine Seite ohne CM-002',
   p2 !== undefined && on(p2, 'Zweites Finding ohne Level') && !on(p2, 'DEFINE THE PROBLEM'), `Seite ${p2}`);
 check('das zweite Finding ist das letzte Blatt des Bogens', p2 === page, `${p2} von ${page}`);
+check('auch die Seite eines Findings ohne Level trägt den Briefkopf',
+  on(p2, 'Muster GmbH') && on(p2, 'CAMO  |  DE.MG.0815'));
 
 fs.rmSync(DATA_DIR, { recursive: true, force: true });
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
