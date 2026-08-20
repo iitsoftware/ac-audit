@@ -669,10 +669,17 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     // Maßnahmen — ein Zustand, kein Fehler: die Seite bleibt der Datenblock.
     if (!cap) continue;
 
-    // Das vollständige CM-002 als eingebettetes Dokument: es zeichnet seinen Kopf auf
-    // jeder neuen Seite selbst und liefert das neue y zurück. Ein fehlender
-    // five_why-Datensatz ist dort kein Fehler, sondern das leere, von Hand
-    // ausfüllbare Formular.
+    // Das CM-002 beginnt auf einer eigenen Seite. Sein Seitenschnitt ist gesetzt —
+    // PRIMARY_CAUSE_STEPS = 3 (pdf/five-why.js) will Why 1–3 auf die erste und
+    // Why 4–5 samt Statement und Unterzeichnerzeile auf die zweite Seite —, und
+    // hinter dem Datenblock beginnend passten ab y ≈ 250 nur Why 1+2: Why 3 rutschte
+    // allein auf eine fast leere Seite und der harte newPage() schöbe Why 4/5 noch
+    // eine weiter. Je Finding gilt damit: Seite 1 Findingdaten, Seite 2 CM-002 Seite 1,
+    // Seite 3 CM-002 Seite 2. Es zeichnet seinen Kopf auf jeder neuen Seite selbst und
+    // liefert das neue y zurück; ein fehlender five_why-Datensatz ist dort kein Fehler,
+    // sondern das leere, von Hand ausfüllbare Formular.
+    doc.addPage();
+    y = 50;
     y = renderFiveWhyPdf(doc, {
       cap, fiveWhy: entry.fiveWhy || null, department: dept, company, logoRow, signer, startY: y,
     });
