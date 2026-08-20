@@ -55,14 +55,14 @@ router.post('/api/departments/:departmentId/audit-plans', (req, res) => {
   let lineId = null;
   if (pType === 'AUTHORITY') {
     lineId = uuidv4();
-    const { auditorTeam, auditee } = authorityLineDefaults(dept);
+    const { auditorTeam, authorityAuditor, auditee } = authorityLineDefaults(dept);
     db.transaction(() => {
       stmts.createAuditPlan.run(id, req.params.departmentId, year, 'ENTWURF', 0, pType);
       stmts.createAuditPlanLine.run(
         lineId, id,
         0, '', '', '', '',
         '1', '', '',
-        auditorTeam, auditee,
+        auditorTeam, authorityAuditor, auditee,
         null, null, '',
         '', '', null,
         '', 'OPEN'
@@ -137,7 +137,7 @@ router.post('/api/audit-plans/:id/copy', (req, res) => {
       stmts.createAuditPlanLine.run(
         newLineId, newId, line.sort_order,
         line.subject || '', line.regulations || '', line.location || '', '',
-        '', '', '', '', '',
+        '', '', '', '', '', '',
         null, null, '',
         '', '', null,
         '', 'OPEN'
@@ -147,7 +147,7 @@ router.post('/api/audit-plans/:id/copy', (req, res) => {
         newLineId, newId, line.sort_order,
         line.subject || '', line.regulations || '', line.location || '', line.planned_window || '',
         line.audit_no || '', line.audit_subject || '', line.audit_title || '',
-        line.auditor_team || '', line.auditee || '',
+        line.auditor_team || '', line.authority_auditor || '', line.auditee || '',
         line.audit_start_date || null, line.audit_end_date || null, line.audit_location || '',
         line.document_ref || '', line.document_iss_rev || '', line.document_rev_date || null,
         line.recommendation || '', line.audit_status || 'OPEN'
@@ -299,7 +299,7 @@ router.post('/api/departments/:departmentId/import-audit-plan',
           stmts.createAuditPlanLine.run(
             lineId, planId, line.sortOrder,
             line.subject, line.regulations, '', line.plannedWindow,
-            String(line.sortOrder), '', '', '', '', null, null, '', '', '', null, '', 'OPEN'
+            String(line.sortOrder), '', '', '', '', '', null, null, '', '', '', null, '', 'OPEN'
           );
           if (line.performedDate) {
             stmts.updateAuditPlanLinePerformed.run(line.performedDate, lineId);

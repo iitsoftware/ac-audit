@@ -50,18 +50,21 @@ router.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
   const maxNo = stmts.getMaxAuditNo.get(req.params.auditPlanId);
   const auditNo = String((maxNo?.max_no || 0) + 1);
 
-  // For authority audits, prefill auditor_team with authority name, auditee with QM name
+  // Behördenaudit: Behörde, zuständiger Bearbeiter und Auditee kommen aus
+  // authorityLineDefaults() — aber nur, wenn der Body keines der drei Felder
+  // mitschickt, sonst würde die Vorbelegung eine bewusste Eingabe überschreiben.
   let auditorTeam = b.auditor_team || '';
+  let authorityAuditor = b.authority_auditor || '';
   let auditee = b.auditee || '';
-  if (plan.plan_type === 'AUTHORITY' && !auditorTeam && !auditee) {
-    ({ auditorTeam, auditee } = authorityLineDefaults(stmts.getDepartment.get(plan.department_id)));
+  if (plan.plan_type === 'AUTHORITY' && !auditorTeam && !authorityAuditor && !auditee) {
+    ({ auditorTeam, authorityAuditor, auditee } = authorityLineDefaults(stmts.getDepartment.get(plan.department_id)));
   }
 
   stmts.createAuditPlanLine.run(
     id, req.params.auditPlanId,
     b.sort_order || 0, b.subject || '', b.regulations || '', b.location || '', b.planned_window || '',
     auditNo, b.audit_subject || '', b.audit_title || '',
-    auditorTeam, auditee,
+    auditorTeam, authorityAuditor, auditee,
     b.audit_start_date || null, b.audit_end_date || null, b.audit_location || '',
     b.document_ref || '', b.document_iss_rev || '', b.document_rev_date || null,
     b.recommendation || '', b.audit_status || 'OPEN'

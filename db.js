@@ -16,7 +16,7 @@ runMigrations(db);
 
 // Prepared statements
 const LINE_FIELDS = `id, audit_plan_id, sort_order, subject, regulations, location, planned_window, performed_date, signature,
-  audit_no, audit_subject, audit_title, auditor_team, auditee, audit_start_date, audit_end_date, audit_location,
+  audit_no, audit_subject, audit_title, auditor_team, authority_auditor, auditee, audit_start_date, audit_end_date, audit_location,
   document_ref, document_iss_rev, document_rev_date, recommendation, audit_status, created_at, updated_at`;
 
 const stmts = {
@@ -148,9 +148,9 @@ const stmts = {
   ),
   createAuditPlanLine: db.prepare(
     `INSERT INTO audit_plan_line (id, audit_plan_id, sort_order, subject, regulations, location, planned_window,
-      audit_no, audit_subject, audit_title, auditor_team, auditee, audit_start_date, audit_end_date, audit_location,
+      audit_no, audit_subject, audit_title, auditor_team, authority_auditor, auditee, audit_start_date, audit_end_date, audit_location,
       document_ref, document_iss_rev, document_rev_date, recommendation, audit_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   updateAuditPlanLine: db.prepare(
     `UPDATE audit_plan_line SET sort_order = ?, subject = ?, regulations = ?, location = ?, planned_window = ?, signature = ?,
@@ -836,8 +836,8 @@ const stmts = {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   restoreAuditPlanLine: db.prepare(
-    `INSERT INTO audit_plan_line (id, audit_plan_id, sort_order, subject, regulations, location, planned_window, performed_date, signature, audit_no, audit_subject, audit_title, auditor_team, auditee, audit_start_date, audit_end_date, audit_location, document_ref, document_iss_rev, document_rev_date, recommendation, audit_status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO audit_plan_line (id, audit_plan_id, sort_order, subject, regulations, location, planned_window, performed_date, signature, audit_no, audit_subject, audit_title, auditor_team, authority_auditor, auditee, audit_start_date, audit_end_date, audit_location, document_ref, document_iss_rev, document_rev_date, recommendation, audit_status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   restoreAuditPlan: db.prepare(
     `INSERT INTO audit_plan (id, department_id, name, year, status, revision, approved_by, approved_at, submitted_to, submitted_planned_at, submitted_at, created_at, updated_at)

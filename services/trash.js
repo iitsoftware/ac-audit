@@ -136,7 +136,9 @@ function restoreAuditPlanLine(line) {
   stmts.restoreAuditPlanLine.run(
     line.id, line.audit_plan_id, line.sort_order, line.subject, line.regulations,
     line.location, line.planned_window, line.performed_date, line.signature,
-    line.audit_no, line.audit_subject, line.audit_title, line.auditor_team, line.auditee,
+    // Ein Snapshot von vor der Spalte kennt authority_auditor nicht — undefined
+    // lehnt better-sqlite3 als Bindung ab, also der Spalten-Default ''.
+    line.audit_no, line.audit_subject, line.audit_title, line.auditor_team, line.authority_auditor || '', line.auditee,
     line.audit_start_date, line.audit_end_date, line.audit_location,
     line.document_ref, line.document_iss_rev, line.document_rev_date,
     line.recommendation, line.audit_status, line.created_at, line.updated_at
