@@ -354,12 +354,16 @@ function renderInternalSections(doc, { checklistItems, startY, tableRight }) {
 function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight }) {
   let y = startY;
 
-  const colX = [50, 112, 200, 415, 470];
-  const colW = [62, 88, 215, 55, 75.28];
-  const headers = ['Nr.', 'Referenz Paragraph', 'Beschreibung', 'Level', 'Frist'];
-  // Seit der Umbenennung passt jede Überschrift in eine Zeile, also dieselben
-  // 16pt wie in der internen Tabelle — die breiteste ("Referenz Paragraph",
-  // 65.8pt bei 7pt fett) bleibt unter den 82pt ihrer Spalte.
+  const colX = [50, 82, 154, 236, 451, 499];
+  const colW = [32, 72, 82, 215, 48, 46.28];
+  const headers = ['Nr.', 'Findingbericht Nr.', 'Referenz Paragraph', 'Beschreibung', 'Level', 'Frist'];
+  // Der Satzspiegel der sechs Spalten: die Beschreibung behält ihre 215pt, die
+  // Findingbericht Nr. kommt aus dem, was Nr. (nur Zahlen), Level ("Bemerkung",
+  // 35.9pt bei 7pt) und Frist (ein Datum, 35pt) über ihrem Inhalt zu breit waren.
+  // Jede Überschrift passt damit weiter in eine Zeile — die breiteste
+  // ("Referenz Paragraph", 65.8pt bei 7pt fett) bleibt unter den 82pt ihrer
+  // Spalte, die neue (59.8pt) unter den 72pt ihrer — also dieselben 16pt
+  // Kopfhöhe wie in der internen Tabelle.
   const headerH = 16;
 
   // Die Frist wird am CAP-Item gepflegt, gehört in der Findings-Liste aber in die
@@ -368,7 +372,11 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
   const capDeadlines = {};
   for (const c of stmts.getCapDeadlinesByLine.all(line.id)) capDeadlines[c.checklist_item_id] = c.deadline;
 
+  // Die Findingbericht Nr. ist die Bezugsnummer der Behörde (document_ref) und
+  // steht neben der eigenen, vergebenen Nr. — die eine zählt diesen Bericht
+  // durch, die andere zitiert den der Behörde.
   const cellText = item => [
+    item.document_ref || '',
     item.regulation_ref || '',
     item.compliance_check || '',
     authorityEvalLabel(item.evaluation),
@@ -428,7 +436,7 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
     // Die Farbe liest den Rohwert 'O'/'L1'/'L2' — beschriftet wird nur die Zelle.
     const evalVal = (item.evaluation || '').trim().toUpperCase();
     if (EVAL_COLORS[evalVal]) {
-      doc.rect(colX[3], y, colW[3], rowH).fill(EVAL_COLORS[evalVal]);
+      doc.rect(colX[4], y, colW[4], rowH).fill(EVAL_COLORS[evalVal]);
       doc.fillColor('#000000');
     }
 
