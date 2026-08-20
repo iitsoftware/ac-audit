@@ -47,7 +47,18 @@ const pdf = async (url) => {
   calls = [];
   const res = await fetch(BASE + url, { headers: { Cookie: cookie }, redirect: 'manual' });
   const buf = Buffer.from(await res.arrayBuffer());
-  return { status: res.status, isPdf: buf.slice(0, 4).toString() === '%PDF', bytes: buf.length, calls };
+  // Ein Wurf mitten im Renderer liefert trotzdem 200 mit gültigem %PDF-Kopf —
+  // doc.pipe(res) läuft, bevor gezeichnet wird. Erst der Abschluss %%EOF und die
+  // Seitenzahl zeigen, dass der Bogen wirklich vollständig ist.
+  const text = buf.toString('latin1');
+  return {
+    status: res.status,
+    isPdf: buf.slice(0, 4).toString() === '%PDF',
+    bytes: buf.length,
+    tail: text.slice(-40),
+    pages: (text.match(/\/Type\s*\/Page[^s]/g) || []).length,
+    calls,
+  };
 };
 
 let failures = 0;
@@ -149,6 +160,13 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
     opts.signer && opts.signer.id === qm.id,
     opts.signer && `${opts.signer.first_name} ${opts.signer.last_name}`);
 
+  check('  → der Bogen läuft vollständig durch (%%EOF)',
+    single.tail.includes('%%EOF'), single.tail.trim().slice(-12));
+  // Die Findingseiten hängen an dem, was die Route lädt: ohne caps bliebe es beim
+  // einseitigen Deckblatt. Vier Seiten = Deckblatt + Findingdaten + CM-002 (2).
+  check('  → die geladenen Daten erzeugen die Findingseiten',
+    single.pages === 4, `${single.pages} Seite(n)`);
+
   // ── 2. Interner Plan: keine einzige Zusatzangabe ──
   const internal = await pdf(`/api/audit-plan-lines/${intLine.id}/pdf`);
   check('Einzel-PDF eines internen Audits wird ausgeliefert',
@@ -178,6 +196,32 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('ein Behördenbericht ohne Findings rendert weiterhin',
     empty.status === 200 && empty.isPdf && Object.keys(empty.calls[0].caps || {}).length === 0,
     `${empty.status}, ${empty.bytes} bytes`);
+
+  // ── 5. Abteilung OHNE QM: der Unterzeichner-Fallback muss auflösbar sein ──
+  // getQmForDepartment() findet dann niemanden, `signer` ist null, und erst da
+  // wertet `signer || qmPerson` in renderAuditLinePdf() den zweiten Operanden aus.
+  // Stand dessen `const` — wie kurzzeitig — innerhalb von `if (!isAuthority)`, warf
+  // genau dieser Bogen "ReferenceError: qmPerson is not defined"; die Route lieferte
+  // trotzdem 200 mit gültigem %PDF-Kopf, weil doc.pipe(res) schon lief. Nur der
+  // Abschluss %%EOF zeigt, dass der Renderer durchgelaufen ist. Mit QM greift der
+  // Kurzschluss und der Fehler bleibt unsichtbar — deshalb dieser eigene Fall.
+  const noQmDept = (await req('POST', `/api/companies/${company.id}/departments`,
+    { name: 'Ohne QM', regulation: 'Part-CAMO' })).payload;
+  const noQmPlan = (await req('POST', `/api/departments/${noQmDept.id}/audit-plans`,
+    { year: 2026, plan_type: 'AUTHORITY' })).payload;
+  await req('POST', `/api/audit-plan-lines/${noQmPlan.authority_line_id}/checklist-items`,
+    { compliance_check: 'Finding ohne QM', evaluation: 'L1' });
+  const noQm = await pdf(`/api/audit-plan-lines/${noQmPlan.authority_line_id}/pdf`);
+  check('ein Behördenbericht ohne QM in der Abteilung rendert vollständig',
+    noQm.status === 200 && noQm.isPdf && noQm.tail.includes('%%EOF'),
+    `${noQm.status}, ${noQm.bytes} bytes, endet auf ${noQm.tail.trim().slice(-6)}`);
+  check('  → sein Unterzeichner bleibt leer, statt den Bogen zu sprengen',
+    (noQm.calls[0] || {}).signer === undefined || !noQm.calls[0].signer,
+    String((noQm.calls[0] || {}).signer));
+  // Deckblatt + Findingdaten + die zwei CM-002-Seiten; ohne Maßnahmen und ohne
+  // 5-Why-Satz bleibt es bei dessen leerem, von Hand ausfüllbarem Formular.
+  check('  → die Findingseiten stehen trotzdem',
+    noQm.pages >= 3, `${noQm.pages} Seite(n)`);
 
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
   console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

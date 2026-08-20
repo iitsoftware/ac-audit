@@ -813,71 +813,90 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   }
   y += 30;
 
-  if (y + 40 > 740) { doc.addPage(); y = 50; }
-  doc.fontSize(10).font('Helvetica-Bold').text('Recommendation for Management', 50, y);
-  y += 16;
-  doc.fontSize(8).font('Helvetica');
-  const recText = line.recommendation || '—';
-  doc.rect(50, y, tableRight - 50, Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10)).stroke();
-  doc.text(recText, 55, y + 5, { width: tableRight - 60 });
-  y += Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10) + 15;
-
+  // Empfehlung ans Management und die Unterschriftenzeile sind Artefakte eines
+  // internen Audits: der LBA-Bericht wird nicht von uns gezeichnet, und eine
+  // Empfehlung an das Management ist das Ergebnis unserer eigenen Prüfung, nicht
+  // eines Behördenbesuchs. Beide entfallen dort ersatzlos — und mit ihnen die
+  // einzige Leserstelle von `personsAll` und `getPersonSignature` in diesem
+  // Renderer, die im Behördenzweig damit gar nicht mehr angefasst wird. Die
+  // Zählzeile 'Summary' darüber und die 'Legend' darunter bleiben, sie
+  // beschreiben die Findings und nicht deren Bewertung durch uns.
+  //
+  // Der QM steht dabei VOR dem Zweig: er ist im internen Zweig der Unterzeichner
+  // der dritten Unterschriftenspalte und im Behördenzweig der Fallback für den
+  // Unterzeichner des eingebetteten CM-002. Innerhalb des `!isAuthority`-Blocks
+  // deklariert, wäre er genau dort nicht sichtbar, wo der Fallback ihn liest —
+  // ein `const` ist blockskopiert, und `signer || qmPerson` wertet ihn aus, sobald
+  // die Route keinen Unterzeichner findet. Ein reines `find()` über das ohnehin
+  // geladene `personsAll`, also kein Lesezugriff, den der Behördenzweig scheute.
   const qmPerson = personsAll.find(p => p.role === 'QM' && p.department_id === dept.id);
-  const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
-  const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
 
-  const deptText = `${dept.name} ${dept.regulation || ''}`.toLowerCase();
-  let alLabel = 'Abteilungsleiter';
-  if (deptText.includes('145')) alLabel = 'Maintenance Manager';
-  else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
-  else if (deptText.includes('ato') || deptText.includes('flugschule') || deptText.includes('training')) alLabel = 'Head of Training';
-  else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
+  if (!isAuthority) {
+    if (y + 40 > 740) { doc.addPage(); y = 50; }
+    doc.fontSize(10).font('Helvetica-Bold').text('Recommendation for Management', 50, y);
+    y += 16;
+    doc.fontSize(8).font('Helvetica');
+    const recText = line.recommendation || '—';
+    doc.rect(50, y, tableRight - 50, Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10)).stroke();
+    doc.text(recText, 55, y + 5, { width: tableRight - 60 });
+    y += Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10) + 15;
 
-  const sigCols = 4;
-  const sigColW = (tableRight - 50) / sigCols;
-  const sigHeaderH = 20;
-  const sigRowH = 50;
+    const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
+    const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
 
-  if (y + sigHeaderH + sigRowH + 10 > 740) { doc.addPage(); y = 50; }
+    const deptText = `${dept.name} ${dept.regulation || ''}`.toLowerCase();
+    let alLabel = 'Abteilungsleiter';
+    if (deptText.includes('145')) alLabel = 'Maintenance Manager';
+    else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
+    else if (deptText.includes('ato') || deptText.includes('flugschule') || deptText.includes('training')) alLabel = 'Head of Training';
+    else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
 
-  const sigHeaders = ['Date', 'Auditor', alLabel, 'Accountable Manager'];
+    const sigCols = 4;
+    const sigColW = (tableRight - 50) / sigCols;
+    const sigHeaderH = 20;
+    const sigRowH = 50;
 
-  doc.fontSize(7).font('Helvetica-Bold');
-  doc.rect(50, y, tableRight - 50, sigHeaderH).fill('#2563eb');
-  doc.fillColor('#ffffff');
-  for (let c = 0; c < sigCols; c++) {
-    doc.text(sigHeaders[c], 50 + c * sigColW + 4, y + 5, { width: sigColW - 8, align: 'center' });
-  }
-  doc.fillColor('#000000');
-  y += sigHeaderH;
+    if (y + sigHeaderH + sigRowH + 10 > 740) { doc.addPage(); y = 50; }
 
-  doc.strokeColor('#d0d0d0').lineWidth(0.5);
-  doc.rect(50, y, tableRight - 50, sigRowH).stroke();
-  for (let c = 1; c < sigCols; c++) {
-    doc.moveTo(50 + c * sigColW, y).lineTo(50 + c * sigColW, y + sigRowH).stroke();
-  }
+    const sigHeaders = ['Date', 'Auditor', alLabel, 'Accountable Manager'];
 
-  doc.fontSize(8).font('Helvetica');
-  doc.text(formatDateDE(line.audit_end_date), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.rect(50, y, tableRight - 50, sigHeaderH).fill('#2563eb');
+    doc.fillColor('#ffffff');
+    for (let c = 0; c < sigCols; c++) {
+      doc.text(sigHeaders[c], 50 + c * sigColW + 4, y + 5, { width: sigColW - 8, align: 'center' });
+    }
+    doc.fillColor('#000000');
+    y += sigHeaderH;
 
-  const sigPersons = [qmPerson, alPerson, accPerson];
-  for (let c = 0; c < 3; c++) {
-    const person = sigPersons[c];
-    const cx = 50 + (c + 1) * sigColW;
-    if (person) {
-      const sigRow = stmts.getPersonSignature.get(person.id);
-      if (sigRow && sigRow.signature) {
-        try {
-          doc.image(sigRow.signature, cx + 4, y + 2, { fit: [sigColW - 8, sigRowH - 14], align: 'center', valign: 'center' });
-        } catch { /* unreadable */ }
-      }
-      const name = `${person.first_name} ${person.last_name}`.trim();
-      if (name) {
-        doc.fontSize(6).text(name, cx + 4, y + sigRowH - 10, { width: sigColW - 8, align: 'center' });
+    doc.strokeColor('#d0d0d0').lineWidth(0.5);
+    doc.rect(50, y, tableRight - 50, sigRowH).stroke();
+    for (let c = 1; c < sigCols; c++) {
+      doc.moveTo(50 + c * sigColW, y).lineTo(50 + c * sigColW, y + sigRowH).stroke();
+    }
+
+    doc.fontSize(8).font('Helvetica');
+    doc.text(formatDateDE(line.audit_end_date), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
+
+    const sigPersons = [qmPerson, alPerson, accPerson];
+    for (let c = 0; c < 3; c++) {
+      const person = sigPersons[c];
+      const cx = 50 + (c + 1) * sigColW;
+      if (person) {
+        const sigRow = stmts.getPersonSignature.get(person.id);
+        if (sigRow && sigRow.signature) {
+          try {
+            doc.image(sigRow.signature, cx + 4, y + 2, { fit: [sigColW - 8, sigRowH - 14], align: 'center', valign: 'center' });
+          } catch { /* unreadable */ }
+        }
+        const name = `${person.first_name} ${person.last_name}`.trim();
+        if (name) {
+          doc.fontSize(6).text(name, cx + 4, y + sigRowH - 10, { width: sigColW - 8, align: 'center' });
+        }
       }
     }
+    y += sigRowH + 15;
   }
-  y += sigRowH + 15;
 
   if (y + 60 > 740) { doc.addPage(); y = 50; }
   doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000').text('Legend', 50, y);
