@@ -690,24 +690,23 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     // hinter dem Datenblock beginnend passten ab y ≈ 250 nur Why 1+2: Why 3 rutschte
     // allein auf eine fast leere Seite und der harte newPage() schöbe Why 4/5 noch
     // eine weiter. Je Finding gilt damit: Seite 1 Findingdaten, Seite 2 CM-002 Seite 1,
-    // Seite 3 CM-002 Seite 2, Seite 4 die Maßnahmen. Es zeichnet seinen Kopf auf jeder
-    // neuen Seite selbst; ein fehlender five_why-Datensatz ist dort kein Fehler,
-    // sondern das leere, von Hand ausfüllbare Formular. Sein Rückgabe-y bleibt hier
-    // ungenutzt, weil die Maßnahmen ohnehin auf einem frischen Blatt beginnen.
+    // Seite 3 CM-002 Seite 2. Es zeichnet seinen Kopf auf jeder neuen Seite selbst und
+    // liefert das neue y zurück; ein fehlender five_why-Datensatz ist dort kein Fehler,
+    // sondern das leere, von Hand ausfüllbare Formular.
     doc.addPage();
     y = 50;
-    renderFiveWhyPdf(doc, {
+    y = renderFiveWhyPdf(doc, {
       cap, fiveWhy: entry.fiveWhy || null, department: dept, company, logoRow, signer, startY: y,
     });
 
-    // Auch die Maßnahmen bekommen ihre eigene Seite: die Zeile Name / Position / Datum
-    // schließt das CM-002 ab, und eine Tabelle darunter auf demselben Blatt läse sich
-    // als ein weiterer Abschnitt des unterschriebenen Formulars statt als das, was sie
-    // ist — unsere Antwort auf das Finding. Innerhalb der beiden Tabellen bleibt der
-    // Umbruch dagegen gerechnet (drawActionTable), denn wie viele Blätter n Maßnahmen
-    // brauchen, gibt kein Formular vor.
+    // Die Maßnahmen beginnen ihrerseits auf einer eigenen Seite. Direkt unter dem
+    // zurückgegebenen y klebten sie an der Zeile Name / Position / Datum der zweiten
+    // CM-002-Seite, und "Behebungsmaßnahmen" las sich wie eine weitere Rubrik des
+    // Unterzeichnerblocks — das Formular ist mit seiner Unterschrift zu Ende. Je
+    // Finding gilt damit die Folge Findingdaten | CM-002 S.1 | CM-002 S.2 | Maßnahmen.
     doc.addPage();
     y = 50;
+
     for (const group of CAP_ACTION_GROUPS) drawActionTable(group.label, actionRows(entry, group));
   }
 
