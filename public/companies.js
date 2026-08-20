@@ -1030,6 +1030,7 @@
       // mit mehreren Berichten nicht.
       findingCaps = [];
       if ((currentPlan.plan_type || 'AUDIT') === 'AUTHORITY') {
+        await renumberLegacyFindings();
         const caps = await fetchJSON(`/api/audit-plans/${currentLine.audit_plan_id}/cap-items`);
         findingCaps = (caps.items || []).filter(c => c.audit_plan_line_id === currentLine.id);
       }
@@ -1047,6 +1048,55 @@
       currentLine = null;
       checklistItems = [];
       findingCaps = [];
+    }
+  }
+
+  // Findings aus der Zeit vor der Nummernvergabe stehen sämtlich auf sort_order 0.
+  // Seit die Nr. der Stammdaten reine Anzeige ist, gibt es keinen Weg mehr, sie von
+  // Hand geradezuziehen — also holt das Laden des Berichts es einmalig nach: jede 0
+  // bekommt in Ladereihenfolge (ORDER BY sort_order, created_at, bei lauter Nullen
+  // also chronologisch) die nächste freie Nummer.
+  //
+  // Auf einem Behördenplan ist die 0 dafür ein eindeutiges Kennzeichen: der
+  // `+`-Button der Findingliste schickt seine Nummer selbst mit und zählt ab max+1
+  // mit Untergrenze 1, das erste Finding eines frischen Berichts trägt also die 1.
+  // Nur der Altbestand steht auf 0, und genau deshalb hängt das hier am Plantyp —
+  // interne Audits vergeben ihre Sortierung sektionsweise selbst und werden nicht
+  // angefasst.
+  //
+  // Die Zählung ist dieselbe wie beim `+`-Button, damit eine nachgetragene Nummer
+  // nicht auf eine schon vergebene trifft. Geschrieben wird je Finding ein PUT mit
+  // dem sonst unveränderten Datensatz; `cap_deadline` bleibt bewusst außen vor, ein
+  // ausgelassenes Feld lässt die am CAP-Item gepflegte Frist stehen, und die
+  // unveränderte `evaluation` verhindert, dass die Route dessen CAP-Item abräumt.
+  async function renumberLegacyFindings() {
+    const stale = checklistItems.filter(item => (item.sort_order ?? 0) === 0);
+    if (!stale.length) return;
+    let next = checklistItems.reduce((max, ci) => Math.max(max, ci.sort_order ?? 0), 0) + 1;
+    try {
+      for (const item of stale) {
+        const saved = await fetchJSON(`/api/checklist-items/${item.id}`, {
+          method: 'PUT',
+          body: {
+            section: item.section || 'THEORETICAL',
+            sort_order: next,
+            regulation_ref: item.regulation_ref || '',
+            compliance_check: item.compliance_check || '',
+            evaluation: item.evaluation || '',
+            auditor_comment: item.auditor_comment || '',
+            document_ref: item.document_ref || '',
+          },
+        });
+        // `saved` ist die rohe Zeile; cap_deadline und evidence_count kommen aus der
+        // Listen-Route und fehlen dort, überschrieben wird also keines von beiden.
+        Object.assign(item, saved);
+        next++;
+      }
+    } catch (e) {
+      // Ein Abbruch mittendrin ist kein Grund, den Bericht nicht zu zeigen: die
+      // bereits geschriebenen Nummern stehen, der Rest bleibt auf 0 und wird beim
+      // nächsten Laden erneut versucht — die Vergabe ist idempotent.
+      toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
     }
   }
 
