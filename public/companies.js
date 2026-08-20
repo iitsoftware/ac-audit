@@ -1817,14 +1817,16 @@
     // Die Stammdaten sind die Findingliste hochkant, also führt auch hier die
     // Beschreibung — man erkennt ein Finding an ihr wieder — und die beiden
     // Bezugsnummern dahinter sind ihre Fundstelle.
-    // Die Nr. ist vergeben und nicht abgeleitet, also ist sie hier ein echtes
-    // Eingabefeld: sie geht als `sort_order` mit. Die Findingbericht Nr. daneben ist
-    // die Bezugsnummer aus dem Schreiben der Behörde und geht als `document_ref` mit
-    // — sie ist damit aus der Durchreiche-Liste in die bearbeiteten Felder gewandert.
+    // Die Nr. ist vergeben, aber vom Server vergeben: sie steht hier als reine
+    // Anzeige — readonly und in derselben abgedunkelten Optik wie die vom 5-Why
+    // gespiegelte Ursache auf der CAP-Ebene, ohne `finding-field` und damit ohne
+    // Blur-Save. Sie reist deshalb wie Sektion und Kommentar unverändert durch.
+    // Die Findingbericht Nr. daneben ist die Bezugsnummer aus dem Schreiben der
+    // Behörde und bleibt ein echtes Eingabefeld: sie geht als `document_ref` mit.
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Stammdaten</h3></div>
       <div id="finding-basics" class="inline-form-grid">
-        <label for="fd-sort-order">Nr.</label><input class="inline-input finding-field" id="fd-sort-order" type="number" min="0" step="1" value="${escapeAttr(String(item.sort_order ?? 0))}">
+        <label for="fd-sort-order">Nr.</label><input class="inline-input" id="fd-sort-order" value="${escapeAttr(String(item.sort_order ?? 0))}" readonly style="background:var(--bg-secondary);opacity:0.7;cursor:not-allowed">
         <label for="fd-compliance-check">Beschreibung</label><textarea class="inline-input inline-textarea finding-field" id="fd-compliance-check" rows="4">${escapeHtml(item.compliance_check || '')}</textarea>
         <label for="fd-document-ref">Findingbericht Nr.</label><input class="inline-input finding-field" id="fd-document-ref" value="${escapeAttr(item.document_ref || '')}">
         <label for="fd-regulation-ref">Referenz Paragraph</label><input class="inline-input finding-field" id="fd-regulation-ref" value="${escapeAttr(item.regulation_ref || '')}">
@@ -2128,24 +2130,20 @@
 
   // Auto-Save auf Blur bzw. change wie auf der Bericht- und der CAP-Ebene.
   // PUT /api/checklist-items/:id ersetzt die Zeile vollständig, deshalb reisen
-  // Sektion und Kommentar unverändert mit — dieser Screen zeigt sie nicht, darf sie
-  // aber auch nicht leeren. Sortierung und Dokument-Ref. sind aus dieser Durchreiche
-  // herausgewandert: sie sind die Nr. und die Findingbericht Nr. des Findings und
-  // werden hier bearbeitet.
+  // Sektion, Kommentar und die vom Server vergebene Nr. unverändert mit — dieser
+  // Screen zeigt die ersten beiden nicht und die Nr. nur als Anzeige, leeren darf er
+  // keines davon. Allein die Dokument-Ref. ist aus dieser Durchreiche herausgewandert:
+  // sie ist die Findingbericht Nr. der Behörde und wird hier bearbeitet.
   async function saveFindingFields() {
     const item = currentFinding;
     if (!item) return;
     const deadlineInput = document.getElementById('fd-deadline');
     const deadlineIso = parseDateDE(deadlineInput.value);
     if (deadlineIso === undefined) return toast('Frist bitte im Format TT.MM.JJJJ eingeben', 'error');
-    // Eine leere oder krumme Nr. würde als 0 durchschreiben und die vergebene
-    // Nummer stillschweigend verlieren — dieselbe Behandlung wie eine unlesbare Frist.
-    const sortOrder = parseInt(document.getElementById('fd-sort-order').value, 10);
-    if (!Number.isInteger(sortOrder) || sortOrder < 0) return toast('Nr. bitte als ganze Zahl eingeben', 'error');
 
     const data = {
       section: item.section || 'THEORETICAL',
-      sort_order: sortOrder,
+      sort_order: item.sort_order ?? 0,
       regulation_ref: document.getElementById('fd-regulation-ref').value.trim(),
       compliance_check: document.getElementById('fd-compliance-check').value.trim(),
       evaluation: document.getElementById('fd-evaluation').value,
@@ -2180,12 +2178,9 @@
       // currentFinding ist dasselbe Objekt wie in checklistItems — die Beanstandungs-
       // tabelle des Berichts zeigt beim Zurücknavigieren denselben Stand.
       Object.assign(item, saved);
-      // Der Name des Screens IST die Nummer — eine geänderte Nr. zieht Überschrift
-      // und Breadcrumb sofort nach, statt bis zum nächsten Laden die alte zu zeigen.
-      // Gezeichnet wird nur der Text, damit der Fokus beim Durchtabben bleibt.
-      const h2 = headerEl.querySelector('h2');
-      if (h2) h2.textContent = findingSegmentName(item);
-      renameFindingSegment(item);
+      // Überschrift und Breadcrumb bleiben unangetastet: der Name des Screens IST die
+      // Nummer, und die ist hier reine Anzeige — sie kann sich durch dieses Speichern
+      // nicht ändern. Benannt wird das Segment allein beim Laden (loadFinding()).
       if (deadlineIso) {
         item.cap_deadline = deadlineIso;
         // Dieselbe Frist steht am CAP-Item, das die Maßnahme-Sektion vollständig
