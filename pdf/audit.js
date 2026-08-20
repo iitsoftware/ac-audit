@@ -514,15 +514,16 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
 
   const countEval = value => checklistItems.filter(i => (i.evaluation || '').toUpperCase() === value).length;
 
-  // Die Zählzeile eines Behördenaudits kennt nur die Level, die auch im
+  // Die Zählzeile eines Behördenaudits kennt genau die Level, die auch im
   // Auswahlmenü stehen (authorityEvalValues im Frontend): C/NA sind kein Urteil
-  // einer Findings-Liste und L3 kennt die Behörde nicht. Gezählt wird weiter
-  // der Rohwert, beschriftet der Klartext des LBA-Berichts.
+  // einer Findings-Liste, Level 3 vergibt die Behörde dagegen wie die anderen
+  // drei. Gezählt wird weiter der Rohwert, beschriftet der Klartext des
+  // LBA-Berichts.
   const sumHeaders = isAuthority
-    ? ['Findings', 'Bemerkung', 'Level 1', 'Level 2']
+    ? ['Findings', 'Bemerkung', 'Level 1', 'Level 2', 'Level 3']
     : ['Total Questions', 'Conformities', 'Not Applicable', 'Observation', 'Level 1', 'Level 2', 'Level 3'];
   const sumValues = isAuthority
-    ? [checklistItems.length, countEval('O'), countEval('L1'), countEval('L2')]
+    ? [checklistItems.length, countEval('O'), countEval('L1'), countEval('L2'), countEval('L3')]
     : [checklistItems.length, countEval('C'), countEval('NA'), countEval('O'), countEval('L1'), countEval('L2'), countEval('L3')];
   const sumColW = (tableRight - 50) / sumHeaders.length;
 
@@ -622,6 +623,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
     'Bemerkung - Beobachtung, kein Finding, lediglich Empfehlung zur Verbesserung',
     'Level 1 - Nichtkonformität, das Finding wird innerhalb von 5 Arbeitstagen behoben',
     'Level 2 - Nichtkonformität, Behebung des Findings innerhalb von 60 Arbeitstagen',
+    'Level 3 - Nicht nur eine Empfehlung, muss umgesetzt oder angepasst werden (bei oder mit der nächsten Revision)',
   ] : [
     'C - Conform: The requirement is fully met',
     'NA - Not Applicable: The requirement does not apply',
