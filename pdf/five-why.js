@@ -34,6 +34,10 @@ const WHY_STEPS = [
 // Beide Seiten setzen ihre Kastenköpfe hier zusammen — laufende Nummer, Frage,
 // deutscher Titel in Klammern —, damit der Seitenschnitt die Überschriften nicht
 // in zwei Schreibweisen auseinanderlaufen lässt.
+// Verglichen wird mit fiveWhyHtml() (public/companies.js) genau dieser
+// zusammengesetzte String, nicht die drei Einzelteile darüber: die <label> der
+// fünf fw-why-Felder tragen '1. Why is it happening? (Auswirkung)' und
+// '2.'–'5. Why is that? (…)' wörtlich.
 const whyHeading = (step, n) => `${n}. ${step.question} (${step.title})`;
 // Seite 1 trägt Why 1–3 unter PRIMARY CAUSE, Seite 2 die restlichen unter
 // WHY IS THIS A PROBLEM? — der Schnitt des echten zweiseitigen Formulars.

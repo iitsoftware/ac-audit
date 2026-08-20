@@ -2254,13 +2254,19 @@
   // Ebene gezeichnet. Beide teilen sich Markup und Verdrahtung, damit die zwei
   // Screens nicht auseinanderlaufen — die Feld-IDs dürfen sie teilen, weil immer
   // nur eine der beiden Ebenen in contentEl steht.
+  // Die fünf <label> sind die Kastenköpfe des CM-002-Formulars: WHY_STEPS +
+  // whyHeading() in pdf/five-why.js setzen dort denselben Satz von fünf Strings
+  // zusammen. Frontend und Renderer teilen sich kein Modul, die Liste steht also
+  // zwangsläufig zweimal — wie die Stufen-Klartexte bei evalLabel() (hier) und
+  // capEvalLabel() (pdf/cap.js). Wer hier ein Wort ändert, ändert es dort mit:
+  // Schirm und Blatt beschriften dasselbe Feld.
   function fiveWhyHtml() {
     return `<div class="inline-form-grid" id="five-why-grid">
-      <label for="fw-why1">1. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2" placeholder="Warum ist das Problem aufgetreten?"></textarea>
-      <label for="fw-why2">2. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2" placeholder="Warum war das so?"></textarea>
-      <label for="fw-why3">3. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2" placeholder="Warum war das so?"></textarea>
-      <label for="fw-why4">4. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2" placeholder="Warum war das so?"></textarea>
-      <label for="fw-why5">5. Warum?</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2" placeholder="Warum war das so?"></textarea>
+      <label for="fw-why1">1. Why is it happening? (Auswirkung)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why1" rows="2" placeholder="Warum ist das Problem aufgetreten?"></textarea>
+      <label for="fw-why2">2. Why is that? (Direkte Ursache)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why2" rows="2" placeholder="Warum war das so?"></textarea>
+      <label for="fw-why3">3. Why is that? (Tiefere Ursache)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why3" rows="2" placeholder="Warum war das so?"></textarea>
+      <label for="fw-why4">4. Why is that? (Organisationsmangel)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why4" rows="2" placeholder="Warum war das so?"></textarea>
+      <label for="fw-why5">5. Why is that? (Systemmangel)</label><textarea class="inline-input inline-textarea five-why-field" id="fw-why5" rows="2" placeholder="Warum war das so?"></textarea>
       <label for="fw-root-cause">Root Cause</label><textarea class="inline-input inline-textarea five-why-field" id="fw-root-cause" rows="3" placeholder="Grundursache (wird als Ursache übernommen)"></textarea>
     </div>`;
   }
