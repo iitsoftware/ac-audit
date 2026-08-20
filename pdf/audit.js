@@ -469,6 +469,12 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   const pageW = 595.28;
   const tableRight = pageW - 50;
 
+  // Ein Behördenplan liest denselben Datensatz als Bericht EINES Besuchs: Titel,
+  // Kopfblock und Findingliste folgen dem Schirm. Interne Pläne drucken
+  // unverändert 'Audit Checklist', die vollen Audit-Informationen und die drei
+  // Sektionen.
+  const isAuthority = (plan.plan_type || 'AUDIT') === 'AUTHORITY';
+
   let y = startY || 50;
 
   if (logoRow && logoRow.logo) {
@@ -487,13 +493,31 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   doc.text(subLine, 50, y);
   y += 25;
 
-  doc.fontSize(14).font('Helvetica-Bold').text('Audit Checklist', 50, y);
+  // Titel wie die Überschrift der Berichtsebene (authorityName() ohne Behörde,
+  // die eine Zeile darunter ihr eigenes Feld hat): ohne Datum sagt die
+  // Beschriftung genau das, statt eine Jahreszahl zu erfinden.
+  const visitDate = formatDateDE(line.audit_end_date);
+  const title = isAuthority
+    ? (visitDate ? `Behördenaudit ${visitDate}` : 'Behördenaudit (ohne Datum)')
+    : 'Audit Checklist';
+  doc.fontSize(14).font('Helvetica-Bold').text(title, 50, y);
   y += 25;
 
   doc.fontSize(10).font('Helvetica-Bold').text('Audit Information', 50, y);
   y += 16;
 
-  const infoItems = [
+  // Der Kopfblock eines Behördenberichts beschreibt den Besuch und nicht ein
+  // Themenbereichs-Audit: dieselben fünf Zeilen, die renderLineDetail() im
+  // Frontend zeichnet — die drei Rollen aus authorityLineDefaults() plus Datum
+  // und Ort. Der Ort ist hier `location` und nicht `audit_location`, weil der
+  // Kopfblock des Berichtsscreens genau diese Spalte schreibt.
+  const infoItems = isAuthority ? [
+    ['Behörde', line.auditor_team || 'LBA'],
+    ['Auditor', line.authority_auditor || ''],
+    ['Auditee', line.auditee || ''],
+    ['Datum', visitDate],
+    ['Ort', line.location || ''],
+  ] : [
     ['Auditplan', plan.year || ''],
     ['Audit Nr.', line.audit_no || ''],
     ['Thema', line.subject || ''],
@@ -522,8 +546,6 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
 
   // Ein Behördenaudit kennt keine Sektionen — dieselbe flache Findings-Tabelle
   // wie renderLineDetail() im UI. Interne Pläne drucken unverändert die drei Sektionen.
-  const isAuthority = (plan.plan_type || 'AUDIT') === 'AUTHORITY';
-
   y = isAuthority
     ? renderAuthorityFindings(doc, { line, checklistItems, startY: y, tableRight })
     : renderInternalSections(doc, { checklistItems, startY: y, tableRight });
