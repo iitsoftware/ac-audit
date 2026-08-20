@@ -1247,8 +1247,9 @@ dialog.dialog-wide {
 }
 
 /* .inline-form-label: Beschriftung ohne Eingabefeld — für abgeleitete, nur
-   angezeigte Werte wie die Nr. eines Findings. Ein <label> ohne Control wäre für
-   Screenreader eine Beschriftung ins Leere. */
+   angezeigte Werte wie den Status eines Findings. Ein <label> ohne Control wäre
+   für Screenreader eine Beschriftung ins Leere. (Die Nr. eines Findings ist
+   vergeben statt abgeleitet und deshalb ein echtes Feld.) */
 .inline-form-grid label,
 .inline-form-grid .inline-form-label {
   font-weight: 600;

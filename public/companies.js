@@ -1328,9 +1328,13 @@
   // "Offene Beanstandungen" war die letzte Stelle, an der das cap_item als eigenes
   // Objekt durchschlug. Ihre drei Zutaten sind hierher gewandert — der
   // ALLE/OPEN/CLOSED-Filter, die Fortschrittsanzeige und der Sammel-Export.
-  // Nr. ist wie das `Lfd.` der AC-SMS-Tabellen aus dem Zeilenindex der VOLLEN Liste
-  // abgeleitet und nie gespeichert: dieselbe Beanstandung trägt dieselbe Nummer in
-  // der Tabelle, im Breadcrumb und auf ihrem eigenen Screen, auch unter Filter.
+  // Nr. ist die VERGEBENE laufende Nummer des Findings (audit_checklist_item.
+  // sort_order) und nicht der Zeilenindex: dieselbe Beanstandung trägt dieselbe
+  // Nummer in der Tabelle, im Breadcrumb und auf ihrem eigenen Screen — auch
+  // unter Filter, und vor allem auch dann noch, wenn ein vorangehendes Finding
+  // gelöscht wird. Nach dem Löschen von Nr. 2 bleibt die Sequenz 1, 3 stehen:
+  // ein LBA-Schreiben verweist auf die Nummer, die im Bericht steht, also darf
+  // sie sich beim Löschen eines Nachbarn nicht verschieben.
   // Status, Fortschritt und Checkbox kommen aus findingCaps, das mit dem Bericht
   // geladen wird (capStatus() ist derselbe Helper und dieselbe completion_date-
   // Grenze wie überall). Ein Finding ohne Stufe hat kein CAP-Item und damit weder
@@ -1340,7 +1344,7 @@
     if (!section) return;
 
     const capOf = item => findingCaps.find(c => c.checklist_item_id === item.id) || null;
-    const rows = checklistItems.map((item, idx) => ({ item, idx, cap: capOf(item) }));
+    const rows = checklistItems.map(item => ({ item, cap: capOf(item) }));
 
     // Nenner sind die Findings mit Stufe: nur sie haben ein CAP-Item und können
     // überhaupt erledigt werden — ein Finding ohne Stufe wäre ein Rest, der nie
@@ -1383,13 +1387,13 @@
           <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-finding" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte Findings als PDF exportieren">${ICON_SHARE}</button></span></th>
           <th></th>
         </tr></thead><tbody>`;
-      filtered.forEach(({ item, idx, cap }) => {
+      filtered.forEach(({ item, cap }) => {
         const evalClass = item.evaluation ? `eval-${item.evaluation}` : '';
         // Der Beweis-Clip hängt an der Beschreibung statt in einer eigenen Spalte —
         // die Spaltenfolge der Findingliste gibt die Behörde vor.
         const clipIcon = item.evidence_count > 0 ? ` <span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
         html += `<tr class="ci-row-clickable" data-id="${escapeAttr(item.id)}">
-          <td>${idx + 1}</td>
+          <td>${item.sort_order ?? 0}</td>
           <td>${escapeHtml(item.regulation_ref)}</td>
           <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
           <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</td>
@@ -1408,8 +1412,12 @@
 
     // Die flache Findingliste zählt über alle Zeilen — die Sektionsansicht interner
     // Audits nur innerhalb ihrer Sektion, sonst kollidieren die sort_order-Werte.
+    // Gezählt wird max+1 und nicht length+1: seit die Nummer vergeben ist, bleibt
+    // nach dem Löschen von Nr. 2 die Sequenz 1, 3 stehen — length+1 träfe dort auf
+    // die schon vergebene 3 und stellte zwei Findings unter dieselbe Nummer.
+    const nextFindingNo = checklistItems.reduce((max, ci) => Math.max(max, ci.sort_order ?? 0), 0) + 1;
     document.getElementById('btn-add-finding').addEventListener('click', () => {
-      openChecklistItemDialog(null, 'THEORETICAL', checklistItems.length + 1);
+      openChecklistItemDialog(null, 'THEORETICAL', nextFindingNo);
     });
 
     section.querySelectorAll('[data-cap-filter]').forEach(btn => {
@@ -1427,9 +1435,9 @@
     section.querySelectorAll('.ci-row-clickable').forEach(row => {
       makeRowClickable(row, (e) => {
         if (e.target.closest('.pane-action-btn') || e.target.closest('.col-select')) return;
-        const idx = checklistItems.findIndex(ci => ci.id === row.dataset.id);
-        if (idx < 0) return;
-        pushNavSegment({ type: 'finding', id: checklistItems[idx].id, name: findingSegmentName(idx) });
+        const item = checklistItems.find(ci => ci.id === row.dataset.id);
+        if (!item) return;
+        pushNavSegment({ type: 'finding', id: item.id, name: findingSegmentName(item) });
       });
     });
 
@@ -1665,17 +1673,30 @@
   // gehören auf eine Seite. Hier steht das Gerüst — die Sektions-Container füllen
   // die Folge-Tasks.
   let currentFinding = null;      // audit_checklist_item
-  let currentFindingIndex = -1;   // Zeilenindex im Bericht → abgeleitete Beanstandung Nr.
   let currentFindingCap = null;   // cap_item der Beanstandung, null solange keine Stufe gesetzt ist
   let currentFindingActions = []; // cap_action-Zeilen des CAP-Items, in Server-Reihenfolge
 
-  // Die Nr. ist wie in renderLineDetail() aus dem Zeilenindex abgeleitet und nie
-  // gespeichert — sie bleibt beim Löschen lückenlos 1..n. Der Name steht an genau
-  // EINER Stelle, weil ihn der Zeilenklick, das Umbenennen in loadFinding() und die
-  // Überschrift des Screens gemeinsam tragen: das Segment heißt wie die Liste, aus
-  // der es aufgeschlagen wird, und die heißt Findings.
-  function findingSegmentName(idx) {
-    return `Finding ${idx + 1}`;
+  // Die Nr. ist die vergebene laufende Nummer (sort_order) und nicht mehr der
+  // Zeilenindex — genau wie in der Findingliste, aus der dieses Segment
+  // aufgeschlagen wird. Der Name steht an genau EINER Stelle, weil ihn der
+  // Zeilenklick, das Umbenennen in loadFinding()/saveFindingFields() und die
+  // Überschrift des Screens gemeinsam tragen: das Segment heißt wie die Zeile,
+  // aus der es kommt, und deren Liste heißt Findings.
+  function findingSegmentName(item) {
+    return `Finding ${item.sort_order ?? 0}`;
+  }
+
+  // Nummer im Breadcrumb nachziehen: der Sprung aus der Tabelle kennt sie zwar,
+  // ein Reload auf dem gespeicherten Pfad aber nicht — und eine in den Stammdaten
+  // geänderte Nummer benennt das Segment ohnehin um.
+  function renameFindingSegment(item) {
+    const seg = navPath[navPath.length - 1];
+    if (!seg || seg.type !== 'finding' || seg.id !== item.id) return;
+    const name = findingSegmentName(item);
+    if (seg.name === name) return;
+    seg.name = name;
+    saveNav();
+    paintBreadcrumb();
   }
 
   // Der Breadcrumb der Ebene ist Abteilung → Bericht → Beanstandung; die Abteilung
@@ -1691,24 +1712,22 @@
 
   async function loadFinding(findingId) {
     currentFinding = null;
-    currentFindingIndex = -1;
     currentFindingCap = null;
     currentFindingActions = [];
 
     // Eine Beanstandung hängt immer unter ihrem Bericht, dessen Segment im
     // persistierten Nav-Pfad steht — so findet auch ein Reload direkt auf dieser
-    // Ebene die Zeile wieder. Die Liste des Berichts wird ohnehin gebraucht: die
-    // Nr. des Findings ist aus dem Zeilenindex abgeleitet.
+    // Ebene die Zeile wieder. Die Liste des Berichts wird ohnehin gebraucht: aus
+    // ihr kommt die Zeile selbst, und mit ihr die Frist aus der Listen-Route.
     const lineSeg = [...navPath].reverse().find(s => s.type === 'audit-plan-line');
     if (!lineSeg) return;
 
     if (!currentLine || currentLine.id !== lineSeg.id) await loadLineData(lineSeg.id);
     if (!currentLine) return;
 
-    const idx = checklistItems.findIndex(ci => ci.id === findingId);
-    if (idx < 0) return;
-    currentFinding = checklistItems[idx];
-    currentFindingIndex = idx;
+    const item = checklistItems.find(ci => ci.id === findingId);
+    if (!item) return;
+    currentFinding = item;
 
     // Das CAP-Item hängt am Checklisten-Eintrag und kommt aus derselben Liste, aus
     // der die Findingliste ihren Status zieht — loadLineData() lädt sie mit dem
@@ -1723,15 +1742,7 @@
       }
     }
 
-    // Nummer im Breadcrumb nachziehen: der Sprung aus der Tabelle kennt sie zwar,
-    // ein Reload auf dem gespeicherten Pfad aber nicht — und nach dem Löschen eines
-    // vorangehenden Findings stimmt sie ohnehin neu.
-    const seg = navPath[navPath.length - 1];
-    if (seg && seg.type === 'finding' && seg.id === findingId && seg.name !== findingSegmentName(idx)) {
-      seg.name = findingSegmentName(idx);
-      saveNav();
-      paintBreadcrumb();
-    }
+    renameFindingSegment(item);
   }
 
   function renderFindingDetail() {
@@ -1753,7 +1764,7 @@
     // der Button dann sichtbar und deaktiviert, damit der Grund dort steht, wo
     // man ihn sucht, genau wie in den sprechenden Leerzuständen der Sektionen.
     const shareTitle = cap ? 'Finding als PDF exportieren' : 'Kein PDF — das Finding hat noch kein Level';
-    headerEl.innerHTML = `<h2>${escapeHtml(findingSegmentName(currentFindingIndex))}</h2>
+    headerEl.innerHTML = `<h2>${escapeHtml(findingSegmentName(item))}</h2>
       <span id="finding-share"><button class="btn-icon" id="btn-finding-export" title="${shareTitle}" aria-label="${shareTitle}"${cap ? '' : ' disabled'}>${ICON_SHARE}</button></span>`;
     if (cap) {
       document.getElementById('btn-finding-export').addEventListener('click', () => {
@@ -1780,10 +1791,13 @@
     // Überschrift des Screens trägt den Namen bereits, und die Spalten der
     // Findingliste stehen hier ohne den Zusatz, den sie dort ebenfalls nicht mehr
     // tragen — Nr. | Referenz Paragraph | Beschreibung | Level | Frist.
+    // Die Nr. ist vergeben und nicht abgeleitet, also ist sie hier ein echtes
+    // Eingabefeld: sie geht als `sort_order` mit und trägt damit die Nummer, unter
+    // der die Behörde das Finding in ihrem Bericht führt.
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Stammdaten</h3></div>
       <div id="finding-basics" class="inline-form-grid">
-        <span class="inline-form-label">Nr.</span><span>${currentFindingIndex + 1}</span>
+        <label for="fd-sort-order">Nr.</label><input class="inline-input finding-field" id="fd-sort-order" type="number" min="0" step="1" value="${escapeAttr(String(item.sort_order ?? 0))}">
         <label for="fd-regulation-ref">Referenz Paragraph</label><input class="inline-input finding-field" id="fd-regulation-ref" value="${escapeAttr(item.regulation_ref || '')}">
         <label for="fd-compliance-check">Beschreibung</label><textarea class="inline-input inline-textarea finding-field" id="fd-compliance-check" rows="4">${escapeHtml(item.compliance_check || '')}</textarea>
         <label for="fd-evaluation">Level</label><select class="inline-input finding-field" id="fd-evaluation">${evalOptionsHtml}</select>
@@ -2086,18 +2100,24 @@
 
   // Auto-Save auf Blur bzw. change wie auf der Bericht- und der CAP-Ebene.
   // PUT /api/checklist-items/:id ersetzt die Zeile vollständig, deshalb reisen
-  // Sektion, Sortierung, Dokument-Ref. und Kommentar unverändert mit — dieser
-  // Screen zeigt sie nicht, darf sie aber auch nicht leeren.
+  // Sektion, Dokument-Ref. und Kommentar unverändert mit — dieser Screen zeigt sie
+  // nicht, darf sie aber auch nicht leeren. Die Sortierung ist aus dieser
+  // Durchreiche herausgewandert: sie ist die Nr. des Findings und wird hier
+  // bearbeitet.
   async function saveFindingFields() {
     const item = currentFinding;
     if (!item) return;
     const deadlineInput = document.getElementById('fd-deadline');
     const deadlineIso = parseDateDE(deadlineInput.value);
     if (deadlineIso === undefined) return toast('Frist bitte im Format TT.MM.JJJJ eingeben', 'error');
+    // Eine leere oder krumme Nr. würde als 0 durchschreiben und die vergebene
+    // Nummer stillschweigend verlieren — dieselbe Behandlung wie eine unlesbare Frist.
+    const sortOrder = parseInt(document.getElementById('fd-sort-order').value, 10);
+    if (!Number.isInteger(sortOrder) || sortOrder < 0) return toast('Nr. bitte als ganze Zahl eingeben', 'error');
 
     const data = {
       section: item.section || 'THEORETICAL',
-      sort_order: item.sort_order || 0,
+      sort_order: sortOrder,
       regulation_ref: document.getElementById('fd-regulation-ref').value.trim(),
       compliance_check: document.getElementById('fd-compliance-check').value.trim(),
       evaluation: document.getElementById('fd-evaluation').value,
@@ -2132,6 +2152,12 @@
       // currentFinding ist dasselbe Objekt wie in checklistItems — die Beanstandungs-
       // tabelle des Berichts zeigt beim Zurücknavigieren denselben Stand.
       Object.assign(item, saved);
+      // Der Name des Screens IST die Nummer — eine geänderte Nr. zieht Überschrift
+      // und Breadcrumb sofort nach, statt bis zum nächsten Laden die alte zu zeigen.
+      // Gezeichnet wird nur der Text, damit der Fokus beim Durchtabben bleibt.
+      const h2 = headerEl.querySelector('h2');
+      if (h2) h2.textContent = findingSegmentName(item);
+      renameFindingSegment(item);
       if (deadlineIso) {
         item.cap_deadline = deadlineIso;
         // Dieselbe Frist steht am CAP-Item, das die Maßnahme-Sektion vollständig
