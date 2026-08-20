@@ -141,9 +141,15 @@ router.put('/api/audit-plan-lines/:id', (req, res) => {
   const existing = stmts.getAuditPlanLine.get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Audit plan line not found' });
   const b = req.body;
+  // Der zuständige Bearbeiter der Behörde hat noch kein Eingabefeld: der Kopfblock
+  // der Berichtsebene zeigt Behörde, Datum und Ort. Ein ausgelassenes Feld behält
+  // deshalb seinen Wert, statt wie die übrigen Spalten auf '' zu fallen — sonst
+  // löschte das erste Speichern die Vorbelegung aus authorityLineDefaults(). Ein
+  // ausdrücklich mitgeschickter Wert (auch der leere) schreibt dagegen durch.
+  const authorityAuditor = b.authority_auditor ?? existing.authority_auditor ?? '';
   stmts.updateAuditPlanLine.run(
     b.sort_order || 0, b.subject || '', b.regulations || '', b.location || '', b.planned_window || '', b.signature || '',
-    b.auditor_team || '', b.auditee || '',
+    b.auditor_team || '', authorityAuditor, b.auditee || '',
     b.audit_start_date || null, b.audit_end_date || null, b.audit_location || '',
     b.document_ref || '', b.document_iss_rev || '', b.document_rev_date || null,
     b.recommendation || '',
@@ -279,6 +285,7 @@ router.post('/api/audit-plans/:id/import-audits', (req, res) => {
           line.planned_window || '',
           line.signature || '',
           meta.auditor_team || line.auditor_team || '',
+          line.authority_auditor || '',
           meta.auditee || line.auditee || '',
           meta.audit_start_date || line.audit_start_date || null,
           meta.audit_end_date || line.audit_end_date || null,

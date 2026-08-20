@@ -307,7 +307,7 @@ router.post('/api/departments/:departmentId/import-audit-plan',
           if (line.signature) {
             stmts.updateAuditPlanLine.run(
               line.sortOrder, line.subject, line.regulations, '', line.plannedWindow, line.signature,
-              '', '', null, null, '', '', '', null, '',
+              '', '', '', null, null, '', '', '', null, '',
               lineId
             );
           }

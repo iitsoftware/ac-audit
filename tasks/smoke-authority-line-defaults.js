@@ -100,7 +100,24 @@ const roles = line => `${line.auditor_team} | ${line.authority_auditor} | ${line
     tplLine.subject === 'Themenbereich' && tplLine.auditor_team === '' && tplLine.authority_auditor === '',
     roles(tplLine));
 
-  // ── 5. Papierkorb: löschen und wiederherstellen verliert den Bearbeiter nicht ──
+  // ── 5. PUT der Berichtsebene: der Bearbeiter überlebt jedes Speichern ──
+  // Genau der Body, den saveLineFields() des Kopfblocks schickt — Behörde, Datum
+  // und Ort, kein authority_auditor, weil dafür kein Feld existiert.
+  const saved = (await req('PUT', `/api/audit-plan-lines/${line.id}`, {
+    subject: '', regulations: '', location: 'Braunschweig', planned_window: '',
+    auditor_team: 'LBA', auditee: 'Petra Prüfer',
+    audit_start_date: null, audit_end_date: '2026-03-04', audit_location: '',
+    document_ref: '', document_iss_rev: '', document_rev_date: null, recommendation: ''
+  })).payload;
+  check('PUT ohne authority_auditor behält den Bearbeiter',
+    saved.authority_auditor === 'Muster' && saved.location === 'Braunschweig', roles(saved));
+
+  const overwritten = (await req('PUT', `/api/audit-plan-lines/${line.id}`,
+    { auditor_team: 'LBA', authority_auditor: 'Neuer Bearbeiter', auditee: 'Petra Prüfer' })).payload;
+  check('  → ein mitgeschickter Bearbeiter schreibt durch',
+    overwritten.authority_auditor === 'Neuer Bearbeiter', roles(overwritten));
+
+  // ── 6. Papierkorb: löschen und wiederherstellen verliert den Bearbeiter nicht ──
   await req('DELETE', `/api/audit-plan-lines/${manual.id}`);
   const trash = (await req('GET', '/api/trash?limit=50')).payload;
   const entry = (trash.items || trash).find(t => t.entity_id === manual.id);

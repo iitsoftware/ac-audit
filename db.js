@@ -152,9 +152,14 @@ const stmts = {
       document_ref, document_iss_rev, document_rev_date, recommendation, audit_status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
+  // authority_auditor steht hier an derselben Stelle wie in LINE_FIELDS und im
+  // INSERT — die Spalte muss durch jeden Schreibweg laufen, sonst wäre sie zwar
+  // vorbelegt, aber kein Aufrufer könnte sie je ändern. Weil das Statement die
+  // ganze Zeile ersetzt und keine Oberfläche das Feld heute rendert, reicht der
+  // Aufrufer den gespeicherten Wert durch, statt ihn auf '' zu räumen.
   updateAuditPlanLine: db.prepare(
     `UPDATE audit_plan_line SET sort_order = ?, subject = ?, regulations = ?, location = ?, planned_window = ?, signature = ?,
-      auditor_team = ?, auditee = ?,
+      auditor_team = ?, authority_auditor = ?, auditee = ?,
       audit_start_date = ?, audit_end_date = ?, audit_location = ?,
       document_ref = ?, document_iss_rev = ?, document_rev_date = ?, recommendation = ?,
       updated_at = datetime('now')
