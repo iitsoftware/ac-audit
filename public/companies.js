@@ -1082,9 +1082,14 @@
     let html = '<div class="audit-detail">';
 
     // ── Kopfblock ──
-    // Beim Behördenaudit ein einziger Block über den Besuch: Behörde, Datum, Ort.
-    // Der Themenbereich-Kopf (Finding/Vorschriften) und der Block
-    // "Audit-Informationen" (Auditee, Audit Ort, Dokument Ref., Iss/Rev, Rev Datum,
+    // Beim Behördenaudit ein einziger Block über den Besuch, in den drei Rollen
+    // von authorityLineDefaults(): Behörde (auditor_team, Default 'LBA'), ihr
+    // zuständiger Bearbeiter (authority_auditor) und der Auditee (auditee, der QM
+    // der Abteilung), dazu Datum und Ort. Genau die drei belegt die Anlage vor —
+    // eine vorbelegte Spalte, die keine Oberfläche zeigt, wäre eine Vorbelegung
+    // und sonst nichts.
+    // Der Themenbereich-Kopf (Finding/Vorschriften) und der Rest des Blocks
+    // "Audit-Informationen" (Audit Ort, Dokument Ref., Iss/Rev, Rev Datum,
     // Empfehlung) sind interne Auditfelder — sie beschreiben ein Themenbereichs-
     // audit, nicht einen Behördenbesuch, und verschwinden deshalb von der
     // Oberfläche. In der DB bleiben sie stehen und reisen in saveLineFields()
@@ -1097,6 +1102,8 @@
         <div class="audit-section-header"><h3 id="ld-authority-heading">${escapeHtml(authorityName(authorityInfo.date, ''))}</h3></div>
         <div class="inline-form-grid">
           <label for="ld-auditor-team">Behörde</label><input class="inline-input" id="ld-auditor-team" value="${escapeHtml(currentLine.auditor_team || '')}">
+          <label for="ld-authority-auditor">Auditor</label><input class="inline-input" id="ld-authority-auditor" value="${escapeHtml(currentLine.authority_auditor || '')}">
+          <label for="ld-auditee">Auditee</label><input class="inline-input" id="ld-auditee" value="${escapeHtml(currentLine.auditee || '')}">
           <label for="ld-authority-date">Datum</label><input class="inline-input" id="ld-authority-date" value="${escapeHtml(formatDateDE(authorityInfo.date))}" placeholder="TT.MM.JJJJ">
           <label for="ld-location">Ort</label><input class="inline-input" id="ld-location" value="${escapeHtml(currentLine.location || '')}">
         </div>
@@ -1215,7 +1222,8 @@
       // Besuchsdatums (performed_date → audit_end_date → audit_start_date) als
       // erste gefüllte findet — performed_date schreibt keine Oberfläche. Kachel,
       // Kachelsortierung und die Überschriften hier zeigen dadurch das, was hier
-      // eingetippt wurde; audit_start_date bleibt wie Auditee unangetastet stehen.
+      // eingetippt wurde; audit_start_date bleibt unangetastet stehen, damit ein
+      // mehrtägiger Altbestandsbesuch seinen Beginn nicht verliert.
       const startIso = isAuthorityLine
         ? (currentLine.audit_start_date || null)
         : parseDateDE(document.getElementById('ld-audit-start-date').value);
@@ -1232,6 +1240,11 @@
         location: fieldVal('ld-location', currentLine.location),
         planned_window: (document.getElementById('ld-planned-window') || {}).value || '',
         auditor_team: fieldVal('ld-auditor-team', currentLine.auditor_team),
+        // Nur der Behördenbericht rendert den Bearbeiter; auf einem internen Plan
+        // reicht fieldVal() den gespeicherten Wert durch — dasselbe "ausgeblendet
+        // heißt mitgesendet" wie bei jedem anderen Feld dieser Zeile, und damit
+        // eine Regel statt einer Ausnahme für die eine Spalte.
+        authority_auditor: fieldVal('ld-authority-auditor', currentLine.authority_auditor),
         auditee: fieldVal('ld-auditee', currentLine.auditee),
         audit_start_date: startIso,
         audit_end_date: endIso,
