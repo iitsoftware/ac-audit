@@ -3,7 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const XLSX = require('xlsx');
 const PDFDocument = require('pdfkit');
 const { db, stmts } = require('../db');
-const { logAction } = require('../services/audit-log');
+const { logAction, formatDateDE } = require('../services/audit-log');
 const { calcCapDeadline } = require('../services/cap-deadlines');
 const { snapshotAuditPlanLine } = require('../services/trash');
 const { authorityLineDefaults } = require('../services/audit-lines');
@@ -119,6 +119,28 @@ function authorityPdfData(line, plan, dept, company) {
   return { caps, deadlines, signer };
 }
 
+// Fußzeile des Behördenblatts: sie benennt den Besuch, zu dem das Blatt gehört,
+// wie CM-025 und CM-002 ihre Formularreferenz benennen. Zwei ausdrücklich in Kauf
+// genommene Folgen:
+//   - addPdfFooter() läuft über bufferedPageRange() und beschriftet ALLE Seiten
+//     gleich, die eingebetteten CM-002-Seiten tragen hier also diesen Text statt
+//     'CM-002, Grundursachenanalyse, Rev. 0, 28.08.2024'. Das ist gewollt — hier
+//     sind sie Seiten eines Behördenberichts und keine eigenständigen Formulare;
+//     die Formularreferenz bleibt dem Einzeldownload
+//     GET /api/cap-items/:id/five-why/pdf, der sein eigenes doc hat. Eine Fußzeile
+//     je Seitenbereich wäre ein zweiter addPdfFooter()-Vertrag für diesen einen
+//     Bogen — mehr, als der Fall wert ist.
+//   - Nur die Einzelroute ruft das hier: eine Mehrfachauswahl hat keinen EINEN
+//     Besuch, dessen Behörde und Datum dort stehen könnten, die Batch-Route behält
+//     also den Default 'Erstellt mit ac-audit'.
+// Ohne Datum endet das Label bei der Behörde, statt ein leeres 'am ' zu drucken.
+// Interne Pläne liefern null und bleiben beim Default.
+function authorityFooterLabel(line, plan) {
+  if ((plan.plan_type || 'AUDIT') !== 'AUTHORITY') return null;
+  const date = formatDateDE(line.audit_end_date);
+  return `Behördenaudit ${line.auditor_team || 'LBA'}${date ? ` am ${date}` : ''}`;
+}
+
 // Multi-select Audit Checklist PDF (must be before :id routes)
 router.get('/api/audit-plan-lines/pdf', (req, res) => {
   const ids = (req.query.ids || '').split(',').filter(Boolean);
@@ -182,7 +204,8 @@ router.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
     ...authorityPdfData(line, plan, dept, company),
     startY: 50,
   });
-  addPdfFooter(doc);
+  const footerLabel = authorityFooterLabel(line, plan);
+  addPdfFooter(doc, footerLabel ? { label: footerLabel } : {});
   doc.end();
 });
 
