@@ -1378,12 +1378,17 @@
     if (filtered.length === 0) {
       html += `<div class="empty-state-inline" style="padding:16px 0">${rows.length === 0 ? 'Keine Findings' : 'Keine Findings in dieser Auswahl'}</div>`;
     } else {
+      // `Findingbericht Nr.` ist die Bezugsnummer, unter der die Behörde das Finding
+      // in ihrem eigenen Bericht führt — gespeichert im vorhandenen `document_ref`
+      // des Prüfpunkts. Sie steht neben der eigenen `Nr.` (der vergebenen
+      // `sort_order`) und ersetzt sie nicht: die eine zählt den Bericht dieser App
+      // durch, die andere zitiert das Schreiben der Behörde.
       html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
         <colgroup>
-          <col style="width:56px"><col style="width:16%"><col style="width:auto"><col style="width:130px"><col style="width:100px"><col style="width:120px"><col style="width:56px"><col style="width:56px">
+          <col style="width:56px"><col style="width:130px"><col style="width:16%"><col style="width:auto"><col style="width:130px"><col style="width:100px"><col style="width:120px"><col style="width:56px"><col style="width:56px">
         </colgroup>
         <thead><tr>
-          <th>Nr.</th><th>Referenz Paragraph</th><th>Beschreibung</th><th>Level</th><th>Frist</th><th>Status</th>
+          <th>Nr.</th><th>Findingbericht Nr.</th><th>Referenz Paragraph</th><th>Beschreibung</th><th>Level</th><th>Frist</th><th>Status</th>
           <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-finding" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte Findings als PDF exportieren">${ICON_SHARE}</button></span></th>
           <th></th>
         </tr></thead><tbody>`;
@@ -1394,6 +1399,7 @@
         const clipIcon = item.evidence_count > 0 ? ` <span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
         html += `<tr class="ci-row-clickable" data-id="${escapeAttr(item.id)}">
           <td>${item.sort_order ?? 0}</td>
+          <td>${escapeHtml(item.document_ref || '')}</td>
           <td>${escapeHtml(item.regulation_ref)}</td>
           <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
           <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</td>
@@ -1564,6 +1570,12 @@
       isAuthorityPlan ? 'Beschreibung' : 'Compliance Check';
     document.querySelector('label[for="ci-form-evaluation"]').textContent =
       isAuthorityPlan ? 'Level' : 'Bewertung';
+    // `document_ref` ist beim Behördenaudit die Bezugsnummer des LBA-Findingberichts —
+    // dasselbe Feld, dieselbe Spalte, nur der Name, unter dem die Behörde es führt.
+    // So trägt ein frisch angelegtes Finding die Nummer sofort, statt sie erst auf
+    // dem Finding-Screen nachtragen zu müssen.
+    document.querySelector('label[for="ci-form-doc-ref"]').textContent =
+      isAuthorityPlan ? 'Findingbericht Nr.' : 'Dokument Ref.';
     // Ein Behördenaudit hat keine Sektionen: jedes Finding wird als 'THEORETICAL'
     // gespeichert, damit Sortier- und Speicherlogik unverändert bleiben. Sektion und
     // Sortierung wären dort ohne Bedeutung, deshalb verschwindet ihre ganze Zeile —
@@ -1790,14 +1802,16 @@
     // Die Sektion heißt Stammdaten und nicht noch einmal "Finding": die
     // Überschrift des Screens trägt den Namen bereits, und die Spalten der
     // Findingliste stehen hier ohne den Zusatz, den sie dort ebenfalls nicht mehr
-    // tragen — Nr. | Referenz Paragraph | Beschreibung | Level | Frist.
+    // tragen — Nr. | Findingbericht Nr. | Referenz Paragraph | Beschreibung | Level | Frist.
     // Die Nr. ist vergeben und nicht abgeleitet, also ist sie hier ein echtes
-    // Eingabefeld: sie geht als `sort_order` mit und trägt damit die Nummer, unter
-    // der die Behörde das Finding in ihrem Bericht führt.
+    // Eingabefeld: sie geht als `sort_order` mit. Die Findingbericht Nr. daneben ist
+    // die Bezugsnummer aus dem Schreiben der Behörde und geht als `document_ref` mit
+    // — sie ist damit aus der Durchreiche-Liste in die bearbeiteten Felder gewandert.
     html += `<div class="audit-section">
       <div class="audit-section-header"><h3>Stammdaten</h3></div>
       <div id="finding-basics" class="inline-form-grid">
         <label for="fd-sort-order">Nr.</label><input class="inline-input finding-field" id="fd-sort-order" type="number" min="0" step="1" value="${escapeAttr(String(item.sort_order ?? 0))}">
+        <label for="fd-document-ref">Findingbericht Nr.</label><input class="inline-input finding-field" id="fd-document-ref" value="${escapeAttr(item.document_ref || '')}">
         <label for="fd-regulation-ref">Referenz Paragraph</label><input class="inline-input finding-field" id="fd-regulation-ref" value="${escapeAttr(item.regulation_ref || '')}">
         <label for="fd-compliance-check">Beschreibung</label><textarea class="inline-input inline-textarea finding-field" id="fd-compliance-check" rows="4">${escapeHtml(item.compliance_check || '')}</textarea>
         <label for="fd-evaluation">Level</label><select class="inline-input finding-field" id="fd-evaluation">${evalOptionsHtml}</select>
@@ -2100,10 +2114,10 @@
 
   // Auto-Save auf Blur bzw. change wie auf der Bericht- und der CAP-Ebene.
   // PUT /api/checklist-items/:id ersetzt die Zeile vollständig, deshalb reisen
-  // Sektion, Dokument-Ref. und Kommentar unverändert mit — dieser Screen zeigt sie
-  // nicht, darf sie aber auch nicht leeren. Die Sortierung ist aus dieser
-  // Durchreiche herausgewandert: sie ist die Nr. des Findings und wird hier
-  // bearbeitet.
+  // Sektion und Kommentar unverändert mit — dieser Screen zeigt sie nicht, darf sie
+  // aber auch nicht leeren. Sortierung und Dokument-Ref. sind aus dieser Durchreiche
+  // herausgewandert: sie sind die Nr. und die Findingbericht Nr. des Findings und
+  // werden hier bearbeitet.
   async function saveFindingFields() {
     const item = currentFinding;
     if (!item) return;
@@ -2122,7 +2136,7 @@
       compliance_check: document.getElementById('fd-compliance-check').value.trim(),
       evaluation: document.getElementById('fd-evaluation').value,
       auditor_comment: item.auditor_comment || '',
-      document_ref: item.document_ref || '',
+      document_ref: document.getElementById('fd-document-ref').value.trim(),
     };
     // Die Behörde gibt ihre Frist vor — sie geht als `cap_deadline` (ISO) mit und
     // legt das CAP-Item damit an bzw. überschreibt dessen Frist. Ein leeres Feld
