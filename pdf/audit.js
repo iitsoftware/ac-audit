@@ -344,9 +344,12 @@ function renderInternalSections(doc, { checklistItems, startY, tableRight }) {
 
 // ── PDF Helper: flache Findings-Tabelle eines Behördenaudits ─────────
 // Ein Behördenaudit kennt keine Sektionen: die Behörde übergibt eine flache
-// Findings-Liste in der Spaltenfolge ihres Berichts. Spiegelt renderLineDetail()
-// in public/companies.js — die Nr. ist wie dort aus dem Zeilenindex abgeleitet
-// und nie gespeichert, damit sie beim Löschen lückenlos 1..n bleibt.
+// Findings-Liste in der Spaltenfolge ihres Berichts. Spiegelt renderFindingsSection()
+// in public/companies.js — die Nr. ist wie dort die VERGEBENE laufende Nummer
+// (audit_checklist_item.sort_order) und nicht der Zeilenindex: ein LBA-Schreiben
+// verweist auf die Nummer, die im Bericht steht, also muss dasselbe Finding auf
+// dem Papier dieselbe Nummer tragen wie auf dem Schirm — samt der Lücke, die nach
+// dem Löschen eines vorangehenden Findings stehen bleibt.
 // Gibt das neue y zurück, wie es die Sektionsschleife interner Pläne hinterlässt.
 function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight }) {
   let y = startY;
@@ -435,7 +438,9 @@ function renderAuthorityFindings(doc, { line, checklistItems, startY, tableRight
       doc.moveTo(colX[c], y).lineTo(colX[c], y + rowH).stroke();
     }
 
-    doc.text(String(i + 1), colX[0] + 3, y + 3, { width: colW[0] - 6 });
+    // `?? 0` wie in der Findingliste: eine ausdrückliche 0 ist eine Nummer, nur
+    // ein fehlender Wert (Altbestand) fällt darauf zurück.
+    doc.text(String(item.sort_order ?? 0), colX[0] + 3, y + 3, { width: colW[0] - 6 });
     cellText(item).forEach((t, c) => doc.text(t, colX[c + 1] + 3, y + 3, { width: colW[c + 1] - 6 }));
 
     y += rowH;
