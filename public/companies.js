@@ -1383,12 +1383,15 @@
       // des Prüfpunkts. Sie steht neben der eigenen `Nr.` (der vergebenen
       // `sort_order`) und ersetzt sie nicht: die eine zählt den Bericht dieser App
       // durch, die andere zitiert das Schreiben der Behörde.
+      // Die Beschreibung steht direkt hinter der `Nr.`: sie ist das, woran der Leser
+      // eine Zeile wiedererkennt, und die beiden Bezugsnummern dahinter sind ihre
+      // Fundstelle. Sie behält ihre `auto`-Breite, die festen Spalten rücken nach.
       html += `<div class="lines-table-wrap"><table class="lines-table checklist-table">
         <colgroup>
-          <col style="width:56px"><col style="width:130px"><col style="width:16%"><col style="width:auto"><col style="width:130px"><col style="width:100px"><col style="width:120px"><col style="width:56px"><col style="width:56px">
+          <col style="width:56px"><col style="width:auto"><col style="width:130px"><col style="width:16%"><col style="width:130px"><col style="width:100px"><col style="width:120px"><col style="width:56px"><col style="width:56px">
         </colgroup>
         <thead><tr>
-          <th>Nr.</th><th>Findingbericht Nr.</th><th>Referenz Paragraph</th><th>Beschreibung</th><th>Level</th><th>Frist</th><th>Status</th>
+          <th>Nr.</th><th>Beschreibung</th><th>Findingbericht Nr.</th><th>Referenz Paragraph</th><th>Level</th><th>Frist</th><th>Status</th>
           <th class="col-select"><span class="select-header"><label><input type="checkbox" class="select-all-finding" title="Alle ausw\u00e4hlen"><span class="sr-only">Alle ausw\u00e4hlen</span></label><button type="button" class="icon-btn select-share-btn" aria-label="Ausgew\u00e4hlte Findings als PDF exportieren">${ICON_SHARE}</button></span></th>
           <th></th>
         </tr></thead><tbody>`;
@@ -1399,9 +1402,9 @@
         const clipIcon = item.evidence_count > 0 ? ` <span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
         html += `<tr class="ci-row-clickable" data-id="${escapeAttr(item.id)}">
           <td>${item.sort_order ?? 0}</td>
+          <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
           <td>${escapeHtml(item.document_ref || '')}</td>
           <td>${escapeHtml(item.regulation_ref)}</td>
-          <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
           <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</td>
           <td>${escapeHtml(formatDateDE(item.cap_deadline))}</td>
           <td>${cap ? `<span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span>` : ''}</td>
@@ -1802,7 +1805,11 @@
     // Die Sektion heißt Stammdaten und nicht noch einmal "Finding": die
     // Überschrift des Screens trägt den Namen bereits, und die Spalten der
     // Findingliste stehen hier ohne den Zusatz, den sie dort ebenfalls nicht mehr
-    // tragen — Nr. | Findingbericht Nr. | Referenz Paragraph | Beschreibung | Level | Frist.
+    // tragen — dieselben sechs Felder Nr., Findingbericht Nr., Referenz Paragraph,
+    // Beschreibung, Level und Frist. Ihre Reihenfolge ist bewusst die des Formulars
+    // und nicht die der Tabelle: die Liste zieht die Beschreibung nach vorn, weil man
+    // an ihr eine Zeile wiedererkennt, das aufgestellte Formular lässt die mehrzeilige
+    // Beschreibung hinter den einzeiligen Bezugsnummern stehen.
     // Die Nr. ist vergeben und nicht abgeleitet, also ist sie hier ein echtes
     // Eingabefeld: sie geht als `sort_order` mit. Die Findingbericht Nr. daneben ist
     // die Bezugsnummer aus dem Schreiben der Behörde und geht als `document_ref` mit
