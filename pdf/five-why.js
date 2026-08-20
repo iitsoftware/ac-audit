@@ -14,6 +14,12 @@ const TITLE = 'GRUNDURSACHENANALYSE / ROOT CAUSE ANALYSIS';
 // Die Frageüberschriften des CM-002-Formulars sind Konstanten des Renderers, keine
 // Spalten: five_why bleibt why1..why5 + root_cause (schema.sql), das Formular
 // beschriftet die fünf Stufen. Deshalb kostet dieses PDF keine Migration.
+// Zweite Fundstelle derselben fünf Titel: fiveWhyHtml() in public/companies.js
+// beschriftet die Eingabefelder der Ursachenanalyse damit. Frontend und Renderer
+// teilen sich kein Modul, die Liste steht also zwangsläufig zweimal — wie die
+// Stufen-Klartexte bei evalLabel() (public/companies.js) und capEvalLabel()
+// (pdf/cap.js). Wer hier ein Titelwort ändert, ändert es dort mit: Schirm und
+// Blatt beschriften dasselbe Feld.
 const WHY_STEPS = [
   { field: 'why1', title: 'Auswirkung' },
   { field: 'why2', title: 'Direkte Ursache' },
