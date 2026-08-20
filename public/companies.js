@@ -1481,9 +1481,9 @@
   // Die Zusammenfassung eines Beh\u00f6rdenaudits kennt nur die Stufen, die auch im
   // Auswahlmen\u00fc stehen (authorityEvalValues): C/NA sind kein Urteil einer
   // Findingliste, L3 dagegen vergibt die Beh\u00f6rde und z\u00e4hlt deshalb als vierte
-  // Spalte mit. (Die Z\u00e4hlzeile des Audit-Line-PDF in pdf/audit.js zieht die
-  // Grenze noch bei L2 \u2014 sie geh\u00f6rt nachgezogen, liegt aber au\u00dferhalb dieses
-  // Frontend-Schnitts.) Beschriftung ist das Ganze: gez\u00e4hlt, gef\u00e4rbt und
+  // Spalte mit. Z\u00e4hlzeile und Legende des Audit-Line-PDF (pdf/audit.js) ziehen
+  // dieselbe Grenze und drucken dieselben vier Stufen, Oberfl\u00e4che und Dokument
+  // z\u00e4hlen also exakt dasselbe. Beschriftung ist das Ganze: gez\u00e4hlt, gef\u00e4rbt und
   // gespeichert wird weiter der Rohwert O/L1/L2/L3, die Badge-Klasse bleibt
   // `eval-${key}` und evalHighlight, die Eval-Statistik und die CAP-Anlage lesen
   // unver\u00e4ndert weiter.
