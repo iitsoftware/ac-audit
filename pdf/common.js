@@ -29,12 +29,15 @@ function addPdfFooter(doc, opts = {}) {
   }
 }
 
-// Beschriftung, kein Datenmodell: gespeichert bleibt 'O'/'L1'/'L2', gedruckt wird bei
+// Beschriftung, kein Datenmodell: gespeichert bleibt 'O'/'L1'/'L2'/'L3', gedruckt wird bei
 // einem Behördenaudit der Klartext des echten LBA-Berichts. Spiegelt authorityEvalLabels /
 // evalLabel() im Frontend — die Farbzuordnung liest weiter den Rohwert.
-// Steht hier, weil sowohl das CAP-PDF (pdf/cap.js) als auch die Beanstandungstabelle des
+// Steht hier, weil sowohl das CAP-PDF (pdf/cap.js) als auch die Findingtabelle des
 // Audit-Line-PDFs (pdf/audit.js) dieselbe Beschriftung drucken müssen.
-const AUTHORITY_EVAL_LABELS = { O: 'Bemerkung', L1: 'Level 1', L2: 'Level 2' };
+// 'L3' steht im Auswahlmenü eines Behördenaudits nicht zur Wahl (authorityEvalValues), kann
+// aber als Altbestand an einem Finding hängen — ohne Eintrag druckte das Dokument dort den
+// Rohwert 'L3' neben ausgeschriebenen Nachbarn.
+const AUTHORITY_EVAL_LABELS = { O: 'Bemerkung', L1: 'Level 1', L2: 'Level 2', L3: 'Level 3' };
 
 function authorityEvalLabel(value) {
   return AUTHORITY_EVAL_LABELS[value] || value || '';
