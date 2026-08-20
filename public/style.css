@@ -1353,6 +1353,16 @@ dialog.dialog-wide {
   table-layout: fixed;
 }
 
+/* Die Spaltenbreiten stehen fest, also muss die Ueberschrift umbrechen statt
+   in die Nachbarspalte zu laufen: das `nowrap` von `.lines-table th` schiebt
+   z. B. `FINDINGBERICHT NR.` ueber seine 130px hinaus und laesst es mit dem
+   naechsten Kopf verschmelzen. Der Kopf darf dafuer zweizeilig werden — das
+   traegt auch die naechste laengere Ueberschrift, ein blosser Abstand nicht.
+   Die Datenzellen sind unberuehrt; nur `.wrap-cell` bricht dort um. */
+.checklist-table th {
+  white-space: normal;
+}
+
 /* ── Wrap cells (Compliance Check, Kommentar) ────────────── */
 .lines-table td.wrap-cell {
   white-space: normal;
