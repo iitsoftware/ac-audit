@@ -1701,16 +1701,17 @@
   // Die Nr. ist die vergebene laufende Nummer (sort_order) und nicht mehr der
   // Zeilenindex — genau wie in der Findingliste, aus der dieses Segment
   // aufgeschlagen wird. Der Name steht an genau EINER Stelle, weil ihn der
-  // Zeilenklick, das Umbenennen in loadFinding()/saveFindingFields() und die
-  // Überschrift des Screens gemeinsam tragen: das Segment heißt wie die Zeile,
-  // aus der es kommt, und deren Liste heißt Findings.
+  // Zeilenklick, das Umbenennen in loadFinding() und die Überschrift des Screens
+  // gemeinsam tragen: das Segment heißt wie die Zeile, aus der es kommt, und
+  // deren Liste heißt Findings.
   function findingSegmentName(item) {
     return `Finding ${item.sort_order ?? 0}`;
   }
 
   // Nummer im Breadcrumb nachziehen: der Sprung aus der Tabelle kennt sie zwar,
-  // ein Reload auf dem gespeicherten Pfad aber nicht — und eine in den Stammdaten
-  // geänderte Nummer benennt das Segment ohnehin um.
+  // ein Reload auf dem gespeicherten Pfad aber nicht — deshalb benennt allein das
+  // Laden das Segment. Die Stammdaten zeigen die Nummer nur an, sie kann sich
+  // durch ein Speichern dort nicht ändern.
   function renameFindingSegment(item) {
     const seg = navPath[navPath.length - 1];
     if (!seg || seg.type !== 'finding' || seg.id !== item.id) return;

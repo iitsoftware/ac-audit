@@ -173,9 +173,12 @@ without Datenumschichtung: the column arrives empty, existing rows keep their
 and leaves `authority_auditor` blank.
 
 `audit_checklist_item` carries **two numbers, and they are not interchangeable**:
-`sort_order` is the Finding's own laufende `Nr.`, **vergeben** (max+1 on create,
-editable afterwards), and `document_ref` is the **Findingbericht Nr.**, the
-reference number under which the authority files the Finding in *its* letter.
+`sort_order` is the Finding's own laufende `Nr.`, **serverseitig vergeben**
+(max+1 on create) and on the Finding screen **display only** — the route still
+takes an explicit value, which is what the internal dialog and the two Importwege
+send, but no Behörden-Oberfläche writes it —, and `document_ref` is the
+**Findingbericht Nr.**, the reference number under which the authority files the
+Finding in *its* letter.
 Neither is new — both are pre-existing columns the Behördenaudit put to use, so
 there is no migration for either (see the two Nummer patterns).
 
