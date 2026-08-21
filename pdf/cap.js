@@ -189,13 +189,17 @@ function capAuditNoLine(line, plan) {
 // Behördenbericht benennt das Papierformular dort nicht einen Themenbereich, sondern
 // wofür das Blatt steht: die Beanstandungen, welche die Behörde in dieser Abteilung
 // erhoben hat. Die Abteilung kommt aus `dept`, das der Renderer ohnehin bekommt — es
-// wird nichts gespeichert und nichts nachgelesen. Ein interner Plan bekommt den leeren
-// String: sein Titel ist der importierte `audit_title` oder gar keiner, und ein Satz
-// über Beanstandungen der Behörde wäre auf seinem Blatt schlicht falsch.
+// wird nichts gespeichert und nichts nachgelesen. OHNE Abteilungsnamen bleibt die Zelle
+// leer, statt einen halben Satz auf `… in der Abteilung` enden zu lassen — dieselbe
+// sprechende Leere, die capAuditNoLine() eine Zeile darüber ohne Datum hält. Ein
+// interner Plan bekommt den leeren String: sein Titel ist der importierte `audit_title`
+// oder gar keiner, und ein Satz über Beanstandungen der Behörde wäre auf seinem Blatt
+// schlicht falsch.
 function capTitleLine(line, plan, dept) {
   const isAuthority = plan && (plan.plan_type || 'AUDIT') === 'AUTHORITY';
   if (!isAuthority) return '';
-  return `Beanstandungen durch die Behörde in der Abteilung ${(dept && dept.name) || ''}`.trim();
+  const deptName = (dept && dept.name ? dept.name : '').trim();
+  return deptName ? `Beanstandungen durch die Behörde in der Abteilung ${deptName}` : '';
 }
 
 // ── Unterschriftenblock ──────────────────────────────────────────────────

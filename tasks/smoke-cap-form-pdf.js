@@ -55,7 +55,7 @@ require('../server');
 
 // Der Guard auf has_signature soll den BLOB-Read für einen Unterzeichner ohne
 // hinterlegte Unterschrift sparen — das ist am Statement zu sehen, nicht am Blatt.
-const { stmts } = require('../db');
+const { db, stmts } = require('../db');
 const realSigStmt = stmts.getPersonSignature;
 let sigReads = [];
 stmts.getPersonSignature = {
@@ -278,6 +278,20 @@ const check = (name, ok, info) => {
     && !withTitle.calls[0].texts.some(t => t.startsWith('Beanstandungen durch')),
     (withTitle.calls[0] || { texts: [] }).texts.find(t => t.startsWith('Beanstandungen durch'))
     || 'Titel gewinnt');
+
+  // ── 3c. Ohne Abteilungsnamen bleibt die Zelle leer, statt den Satz auf
+  // `… in der Abteilung` enden zu lassen — dieselbe sprechende Leere, die
+  // capAuditNoLine() eine Zeile darüber ohne Datum hält. Der Name wird direkt in der
+  // Datenbank geleert: POST/PUT /api/departments verlangen ihn, über HTTP ist der
+  // Zustand also nicht zu erreichen, aus einer Altbestandszeile sehr wohl.
+  const deptName = dept.name;
+  db.prepare('UPDATE department SET name = ? WHERE id = ?').run('', dept.id);
+  const noDept = await pdf(`/api/cap-items/${capC.id}/pdf`);
+  db.prepare('UPDATE department SET name = ? WHERE id = ?').run(deptName, dept.id);
+  check('ohne Abteilungsnamen bleibt die Titelzelle leer',
+    noDept.ok && !noDept.calls[0].texts.some(t => t.startsWith('Beanstandungen durch')),
+    (noDept.calls[0] || { texts: [] }).texts.find(t => t.startsWith('Beanstandungen durch'))
+    || 'leer');
 
   // ── 4. Interner Auditplan druckt dasselbe Formular mit der internen Kurzform ──
   const intPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`, { year: 2026 })).payload;
