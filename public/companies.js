@@ -1293,10 +1293,17 @@
       // nach ISO, ein interner Plan reicht den gespeicherten Wert unverändert
       // durch — der PUT ersetzt die ganze Zeile, ein fehlendes Feld leerte also
       // die Spalte. fieldVal() selbst passt nicht, weil es einen getrimmten
-      // String liefert und diese Spalte ISO oder null trägt, genau wie startIso
-      // und revDateIso eine Zeile höher.
-      const reportDateIso = isAuthorityLine
-        ? parseDateDE(document.getElementById('ld-authority-report-date').value)
+      // String liefert und diese Spalte ISO trägt, genau wie startIso und
+      // revDateIso eine Zeile höher.
+      // Ein GELEERTES Feld geht dabei als leerer String hinaus und nicht als
+      // null: der Server-Guard liest `b.authority_report_date ?? existing`, und
+      // `null` heißt dort "nicht mitgeschickt" — ein gelöschtes Datum stünde
+      // beim nächsten Laden wieder da. Der leere String schreibt durch und räumt
+      // die Spalte, genau wie ihn fieldVal() für den Bearbeiter daneben
+      // schickt; ein ungültiges Format bleibt undefined und bricht ab.
+      const reportDateEl = isAuthorityLine ? document.getElementById('ld-authority-report-date') : null;
+      const reportDateIso = reportDateEl
+        ? (reportDateEl.value.trim() ? parseDateDE(reportDateEl.value) : '')
         : (currentLine.authority_report_date || null);
       // Skip save if any date is invalid format
       if (startIso === undefined || endIso === undefined || revDateIso === undefined || reportDateIso === undefined) return;

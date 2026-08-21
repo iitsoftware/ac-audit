@@ -107,11 +107,20 @@ function drawCapFormHead(doc, { line, plan, dept, logoRow, y }) {
   for (let c = 1; c < colX.length; c++) {
     doc.moveTo(colX[c], y).lineTo(colX[c], y + headH).stroke();
   }
+  // Die waagerechte Trennlinie des Papierformulars läuft auf halber Höhe und nur über
+  // die ersten beiden Spalten: dort stehen je zwei Angaben übereinander (Dokumenttitel
+  // über Audit No., Audit Subject über Audit Title), die Logospalte rechts trägt
+  // dagegen EINE Angabe — Logo über der Genehmigungsnummer —, durch die ein Strich
+  // mitten hindurchliefe. Sie endet deshalb an colX[2], der linken Kante dieser Spalte.
+  doc.moveTo(FORM_LEFT, y + headH / 2).lineTo(colX[2], y + headH / 2).stroke();
   doc.fillColor('#000000');
 
   doc.font('Helvetica-Bold').fontSize(12)
     .text('Corrective Action Plan (CAP) Rev. 0', colX[0] + 6, y + 10, { width: colW[0] - 12 });
-  drawHeadField(doc, { x: colX[0] + 6, y: y + 40, w: colW[0] - 12, label: 'Audit No.:', value: line.audit_no });
+  drawHeadField(doc, {
+    x: colX[0] + 6, y: y + 40, w: colW[0] - 12,
+    label: 'Audit No.:', value: capAuditNoLine(line, plan),
+  });
 
   // Der Besuch, den dieser CAP beantwortet. `audit_subject` ist die Spalte, die der
   // xlsx-Import unter genau diesem Namen füllt (imports/audit.js) — ein Bericht ohne
@@ -147,6 +156,29 @@ function capVisitLine(line, plan) {
   if (line.subject) return line.subject;
   const isAuthority = plan && (plan.plan_type || 'AUDIT') === 'AUTHORITY';
   return isAuthority ? authorityVisitLabel(line) : '';
+}
+
+// Die Audit-Nr.-Zelle desselben Kopfes. Im Papierformular der Behörde steht dort nicht
+// die nackte Nummer, sondern zweizeilig der Satz, der den Bericht benennt, den dieser
+// CAP beantwortet — "Beanstandungsbericht LBA für Audit Nr. 1 vom 27.07.2026". Die
+// Behörde ist `auditor_team` mit demselben 'LBA'-Fallback, den der Kopfblock der
+// Berichtsebene, authorityLineDefaults() (services/audit-lines.js) und
+// authorityFooterLabel() (routes/audit-plan-lines.js) tragen: das Feld ist editierbar,
+// ein hart gedrucktes 'LBA' wäre genau die Stelle, an der Blatt und Schirm
+// auseinanderlaufen. Das Berichtsdatum ist `audit_end_date` — die eine Spalte, die die
+// Berichtsebene als Datum des Besuchs schreibt und aus der auch authorityVisitLabel()
+// (pdf/common.js) seine Überschrift zieht, damit der Kopf keine zweite Datumsregel
+// bekommt. OHNE Datum endet der Satz bei der Nummer, statt ein leeres `vom ` zu
+// drucken — dieselbe sprechende Leere wie `Behördenaudit LBA` in der Fußzeile des
+// Behördenbogens. Ein interner Plan behält die nackte Nummer: er hat keinen
+// Beanstandungsbericht, den der Satz benennen könnte.
+function capAuditNoLine(line, plan) {
+  const isAuthority = plan && (plan.plan_type || 'AUDIT') === 'AUTHORITY';
+  if (!isAuthority) return line.audit_no || '';
+  const authority = line.auditor_team || 'LBA';
+  const sentence = `Beanstandungsbericht ${authority} für Audit Nr. ${line.audit_no || ''}`.trim();
+  const reportDate = formatDateDE(line.audit_end_date);
+  return reportDate ? `${sentence} vom ${reportDate}` : sentence;
 }
 
 // ── Unterschriftenblock ──────────────────────────────────────────────────
@@ -191,17 +223,24 @@ function drawCapSignatures(doc, { dept, company, personsAll, y }) {
     doc.moveTo(FORM_LEFT + c * colW, y).lineTo(FORM_LEFT + c * colW, y + SIG_ROW_H).stroke();
   }
 
+  // Das Unterschriftsbild steht in jeder der drei Namensspalten über dem Namen —
+  // deshalb einmal hier statt dreimal in derselben Funktion. Der Guard auf
+  // has_signature, das getPersonsByCompany ohnehin mitliefert, spart den BLOB-Read
+  // für jeden Unterzeichner ohne hinterlegte Unterschrift; eine fehlende ist kein
+  // Fehler, die Zelle bleibt dann mit dem Namen allein stehen.
+  const drawSignatureImage = (person, colX) => {
+    if (!person || !person.has_signature) return;
+    const sigRow = stmts.getPersonSignature.get(person.id);
+    if (!sigRow || !sigRow.signature) return;
+    try {
+      doc.image(sigRow.signature, colX + 4, y + 3, {
+        fit: [colW - 8, SIG_ROW_H - 26], align: 'center', valign: 'center',
+      });
+    } catch { /* unlesbare Unterschrift lässt Name und Funktion stehen */ }
+  };
+
   // Spalte 1: Unterschriftsbild über Name und Funktionsbezeichnung.
-  if (qm) {
-    const sigRow = stmts.getPersonSignature.get(qm.id);
-    if (sigRow && sigRow.signature) {
-      try {
-        doc.image(sigRow.signature, FORM_LEFT + 4, y + 3, {
-          fit: [colW - 8, SIG_ROW_H - 26], align: 'center', valign: 'center',
-        });
-      } catch { /* unlesbare Unterschrift lässt Name und Funktion stehen */ }
-    }
-  }
+  drawSignatureImage(qm, FORM_LEFT);
   doc.font('Helvetica-Bold').fontSize(7)
     .text(personName(qm), FORM_LEFT + 4, y + SIG_ROW_H - 21, { width: colW - 8, align: 'center', lineBreak: false });
   doc.font('Helvetica').fontSize(6)
@@ -214,10 +253,14 @@ function drawCapSignatures(doc, { dept, company, personsAll, y }) {
     .text(formatDateDE(new Date().toISOString()), FORM_LEFT + colW + 4, y + SIG_ROW_H / 2 - 6,
       { width: colW - 8, align: 'center', lineBreak: false });
 
-  // Spalte 3 und 4: die beiden Empfänger in Kopie.
-  doc.fontSize(7);
+  // Spalte 3 und 4: die beiden Empfänger in Kopie — Bild und Name wie in Spalte 1
+  // und auf derselben Grundlinie, damit die vier Zellen bündig lesen. Eine
+  // Funktionszeile braucht es hier nicht: die Rolle steht in der Kopfzeile der Spalte.
+  doc.font('Helvetica').fontSize(7);
   [accPerson, alPerson].forEach((person, i) => {
-    doc.text(personName(person), FORM_LEFT + (i + 2) * colW + 4, y + SIG_ROW_H / 2 - 5,
+    const colX = FORM_LEFT + (i + 2) * colW;
+    drawSignatureImage(person, colX);
+    doc.text(personName(person), colX + 4, y + SIG_ROW_H - 21,
       { width: colW - 8, align: 'center', lineBreak: false });
   });
 

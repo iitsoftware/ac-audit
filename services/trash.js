@@ -136,11 +136,13 @@ function restoreAuditPlanLine(line) {
   stmts.restoreAuditPlanLine.run(
     line.id, line.audit_plan_id, line.sort_order, line.subject, line.regulations,
     line.location, line.planned_window, line.performed_date, line.signature,
-    // Ein Snapshot von vor der Spalte kennt authority_auditor nicht — undefined
-    // lehnt better-sqlite3 als Bindung ab, also der Spalten-Default ''.
-    line.audit_no, line.audit_subject, line.audit_title, line.auditor_team, line.authority_auditor || '', line.auditee,
-    // Dasselbe für das Berichtsdatum, nur ist dessen Default NULL statt ''.
-    line.audit_start_date, line.audit_end_date, line.authority_report_date || null, line.audit_location,
+    // Ein Snapshot von vor den beiden Behördenspalten kennt sie nicht — undefined
+    // lehnt better-sqlite3 als Bindung ab, also je der Spalten-Default:
+    // authority_auditor ist TEXT DEFAULT '', authority_report_date ein nullbares
+    // Datum wie audit_start_date daneben und fällt deshalb auf null statt auf ''.
+    line.audit_no, line.audit_subject, line.audit_title,
+    line.auditor_team, line.authority_auditor || '', line.authority_report_date || null, line.auditee,
+    line.audit_start_date, line.audit_end_date, line.audit_location,
     line.document_ref, line.document_iss_rev, line.document_rev_date,
     line.recommendation, line.audit_status, line.created_at, line.updated_at
   );

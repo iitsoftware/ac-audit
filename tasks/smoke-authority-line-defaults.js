@@ -1,8 +1,10 @@
-// Smoke test for authorityLineDefaults() and every write path that carries
-// audit_plan_line.authority_auditor. Boots the real server against a throwaway
-// DATA_DIR and checks the three roles of the Behörden-Kopfblocks:
-// auditor_team = Behörde ('LBA'), authority_auditor = zuständiger Bearbeiter
-// (department.authority_name), auditee = QM der Abteilung.
+// Smoke test for authorityLineDefaults() and every write path that carries the
+// two additiven Behördenspalten von audit_plan_line — authority_auditor und
+// authority_report_date. Boots the real server against a throwaway DATA_DIR and
+// checks the three roles of the Behörden-Kopfblocks: auditor_team = Behörde
+// ('LBA'), authority_auditor = zuständiger Bearbeiter (department.authority_name),
+// auditee = QM der Abteilung — plus das Berichtsdatum, das Datum des Schreibens
+// der Behörde, das dieselben Statements durchlaufen muss.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -65,6 +67,10 @@ const roles = line => `${line.auditor_team} | ${line.authority_auditor} | ${line
   check('POST audit-plans (AUTHORITY) belegt Behörde | Bearbeiter | Auditee vor',
     line.auditor_team === 'LBA' && line.authority_auditor === 'Muster' && line.auditee === 'Petra Prüfer',
     roles(line));
+  // Das Berichtsdatum ist das Datum des Schreibens der Behörde und kann beim
+  // Anlegen des Besuchs noch gar nicht bekannt sein.
+  check('  → das Berichtsdatum kommt leer dazu', line.authority_report_date === null,
+    String(line.authority_report_date));
 
   // ── 2. manuelles Anlegen einer Zeile liest denselben Helfer ──
   const manual = (await req('POST', `/api/audit-plans/${plan.id}/lines`, {})).payload;
@@ -72,11 +78,16 @@ const roles = line => `${line.auditor_team} | ${line.authority_auditor} | ${line
     manual.auditor_team === 'LBA' && manual.authority_auditor === 'Muster' && manual.auditee === 'Petra Prüfer',
     roles(manual));
 
+  check('  → auch dort bleibt das Berichtsdatum leer', manual.authority_report_date === null,
+    String(manual.authority_report_date));
+
   const explicit = (await req('POST', `/api/audit-plans/${plan.id}/lines`,
-    { authority_auditor: 'Selbst eingetragen' })).payload;
+    { authority_auditor: 'Selbst eingetragen', authority_report_date: '2026-07-27' })).payload;
   check('  → eine Eingabe im Body schaltet die Vorbelegung ab',
     explicit.auditor_team === '' && explicit.authority_auditor === 'Selbst eingetragen' && explicit.auditee === '',
     roles(explicit));
+  check('  → ein mitgeschicktes Berichtsdatum schreibt durch',
+    explicit.authority_report_date === '2026-07-27', String(explicit.authority_report_date));
 
   // ── 3. interner Plan bleibt unberührt ──
   const internal = (await req('POST', `/api/departments/${dept.id}/audit-plans`, { year: 2026 })).payload;
@@ -85,20 +96,32 @@ const roles = line => `${line.auditor_team} | ${line.authority_auditor} | ${line
   const internalLine = (await req('POST', `/api/audit-plans/${internal.id}/lines`,
     { subject: 'Themenbereich' })).payload;
   check('POST lines (AUDIT) belegt nichts vor',
-    internalLine.auditor_team === '' && internalLine.authority_auditor === '' && internalLine.auditee === '',
+    internalLine.auditor_team === '' && internalLine.authority_auditor === '' && internalLine.auditee === '' &&
+    internalLine.authority_report_date === null,
     roles(internalLine));
 
   // ── 4. Kopie: Revision übernimmt den Bearbeiter, Vorlage räumt ihn ab ──
   const revision = (await req('POST', `/api/audit-plans/${plan.id}/copy`, { mode: 'revision' })).payload;
-  const revLine = (await req('GET', `/api/audit-plans/${revision.id}/lines`)).payload
-    .find(l => l.auditee === 'Petra Prüfer');
+  const revLines = (await req('GET', `/api/audit-plans/${revision.id}/lines`)).payload;
+  const revLine = revLines.find(l => l.auditee === 'Petra Prüfer');
   check('copy (revision) nimmt authority_auditor mit',
     revLine && revLine.auditor_team === 'LBA' && revLine.authority_auditor === 'Muster', roles(revLine || {}));
+  const revDated = revLines.find(l => l.authority_auditor === 'Selbst eingetragen');
+  check('  → und das Berichtsdatum mit', revDated && revDated.authority_report_date === '2026-07-27',
+    String(revDated && revDated.authority_report_date));
   const template = (await req('POST', `/api/audit-plans/${internal.id}/copy`, { mode: 'template' })).payload;
   const tplLine = (await req('GET', `/api/audit-plans/${template.id}/lines`)).payload[0];
   check('copy (template) räumt die Auditdaten ab',
-    tplLine.subject === 'Themenbereich' && tplLine.auditor_team === '' && tplLine.authority_auditor === '',
+    tplLine.subject === 'Themenbereich' && tplLine.auditor_team === '' && tplLine.authority_auditor === '' &&
+    tplLine.authority_report_date === null,
     roles(tplLine));
+  // Die Vorlage des Behördenplans trägt ein Berichtsdatum in der Quelle — die
+  // Kopie räumt es mit den übrigen Auditdaten leer.
+  const authTemplate = (await req('POST', `/api/audit-plans/${plan.id}/copy`, { mode: 'template' })).payload;
+  const authTplLines = (await req('GET', `/api/audit-plans/${authTemplate.id}/lines`)).payload;
+  check('  → auch das Berichtsdatum eines Behördenplans',
+    authTplLines.length > 0 && authTplLines.every(l => l.authority_report_date === null),
+    authTplLines.map(l => String(l.authority_report_date)).join(', '));
 
   // ── 5. PUT der Berichtsebene: der Bearbeiter überlebt jedes Speichern ──
   // Genau der Body, den saveLineFields() des Kopfblocks schickt — Behörde, Datum
@@ -113,9 +136,16 @@ const roles = line => `${line.auditor_team} | ${line.authority_auditor} | ${line
     saved.authority_auditor === 'Muster' && saved.location === 'Braunschweig', roles(saved));
 
   const overwritten = (await req('PUT', `/api/audit-plan-lines/${line.id}`,
-    { auditor_team: 'LBA', authority_auditor: 'Neuer Bearbeiter', auditee: 'Petra Prüfer' })).payload;
+    { auditor_team: 'LBA', authority_auditor: 'Neuer Bearbeiter', auditee: 'Petra Prüfer',
+      authority_report_date: '2026-07-27' })).payload;
   check('  → ein mitgeschickter Bearbeiter schreibt durch',
     overwritten.authority_auditor === 'Neuer Bearbeiter', roles(overwritten));
+  check('  → ein mitgeschicktes Berichtsdatum ebenfalls',
+    overwritten.authority_report_date === '2026-07-27', String(overwritten.authority_report_date));
+  const kept = (await req('PUT', `/api/audit-plan-lines/${line.id}`,
+    { auditor_team: 'LBA', auditee: 'Petra Prüfer' })).payload;
+  check('  → ein ausgelassenes Berichtsdatum behält den gespeicherten Wert',
+    kept.authority_report_date === '2026-07-27', String(kept.authority_report_date));
 
   // ── 6. Papierkorb: löschen und wiederherstellen verliert den Bearbeiter nicht ──
   await req('DELETE', `/api/audit-plan-lines/${manual.id}`);
@@ -127,6 +157,15 @@ const roles = line => `${line.auditor_team} | ${line.authority_auditor} | ${line
   check('  → restore schreibt authority_auditor zurück',
     restored.auditor_team === 'LBA' && restored.authority_auditor === 'Muster' && restored.auditee === 'Petra Prüfer',
     roles(restored));
+
+  // Dieselbe Runde mit der Zeile, die ein Berichtsdatum trägt.
+  await req('DELETE', `/api/audit-plan-lines/${explicit.id}`);
+  const trash2 = (await req('GET', '/api/trash?limit=50')).payload;
+  const entry2 = (trash2.items || trash2).find(t => t.entity_id === explicit.id);
+  await req('POST', `/api/trash/${entry2.id}/restore`);
+  const restored2 = (await req('GET', `/api/audit-plan-lines/${explicit.id}`)).payload;
+  check('  → und das Berichtsdatum mit', restored2.authority_report_date === '2026-07-27',
+    String(restored2.authority_report_date));
 
   server.kill();
   fs.rmSync(DATA_DIR, { recursive: true, force: true });

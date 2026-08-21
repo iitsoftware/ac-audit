@@ -27,7 +27,7 @@ const realRender = pdfCap.renderCapFormPdf;
 let renderCalls = [];
 pdfCap.renderCapFormPdf = (doc, args) => {
   const call = {
-    args, texts: [],
+    args, texts: [], images: [],
     pageW: doc.page.width, pageH: doc.page.height,
     pagesAtStart: doc.bufferedPageRange().count,
   };
@@ -36,13 +36,31 @@ pdfCap.renderCapFormPdf = (doc, args) => {
     call.texts.push(String(txt));
     return realText(txt, ...rest);
   };
+  // Die Unterschriftsbilder sind das einzige, was der Unterschriftenblock zeichnet
+  // statt zu schreiben — ohne diesen Spy bliebe eine leere Zelle vom vollen Kasten
+  // ununterscheidbar, denn im fertigen PDF ist beides komprimiert.
+  const realImage = doc.image.bind(doc);
+  doc.image = (src, x, y, ...rest) => {
+    call.images.push({ x, y });
+    return realImage(src, x, y, ...rest);
+  };
   renderCalls.push(call);
   const out = realRender(doc, args);
   doc.text = realText;
+  doc.image = realImage;
   return out;
 };
 
 require('../server');
+
+// Der Guard auf has_signature soll den BLOB-Read für einen Unterzeichner ohne
+// hinterlegte Unterschrift sparen — das ist am Statement zu sehen, nicht am Blatt.
+const { stmts } = require('../db');
+const realSigStmt = stmts.getPersonSignature;
+let sigReads = [];
+stmts.getPersonSignature = {
+  get: (id) => { sigReads.push(id); return realSigStmt.get(id); },
+};
 
 let cookie = '';
 const req = async (method, url, body) => {
@@ -58,6 +76,7 @@ const req = async (method, url, body) => {
 
 const pdf = async (url) => {
   renderCalls = [];
+  sigReads = [];
   const res = await fetch(BASE + url, { headers: { Cookie: cookie }, redirect: 'manual' });
   const buf = Buffer.from(await res.arrayBuffer());
   // Ein Wurf mitten im Renderer liefert trotzdem 200 mit gültigem %PDF-Kopf —
@@ -92,12 +111,17 @@ const check = (name, ok, info) => {
   const company = (await req('POST', '/api/companies', { name: 'Smoke Air GmbH', city: 'Bremen' })).payload;
   const dept = (await req('POST', `/api/companies/${company.id}/departments`,
     { name: 'CAMO', regulation: 'Part-CAMO', easa_permission_number: 'DE.MG.4711' })).payload;
-  await req('POST', `/api/companies/${company.id}/persons`,
-    { role: 'QM', department_id: dept.id, first_name: 'Petra', last_name: 'Prüfer', email: 'qm@example.org' });
-  await req('POST', `/api/companies/${company.id}/persons`,
-    { role: 'ACCOUNTABLE', first_name: 'Achim', last_name: 'Manager' });
-  await req('POST', `/api/companies/${company.id}/persons`,
-    { role: 'ABTEILUNGSLEITER', department_id: dept.id, first_name: 'Lena', last_name: 'Leiter' });
+  const qmPerson = (await req('POST', `/api/companies/${company.id}/persons`,
+    { role: 'QM', department_id: dept.id, first_name: 'Petra', last_name: 'Prüfer', email: 'qm@example.org' })).payload;
+  const accPerson = (await req('POST', `/api/companies/${company.id}/persons`,
+    { role: 'ACCOUNTABLE', first_name: 'Achim', last_name: 'Manager' })).payload;
+  // Der Abteilungsleiter bleibt bewusst OHNE Unterschrift: seine Zelle muss mit dem
+  // Namen stehen bleiben, und sein fehlendes Bild darf keinen BLOB-Read kosten.
+  const alPerson = (await req('POST', `/api/companies/${company.id}/persons`,
+    { role: 'ABTEILUNGSLEITER', department_id: dept.id, first_name: 'Lena', last_name: 'Leiter' })).payload;
+  const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  await req('PUT', `/api/persons/${qmPerson.id}/signature`, { signature: PNG_1PX });
+  await req('PUT', `/api/persons/${accPerson.id}/signature`, { signature: PNG_1PX });
 
   // ── Ein Behördenbericht mit zwei Findings ──
   const plan = (await req('POST', `/api/departments/${dept.id}/audit-plans`,
@@ -107,7 +131,10 @@ const check = (name, ok, info) => {
   // audit_no wird serverseitig vergeben und von PUT nicht geschrieben — dieselbe
   // Nummer muss im Kopf des Formulars stehen.
   const auditNo = line.audit_no;
-  await req('PUT', `/api/audit-plan-lines/${lineId}`, { ...line, audit_end_date: '2026-03-12' });
+  // Die Behörde ist ein editierbares Feld — ein abweichender Wert muss im Satz der
+  // Audit-Nr.-Zelle stehen, sonst wäre der 'LBA'-Fallback hart gedruckt.
+  await req('PUT', `/api/audit-plan-lines/${lineId}`,
+    { ...line, auditor_team: 'LBA Braunschweig', audit_end_date: '2026-03-12' });
 
   const first = (await req('POST', `/api/audit-plan-lines/${lineId}/checklist-items`,
     { compliance_check: 'Werkzeugkontrolle unvollständig', document_ref: 'LBA-2026-1',
@@ -146,7 +173,12 @@ const check = (name, ok, info) => {
 
   const has = (call, txt) => call.texts.includes(txt);
   check('  → Kopf links: Formularname + Audit No.',
-    has(one, 'Corrective Action Plan (CAP) Rev. 0') && has(one, 'Audit No.:') && has(one, String(auditNo)));
+    has(one, 'Corrective Action Plan (CAP) Rev. 0') && has(one, 'Audit No.:'));
+  // Die Zelle trägt beim Behördenbericht den Satz des Papierformulars, nicht die
+  // nackte Nummer — mit der eingetragenen Behörde und dem Datum des Besuchs.
+  check('  → Audit-Nr.-Zelle benennt den Beanstandungsbericht',
+    has(one, `Beanstandungsbericht LBA Braunschweig für Audit Nr. ${auditNo} vom 12.03.2026`),
+    one.texts.find(t => t.startsWith('Beanstandungsbericht')) || '—');
   check('  → Kopf Mitte: Audit Subject (Besuchszeile) + Audit Title',
     has(one, 'Audit Subject:') && has(one, 'Audit Title:')
     && has(one, 'Behördenaudit 12.03.2026'), one.texts.slice(0, 8).join(' | '));
@@ -171,6 +203,24 @@ const check = (name, ok, info) => {
     && has(one, 'Copy to: Accountable Manager') && has(one, 'Copy to: Leiter CAMO')
     && has(one, 'Petra Prüfer') && has(one, 'Compliance Monitoring Manager')
     && has(one, 'Achim Manager') && has(one, 'Lena Leiter'));
+
+  // Alle drei Namensspalten zeichnen ihr Unterschriftsbild, nicht nur der QM: die
+  // Firma dieses Tests hat kein Logo, jedes gezeichnete Bild ist also eine
+  // Unterschrift. Geprüft wird an der Spalte, in der es landet.
+  const SIG_COL_W = (841.89 - 80) / 4;
+  const inSigCol = (img, c) => Math.abs(img.x - (40 + c * SIG_COL_W + 4)) < 1;
+  check('  → Unterschriftsbild in Spalte 1 (QM) UND Spalte 3 (Accountable Manager)',
+    one.images.length === 2
+    && one.images.some(i => inSigCol(i, 0)) && one.images.some(i => inSigCol(i, 2)),
+    one.images.map(i => Math.round(i.x)).join(', ') || 'kein Bild');
+  // Eine fehlende Unterschrift ist kein Fehler — die Zelle bleibt mit dem Namen
+  // stehen (oben geprüft) — und sie kostet dank has_signature keinen BLOB-Read.
+  check('  → der Abteilungsleiter ohne Unterschrift bekommt kein Bild',
+    !one.images.some(i => inSigCol(i, 3)));
+  check('  → nur die Unterzeichner MIT Unterschrift kosten einen BLOB-Read',
+    sigReads.length === 2 && sigReads.includes(qmPerson.id)
+    && sigReads.includes(accPerson.id) && !sigReads.includes(alPerson.id),
+    `${sigReads.length} Read(s)`);
 
   check('  → kein 5-Why-Block und keine Nachweisbilder mehr',
     !one.texts.some(t => /5-Why|Nachweise|Warum\?/.test(t)));
@@ -200,6 +250,13 @@ const check = (name, ok, info) => {
   check('  → jedes Formular trägt nur die Findings SEINES Berichts',
     across.calls.every(c => (c.args.entries || []).length === 1
       && c.args.entries[0].cap.checklist_item_id !== undefined));
+  // plan2 hat kein Datum und keine geänderte Behörde: der Satz endet bei der Nummer
+  // (kein leeres `vom `) und trägt den 'LBA'-Fallback der Vorbelegung.
+  const line2 = (await req('GET', `/api/audit-plan-lines/${plan2.authority_line_id}`)).payload;
+  const noDate = across.calls[1] || { texts: [] };
+  check('  → ohne Berichtsdatum endet der Satz bei der Nummer',
+    noDate.texts.includes(`Beanstandungsbericht LBA für Audit Nr. ${line2.audit_no}`),
+    noDate.texts.find(t => t.startsWith('Beanstandungsbericht')) || '—');
 
   // ── 4. Interner Auditplan druckt dasselbe Formular mit der internen Kurzform ──
   const intPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`, { year: 2026 })).payload;
@@ -216,6 +273,9 @@ const check = (name, ok, info) => {
     internal.calls[0].texts.includes('L1') && !internal.calls[0].texts.includes('Level 1'));
   check('  → Audit Subject fällt auf den Themenbereich zurück',
     internal.calls[0].texts.includes('Themenbereich Technik'));
+  check('  → Audit-Nr.-Zelle bleibt die nackte Nummer',
+    internal.calls[0].texts.includes(String(intLine.audit_no))
+    && !internal.calls[0].texts.some(t => t.startsWith('Beanstandungsbericht')));
 
   // ── 5. Der Versandweg fährt denselben Renderer ──
   // generateCapItemsPdfBuffer() ist die Quelle des E-Mail-Anhangs; ohne SMTP ist die

@@ -65,9 +65,11 @@ router.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
     id, req.params.auditPlanId,
     b.sort_order || 0, b.subject || '', b.regulations || '', b.location || '', b.planned_window || '',
     auditNo, b.audit_subject || '', b.audit_title || '',
-    auditorTeam, authorityAuditor, auditee,
-    b.audit_start_date || null, b.audit_end_date || null,
-    b.authority_report_date || null, b.audit_location || '',
+    // Das Berichtsdatum hat keine Vorbelegung — es steht im Schreiben der
+    // Behörde und ist erst bekannt, wenn das Schreiben da ist. Wie die übrigen
+    // Datumsspalten der Zeile kommt es leer als NULL an.
+    auditorTeam, authorityAuditor, b.authority_report_date || null, auditee,
+    b.audit_start_date || null, b.audit_end_date || null, b.audit_location || '',
     b.document_ref || '', b.document_iss_rev || '', b.document_rev_date || null,
     b.recommendation || '', b.audit_status || 'OPEN'
   );
@@ -260,18 +262,16 @@ router.put('/api/audit-plan-lines/:id', (req, res) => {
   // löschte das erste Speichern die Vorbelegung aus authorityLineDefaults(). Ein
   // ausdrücklich mitgeschickter Wert (auch der leere) schreibt dagegen durch.
   const authorityAuditor = b.authority_auditor ?? existing.authority_auditor ?? '';
-  // Das Berichtsdatum braucht diesen Guard NICHT: es ist eine Datumsspalte wie
-  // audit_start_date und document_rev_date und fällt wie die beiden auf null,
-  // wenn der Body nichts schickt. Am Leben hält es dieselbe Regel, die auch die
-  // beiden trägt — der Kopfblock der Berichtsebene rendert das Feld, der interne
-  // Screen reicht den geladenen Wert unverändert mit ("ausgeblendet heißt
-  // mitgesendet", siehe saveLineFields()). Ein leeres Feld räumt die Spalte,
-  // und genau das soll ein gelöschtes Datum tun.
+  // Dasselbe für das Berichtsdatum, und aus demselben Grund: das Datum des
+  // Beanstandungsberichts steht nur im Kopfblock der Berichtsebene, jeder andere
+  // Aufrufer dieser Route kennt das Feld nicht und löschte es sonst mit dem
+  // nächsten Speichern. Auch hier schreibt ein ausdrücklich gesendeter Wert
+  // durch — der leere String eingeschlossen.
+  const authorityReportDate = b.authority_report_date ?? existing.authority_report_date ?? '';
   stmts.updateAuditPlanLine.run(
     b.sort_order || 0, b.subject || '', b.regulations || '', b.location || '', b.planned_window || '', b.signature || '',
-    b.auditor_team || '', authorityAuditor, b.auditee || '',
-    b.audit_start_date || null, b.audit_end_date || null,
-    b.authority_report_date || null, b.audit_location || '',
+    b.auditor_team || '', authorityAuditor, authorityReportDate, b.auditee || '',
+    b.audit_start_date || null, b.audit_end_date || null, b.audit_location || '',
     b.document_ref || '', b.document_iss_rev || '', b.document_rev_date || null,
     b.recommendation || '',
     req.params.id
@@ -412,10 +412,12 @@ router.post('/api/audit-plans/:id/import-audits', (req, res) => {
           line.signature || '',
           meta.auditor_team || line.auditor_team || '',
           line.authority_auditor || '',
+          // Das xlsx einer Checkliste kennt kein Berichtsdatum — der Sync reicht
+          // den gespeicherten Wert unverändert durch, wie den Bearbeiter darüber.
+          line.authority_report_date || null,
           meta.auditee || line.auditee || '',
           meta.audit_start_date || line.audit_start_date || null,
           meta.audit_end_date || line.audit_end_date || null,
-          line.authority_report_date || null,
           meta.audit_location || fallbackCity,
           meta.document_ref || line.document_ref || '',
           meta.document_iss_rev || line.document_iss_rev || '',
