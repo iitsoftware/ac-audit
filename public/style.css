@@ -52,6 +52,22 @@
   --shadow-lg: 0 4px 12px rgba(0,0,0,.1);
   --nav-height: 56px;
   --transition: 150ms ease;
+
+  /* Modulfarben des Abteilungs-Dashboards. Sie sind keine neuen Farben,
+     sondern die drei, die das Haus für diese Module schon führt: Blau ist
+     --primary, Grün das erledigte --plan-tile-done, Violett das
+     .plan-tile-authority der Behördenkachel. Eine Kachelgruppe setzt sie über
+     ihren Modifier auf --mod-color, damit Rand, Überschrift und Hover einer
+     Gruppe aus EINER Angabe kommen. */
+  --mod-audit: #2563eb;
+  --mod-safety: #22c55e;
+  --mod-change: #8b5cf6;
+
+  /* Eine Chart-Palette steht hier bewusst NICHT: public/charts.js führt sie als
+     CHART_COLORS im Widget und teilt sich die Töne mit public/risk-matrix.js,
+     damit die zwei handgeschriebenen Widgets der App nicht zwei Paletten
+     tragen. Ein dritter Satz Variablen daneben wäre genau die Stelle, an der
+     sie auseinanderlaufen. */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -70,6 +86,14 @@
     --danger-text: #fca5a5;
     --shadow: 0 1px 3px rgba(0,0,0,.3);
     --shadow-lg: 0 4px 12px rgba(0,0,0,.4);
+
+    /* Aufgehellt gegen den dunklen Grund — dieselbe Bewegung, die --primary
+       und --danger zwei Zeilen höher machen. Grün und Violett bleiben, sie
+       tragen auf beiden Gründen genug Kontrast (wie .plan-tile-done und
+       .plan-tile-authority, die im Dunkelmodus ebenfalls unverändert sind). */
+    --mod-audit: #3b82f6;
+    --mod-safety: #22c55e;
+    --mod-change: #a78bfa;
   }
 }
 
@@ -3247,4 +3271,310 @@ dialog.dialog-lg { max-width: 600px; }
 }
 
 .text-muted { color: var(--text-muted); }
+
+/* ══ Organisationsgeführte Navigation ═══════════════════════════════════════
+ *
+ * Firma → Abteilung → Modul, die Ebene in der URL statt in einer Tab-Leiste.
+ * Drei Bausteine, ein zusammenhängender Block, weil sie ein Bildschirmpaar
+ * sind und nicht drei Zufälle:
+ *
+ *   .org-tile*   Firmen- (/companies) UND Abteilungskacheln (/companies/:id)
+ *   .org-tile-warn  der Warnbadge fehlender Person/Signatur auf beiden
+ *   .dash-*      das Abteilungs-Dashboard (/departments/:id)
+ *
+ * Diese Datei ist der EINE Ort dieses Vokabulars: die Seiten-Tasks liefern
+ * Markup und Logik, die Klassennamen stehen hier. Deshalb ist das Gitter der
+ * Firmen- und der Abteilungskachel auch dasselbe und nicht je eines — die
+ * beiden Ebenen zeigen dieselbe Sache eine Stufe tiefer, und zwei Kachel-
+ * vokabulare wären die Stelle, an der sie optisch auseinanderlaufen.
+ *
+ * Idiom und Maße kommen von .org-dept-tile* und .plan-tile* weiter oben; wo
+ * hier davon abgewichen wird, steht der Grund dabei.
+ */
+
+/* ── Kachelgitter: Firmen und Abteilungen ─────────────────── */
+
+/* 220px statt der 180px von .plan-tile-grid: eine Firmenkachel trägt ein
+   80×80-Logo mit Name und Anschrift darunter, eine Abteilungskachel Name,
+   EASA-Genehmigungsnummer und Regulation — beide brauchen mehr Zeile als
+   eine Jahreszahl. */
+.org-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.org-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px 14px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-align: center;
+  transition: box-shadow var(--transition), border-color var(--transition);
+}
+
+/* :focus-within neben :hover, weil die Kachel als <a> navigiert: wer sie
+   ertastet statt sie anzufahren, bekommt dieselbe Rückmeldung. Den Ring um
+   den Link selbst zeichnet die globale :focus-visible-Regel. */
+.org-tile:hover,
+.org-tile:focus-within {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+/* Wie .org-dept-tile--warn: die unvollständige Kachel trägt ihren Mangel
+   schon im Rand, damit sie im Gitter auffällt, bevor man den Badge liest. */
+.org-tile--warn { border-color: #f59e0b; }
+
+.org-tile--warn:hover,
+.org-tile--warn:focus-within { border-color: #d97706; }
+
+/* flex:1 + justify-content:center: das Gitter zieht alle Kacheln einer Reihe
+   auf die Höhe der höchsten, und der Link nimmt den Überschuss auf, damit
+   Warnbadge und Aktionen an der Unterkante stehen bleiben. Zentriert, weil
+   eine Abteilungskachel ohne Logo sonst oben klebt, während die Firmenkachel
+   daneben ein 80er-Logo trägt — beide sollen in ihrer Kachel mittig sitzen. */
+.org-tile-link {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Die ganze Kachelfläche navigiert und nicht nur ihr Text: das ::after legt
+   sich über die Kachel samt Innenabstand. Es ist der Grund, warum Warnbadge
+   und Aktionen darunter ein z-index tragen — sie sind Geschwister des Links
+   (ein <button> darf nicht in einem <a> stecken), und ohne das Anheben
+   verschluckte die Fläche ihre Klicks und den Tooltip des Badges. */
+.org-tile-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+}
+
+.org-tile-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.org-tile-meta {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Der Warnbadge: fehlender Accountable Manager auf der Firmenkachel, fehlender
+   QM/Abteilungsleiter auf der Abteilungskachel — ein Satz, weil mit der Person
+   ihre Unterschrift zwangsläufig mitfehlt. Farbpaar ist das von .eval-O, das
+   im Haus schon auf Kontrast geprüft ist (#78350f auf #fde68a, ≥4.5:1); ein
+   zweites Bernstein daneben wäre dieselbe Warnung in zwei Tönen.
+   `cursor: help` wie .org-dept-tile-warn — der volle Text steht im title. */
+.org-tile-warn {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #fde68a;
+  color: #78350f;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: help;
+}
+
+.org-tile-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+/* Aufgedeckt wird wie bei .plan-tile-actions — aber auch bei :focus-within:
+   ein Element mit opacity:0 bleibt fokussierbar, und ein Bearbeiten-Symbol,
+   das man antabben, aber nicht sehen kann, ist schlechter als ein sichtbares. */
+.org-tile:hover .org-tile-actions,
+.org-tile:focus-within .org-tile-actions { opacity: 1; }
+
+/* Ohne Hover gibt es kein Aufdecken: auf Zeigegeräten ohne Schwebezustand
+   stehen die beiden Symbole dauerhaft, sonst wären sie unerreichbar. */
+@media (hover: none) {
+  .org-tile-actions { opacity: 1; }
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Dasselbe Umdrehen, das .eval-O im Dunkelmodus macht. */
+  .org-tile-warn { background: #713f12; color: #fde68a; }
+}
+
+/* ── Abteilungs-Dashboard ─────────────────────────────────── */
+
+.dash-section { margin-bottom: 28px; }
+.dash-section:last-child { margin-bottom: 0; }
+
+.dash-section-title {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Aufgabenbuttons, nach Modulen gruppiert — AC-Audit, AC-SMS, AC-Change.
+   auto-fit statt auto-fill: es sind genau drei Gruppen, und eine leere
+   vierte Spalte im Gitter zöge die drei unnötig schmal. */
+.dash-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+/* Die Modulfarbe kommt EINMAL über --mod-color herein und speist Rand,
+   Überschrift und Hover der Gruppe; ein Modul umzufärben ist damit eine
+   Zeile und nicht drei, die auseinanderlaufen können. Der Fallback auf
+   --primary hält eine Gruppe ohne Modifier lesbar statt farblos. */
+.dash-module {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--mod-color, var(--primary));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.dash-module--audit  { --mod-color: var(--mod-audit); }
+.dash-module--safety { --mod-color: var(--mod-safety); }
+.dash-module--change { --mod-color: var(--mod-change); }
+
+.dash-module-title {
+  margin-bottom: 12px;
+  color: var(--mod-color, var(--primary));
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.dash-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Trägt <button> und <a> gleichermaßen: die meisten Aufgaben navigieren auf
+   einen Moduldeeplink, "Audit durchführen" springt erst nach einem Lookup.
+   Deshalb font/text-align ausdrücklich — ein <button> erbt beides nicht.
+   min-height 44px ist die Berührungsfläche des Hauses (siehe .btn-icon). */
+.dash-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.dash-action:hover:not(:disabled) {
+  background: var(--primary-tint);
+  border-color: var(--mod-color, var(--primary));
+  color: var(--mod-color, var(--primary));
+}
+
+/* Eine Aufgabe ohne Ziel — "Audit durchführen" ohne AKTIV-Plan — steht
+   abgeblendet da statt zu verschwinden: dieselbe sprechende Leere wie beim
+   #finding-share ohne CAP-Item, und der Grund gehört ins title-Attribut. */
+.dash-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Dashboard: Chart-Karten ──────────────────────────────── */
+
+.dash-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* Die Karte ist der Rahmen, den public/charts.js ausdrücklich NICHT selbst
+   stellt ("die Chart-KARTE … wohnt in style.css"): Rahmen, Schatten, Polster
+   und Überschrift. Das Widget zeichnet mit `.chart` / `.chart-body` /
+   `.chart-svg` hinein und bringt deren Stile in seinem eigenen <style> mit —
+   dieselbe Arbeitsteilung wie bei public/risk-matrix.js, weshalb hier weder
+   ein `.dash-chart-body` noch ein `svg`-Zuschnitt steht: das wäre eine zweite
+   Fassung dessen, was das Widget schon regelt.
+
+   min-width:0 ist der Anteil der Karte daran: ohne es setzt ein Grid-Element
+   seine Mindestbreite auf den Inhalt, und die min-width:0-Kette des Widgets
+   liefe ins Leere — ein breit gezeichnetes SVG sprengte dann die Spalte. */
+.dash-chart {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.dash-chart-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Die Tabelle der offenen CAPs darunter braucht hier nichts: sie ist die des
+   entfallenen globalen Dashboards und behält mit .home-cap-* ihre Stile, die
+   weiter oben unverändert stehen. Sie auf .dash-cap-* umzutaufen gehört zu dem
+   Schritt, der ihr Markup ins Dashboard holt — die Klasse hier umzubenennen,
+   bevor das Markup da ist, ließe die Tabelle ungestylt ankommen. */
+
+/* ── Responsive ───────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  /* Eine Spalte statt zweier halber: die Modulgruppe ist eine Liste von
+     Aufgaben und liest sich untereinander besser als nebeneinander gequetscht. */
+  .dash-modules,
+  .dash-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Wie .plan-tile-grid eine Stufe enger — zwei Kacheln nebeneinander
+     bleiben auf einem Telefon lesbar, eine je Zeile verschwendet die Breite. */
+  .org-tile-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .org-tile {
+    padding: 14px 10px 10px;
+  }
+}
 
