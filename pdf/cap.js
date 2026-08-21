@@ -217,17 +217,24 @@ function drawCapSignatures(doc, { dept, company, personsAll, y }) {
     doc.moveTo(FORM_LEFT + c * colW, y).lineTo(FORM_LEFT + c * colW, y + SIG_ROW_H).stroke();
   }
 
+  // Das Unterschriftsbild steht in jeder der drei Namensspalten über dem Namen —
+  // deshalb einmal hier statt dreimal in derselben Funktion. Der Guard auf
+  // has_signature, das getPersonsByCompany ohnehin mitliefert, spart den BLOB-Read
+  // für jeden Unterzeichner ohne hinterlegte Unterschrift; eine fehlende ist kein
+  // Fehler, die Zelle bleibt dann mit dem Namen allein stehen.
+  const drawSignatureImage = (person, colX) => {
+    if (!person || !person.has_signature) return;
+    const sigRow = stmts.getPersonSignature.get(person.id);
+    if (!sigRow || !sigRow.signature) return;
+    try {
+      doc.image(sigRow.signature, colX + 4, y + 3, {
+        fit: [colW - 8, SIG_ROW_H - 26], align: 'center', valign: 'center',
+      });
+    } catch { /* unlesbare Unterschrift lässt Name und Funktion stehen */ }
+  };
+
   // Spalte 1: Unterschriftsbild über Name und Funktionsbezeichnung.
-  if (qm) {
-    const sigRow = stmts.getPersonSignature.get(qm.id);
-    if (sigRow && sigRow.signature) {
-      try {
-        doc.image(sigRow.signature, FORM_LEFT + 4, y + 3, {
-          fit: [colW - 8, SIG_ROW_H - 26], align: 'center', valign: 'center',
-        });
-      } catch { /* unlesbare Unterschrift lässt Name und Funktion stehen */ }
-    }
-  }
+  drawSignatureImage(qm, FORM_LEFT);
   doc.font('Helvetica-Bold').fontSize(7)
     .text(personName(qm), FORM_LEFT + 4, y + SIG_ROW_H - 21, { width: colW - 8, align: 'center', lineBreak: false });
   doc.font('Helvetica').fontSize(6)
@@ -240,10 +247,14 @@ function drawCapSignatures(doc, { dept, company, personsAll, y }) {
     .text(formatDateDE(new Date().toISOString()), FORM_LEFT + colW + 4, y + SIG_ROW_H / 2 - 6,
       { width: colW - 8, align: 'center', lineBreak: false });
 
-  // Spalte 3 und 4: die beiden Empfänger in Kopie.
-  doc.fontSize(7);
+  // Spalte 3 und 4: die beiden Empfänger in Kopie — Bild und Name wie in Spalte 1
+  // und auf derselben Grundlinie, damit die vier Zellen bündig lesen. Eine
+  // Funktionszeile braucht es hier nicht: die Rolle steht in der Kopfzeile der Spalte.
+  doc.font('Helvetica').fontSize(7);
   [accPerson, alPerson].forEach((person, i) => {
-    doc.text(personName(person), FORM_LEFT + (i + 2) * colW + 4, y + SIG_ROW_H / 2 - 5,
+    const colX = FORM_LEFT + (i + 2) * colW;
+    drawSignatureImage(person, colX);
+    doc.text(personName(person), colX + 4, y + SIG_ROW_H - 21,
       { width: colW - 8, align: 'center', lineBreak: false });
   });
 
