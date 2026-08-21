@@ -126,7 +126,13 @@ function loadNavState(key) {
 
 // Render company tabs into a container element
 // companies: array, selectedId: string, container: element, onSelect: callback(id)
+// Ohne Container ein No-op — dieselbe Wache wie makeRowClickable() weiter unten:
+// die drei Modulseiten beziehen ihre Abteilung seit dem Deeplink aus
+// #page-department-id und tragen keine Tab-Leiste mehr, nur /organization tut es
+// noch. Ein ungewachtes container.innerHTML wäre dort ein TypeError im
+// loadCompanies() des Seitenstarts und damit eine tote Seite.
 function renderCompanyTabs(companies, selectedId, container, onSelect) {
+  if (!container) return;
   let html = '';
   companies.forEach(c => {
     const active = c.id === selectedId ? ' tab-active' : '';
@@ -141,6 +147,7 @@ function renderCompanyTabs(companies, selectedId, container, onSelect) {
 // Render department tabs into a container element
 // departments: array, activeDeptId: string|null, container: element, onSelect: callback(id)
 function renderDeptTabs(departments, activeDeptId, container, onSelect) {
+  if (!container) return;
   let html = '';
   departments.forEach(d => {
     const active = d.id === activeDeptId ? ' tab-active' : '';
