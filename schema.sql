@@ -60,6 +60,16 @@ CREATE TABLE IF NOT EXISTS audit_plan (
 -- Datenumschichtung: die Spalte kommt leer dazu, bestehende Zeilen behalten
 -- ihr auditor_team unverändert. Ein interner Auditplan liest auditor_team
 -- weiter als sein Auditorenteam und lässt authority_auditor leer.
+--
+-- authority_report_date ist nach demselben Muster das Datum des
+-- Beanstandungsberichts der Behörde ("Beanstandungsbericht LBA für Audit Nr. 1
+-- vom 27.7.26") — das Datum des Schreibens, nicht das des Besuchs. Es bekommt
+-- eine eigene Spalte, weil keine vorhandene es tragen kann, ohne etwas anderes
+-- zu verschieben: performed_date steht im COALESCE von authority_date und
+-- würde Kachel, Kachelsortierung und Titel des Besuchs umschreiben, und
+-- document_rev_date ist das interne "Rev Datum" eines Themenbereichs-Audits.
+-- Ebenfalls additiv: die Spalte kommt leer dazu, Altbestand bleibt unberührt,
+-- und ein interner Auditplan liest sie nie.
 CREATE TABLE IF NOT EXISTS audit_plan_line (
   id TEXT PRIMARY KEY,
   audit_plan_id TEXT NOT NULL REFERENCES audit_plan(id) ON DELETE CASCADE,
@@ -75,6 +85,7 @@ CREATE TABLE IF NOT EXISTS audit_plan_line (
   audit_title TEXT DEFAULT '',
   auditor_team TEXT DEFAULT '',
   authority_auditor TEXT DEFAULT '',
+  authority_report_date TEXT,
   auditee TEXT DEFAULT '',
   audit_start_date TEXT,
   audit_end_date TEXT,
