@@ -1,4 +1,5 @@
 const PDFDocument = require('pdfkit');
+const { formatDateDE } = require('../services/audit-log');
 
 // Factory for consistent PDFKit document configuration.
 function createPdfDoc({ landscape = false, margin = 50 } = {}) {
@@ -43,6 +44,16 @@ function authorityEvalLabel(value) {
   return AUTHORITY_EVAL_LABELS[value] || value || '';
 }
 
+// Die Überschrift eines Behördenberichts — dieselbe Regel wie authorityName(date, '')
+// im Frontend: ohne Datum sagt die Beschriftung genau das, statt eine Jahreszahl zu
+// erfinden. Steht hier, weil Deckblatt und Findingseiten des Behördenbogens
+// (pdf/audit.js) und der Kopf des CM-003 (pdf/cap.js) denselben Besuch benennen —
+// eine zweite Fundstelle wäre die erste, die abdriftet.
+function authorityVisitLabel(line) {
+  const visitDate = formatDateDE(line.audit_end_date);
+  return visitDate ? `Behördenaudit ${visitDate}` : 'Behördenaudit (ohne Datum)';
+}
+
 // Beschriftung, kein Datenmodell: die Rolle bleibt gespeichert als 'ABTEILUNGSLEITER', gedruckt
 // wird die Bezeichnung, die das jeweilige Regelwerk der Abteilung dafür führt. Gelesen werden
 // Name und Regulation gemeinsam, weil beide Felder die Genehmigungsart tragen können.
@@ -59,4 +70,4 @@ function departmentLeaderLabel(dept) {
   return 'Abteilungsleiter';
 }
 
-module.exports = { createPdfDoc, addPdfFooter, authorityEvalLabel, departmentLeaderLabel };
+module.exports = { createPdfDoc, addPdfFooter, authorityEvalLabel, authorityVisitLabel, departmentLeaderLabel };

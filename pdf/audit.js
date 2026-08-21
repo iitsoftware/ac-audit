@@ -1,6 +1,6 @@
 const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
-const { createPdfDoc, authorityEvalLabel, departmentLeaderLabel } = require('./common');
+const { createPdfDoc, authorityEvalLabel, authorityVisitLabel, departmentLeaderLabel } = require('./common');
 // Die Findingseiten drucken das vollständige CM-002 mit — zyklenfrei, weil
 // five-why.js nur ./common und db zieht und nichts aus dieser Datei.
 const { renderFiveWhyPdf } = require('./five-why');
@@ -240,15 +240,6 @@ const CAP_ACTION_GROUPS = [
   { kind: 'CORRECTIVE', label: 'Behebungsmaßnahmen', legacy: 'corrective_action' },
   { kind: 'PREVENTIVE', label: 'Präventivmaßnahmen', legacy: 'preventive_action' },
 ];
-
-// Die Überschrift eines Behördenberichts — dieselbe Regel wie authorityName(date, '')
-// im Frontend: ohne Datum sagt die Beschriftung genau das, statt eine Jahreszahl zu
-// erfinden. Steht hier einmal, weil Deckblatt und Findingseiten denselben Besuch
-// benennen müssen.
-function authorityVisitLabel(line) {
-  const visitDate = formatDateDE(line.audit_end_date);
-  return visitDate ? `Behördenaudit ${visitDate}` : 'Behördenaudit (ohne Datum)';
-}
 
 // Der Briefkopf eines Blatts: Logo, Firmenname, Abteilungszeile mit
 // EASA-Genehmigungsnummer und Regulation. Nimmt `y` und liefert das neue zurück,
@@ -537,10 +528,10 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
 
   let y = 50;
 
-  // Zwilling von drawInfoRow() in renderCapItemPdf (pdf/cap.js): dieselbe
-  // Label/Wert-Optik, damit Findingseite und CM-003 denselben Datensatz nicht in
-  // zwei Anmutungen zeigen. Die Funktion wohnt dort in einem Closure über dessen
-  // `y`, ist also nicht zu importieren.
+  // Die Label/Wert-Optik der Findingdatenseite. Sie stand einmal auch im CM-003,
+  // dessen Kopfblock sie beim Formularschnitt an die elfspaltige Tabelle verloren
+  // hat — hier trägt sie weiter die Felder EINES Findings, für die ein Bogen im
+  // Hochformat den Platz hat.
   function drawInfoRow(label, value, { evalHighlight, bold } = {}) {
     const labelW = 130;
     const valW = contentW - labelW;

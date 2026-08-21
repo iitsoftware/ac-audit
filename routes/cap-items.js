@@ -1,14 +1,13 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const PDFDocument = require('pdfkit');
 const { db, stmts } = require('../db');
 const { logAction } = require('../services/audit-log');
 const { getCapDeadlineDays, calcCapDeadline } = require('../services/cap-deadlines');
 const { snapshotCapItem } = require('../services/trash');
 const { getQmForDepartment, buildAuthoritySalutation, sendDocumentEmail } = require('../services/email');
-const { renderCapItemPdf, generateCapItemsPdfBuffer, capHasFiveWhy } = require('../pdf/cap');
+const { renderCapFormPdf, capFormGroups, generateCapItemsPdfBuffer } = require('../pdf/cap');
 const { generateFiveWhyPdfBuffer } = require('../pdf/five-why');
-const { addPdfFooter } = require('../pdf/common');
+const { createPdfDoc, addPdfFooter } = require('../pdf/common');
 const { loadResource } = require('../middleware/load-resource');
 
 const router = express.Router();
@@ -78,31 +77,22 @@ router.get('/api/cap-items/pdf', (req, res) => {
   const ids = (req.query.ids || '').split(',').filter(Boolean);
   if (ids.length === 0) return res.status(400).json({ error: 'No IDs provided' });
 
-  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+  // Ein CM-003 ist das Formular EINES Berichts; eine Mehrfachauswahl kann über
+  // mehrere streuen. capFormGroups() gruppiert und lädt, die Route spreizt nur —
+  // dasselbe Muster wie authorityPdfData() für das Audit-Line-PDF.
+  const groups = capFormGroups(ids);
+  if (groups.length === 0) return res.status(404).json({ error: 'Keine CAP-Einträge gefunden' });
+
+  // Querformat: elf Formularspalten je Finding passen auf kein Hochformat.
+  const doc = createPdfDoc({ landscape: true, margin: 40 });
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', 'attachment; filename="Corrective_Actions.pdf"');
   doc.pipe(res);
 
-  const checklistStmt = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?');
-
-  for (let idx = 0; idx < ids.length; idx++) {
-    const cap = stmts.getCapItem.get(ids[idx]);
-    if (!cap) continue;
-    const checklistItem = checklistStmt.get(cap.checklist_item_id);
-    const line = stmts.getAuditPlanLine.get(checklistItem.audit_plan_line_id);
-    const plan = stmts.getAuditPlan.get(line.audit_plan_id);
-    const dept = stmts.getDepartment.get(plan.department_id);
-    const company = stmts.getCompany.get(dept.company_id);
-    const logoRow = stmts.getCompanyLogo.get(company.id);
-    const fiveWhy = capHasFiveWhy(cap) ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
-    // Die Maßnahmen lädt der Aufrufer, nicht der Renderer — dasselbe Muster wie beim
-    // 5-Why-Satz: der Renderer joint nur, was er bekommt.
-    const capActions = stmts.getCapActionsByCapItem.all(cap.id);
-    const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
-
+  groups.forEach((group, idx) => {
     if (idx > 0) doc.addPage();
-    renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, capActions, evidenceFiles, startY: 50 });
-  }
+    renderCapFormPdf(doc, group);
+  });
 
   addPdfFooter(doc);
   doc.end();
@@ -191,22 +181,17 @@ router.get('/api/cap-items/:id/pdf', (req, res) => {
   const cap = stmts.getCapItem.get(req.params.id);
   if (!cap) return res.status(404).json({ error: 'CAP item not found' });
 
-  const checklistItem = db.prepare('SELECT * FROM audit_checklist_item WHERE id = ?').get(cap.checklist_item_id);
-  const line = stmts.getAuditPlanLine.get(checklistItem.audit_plan_line_id);
-  const plan = stmts.getAuditPlan.get(line.audit_plan_id);
-  const dept = stmts.getDepartment.get(plan.department_id);
-  const company = stmts.getCompany.get(dept.company_id);
-  const logoRow = stmts.getCompanyLogo.get(company.id);
-  const fiveWhy = capHasFiveWhy(cap) ? stmts.getFiveWhyByCapItem.get(cap.id) : null;
-  const capActions = stmts.getCapActionsByCapItem.all(cap.id);
-  const evidenceFiles = stmts.getEvidenceFilesByCapItem.all(cap.id);
+  // Dasselbe Formular wie die Batch-Route, nur mit genau einer Zeile in der Tabelle —
+  // die eine Auswahl ergibt genau eine Gruppe.
+  const groups = capFormGroups([cap.id]);
+  if (groups.length === 0) return res.status(404).json({ error: 'Keine CAP-Einträge gefunden' });
 
-  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+  const doc = createPdfDoc({ landscape: true, margin: 40 });
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `attachment; filename="${capPdfFilename('CAP', cap)}"`);
   doc.pipe(res);
 
-  renderCapItemPdf(doc, { cap, line, plan, dept, company, logoRow, fiveWhy, capActions, evidenceFiles, startY: 50 });
+  renderCapFormPdf(doc, groups[0]);
   addPdfFooter(doc);
   doc.end();
 });
