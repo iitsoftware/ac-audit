@@ -182,6 +182,11 @@ const check = (name, ok, info) => {
   check('  → Kopf Mitte: Audit Subject (Besuchszeile) + Audit Title',
     has(one, 'Audit Subject:') && has(one, 'Audit Title:')
     && has(one, 'Behördenaudit 12.03.2026'), one.texts.slice(0, 8).join(' | '));
+  // Die Titelzelle trägt beim Behördenbericht den Satz mit der Abteilung, statt leer
+  // zu bleiben — `audit_title` füllt nur der xlsx-Import interner Audits.
+  check('  → Audit-Title-Zelle benennt die Abteilung',
+    has(one, `Beanstandungen durch die Behörde in der Abteilung ${dept.name}`),
+    one.texts.find(t => t.startsWith('Beanstandungen durch')) || '—');
   check('  → Kopf rechts: EASA-Genehmigungsnummer', has(one, 'DE.MG.4711'));
 
   const HEADERS = ['No.', 'Finding description', 'Level', 'Deadline', 'Responsible person',
@@ -258,6 +263,22 @@ const check = (name, ok, info) => {
     noDate.texts.includes(`Beanstandungsbericht LBA für Audit Nr. ${line2.audit_no}`),
     noDate.texts.find(t => t.startsWith('Beanstandungsbericht')) || '—');
 
+  // ── 3b. Ein Bericht MIT eigenem Titel: die Titelzelle ist ein Fallback, keine
+  // Ersetzung — ein gefülltes `audit_title` (der Weg des xlsx-Imports) gewinnt.
+  const titled = (await req('POST', `/api/audit-plans/${plan2.id}/lines`,
+    { audit_title: 'Nachaudit Werkstatt' })).payload;
+  const titledItem = (await req('POST', `/api/audit-plan-lines/${titled.id}/checklist-items`,
+    { compliance_check: 'Dritter Besuch', evaluation: 'L1' })).payload;
+  const titledCap = (await req('GET', `/api/audit-plans/${plan2.id}/cap-items`)).payload.items
+    .find(c => c.checklist_item_id === titledItem.id);
+
+  const withTitle = await pdf(`/api/cap-items/${titledCap.id}/pdf`);
+  check('ein gesetzter audit_title gewinnt gegen den Satz der Titelzelle',
+    withTitle.ok && withTitle.calls[0].texts.includes('Nachaudit Werkstatt')
+    && !withTitle.calls[0].texts.some(t => t.startsWith('Beanstandungen durch')),
+    (withTitle.calls[0] || { texts: [] }).texts.find(t => t.startsWith('Beanstandungen durch'))
+    || 'Titel gewinnt');
+
   // ── 4. Interner Auditplan druckt dasselbe Formular mit der internen Kurzform ──
   const intPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`, { year: 2026 })).payload;
   const intLine = (await req('POST', `/api/audit-plans/${intPlan.id}/lines`,
@@ -276,6 +297,9 @@ const check = (name, ok, info) => {
   check('  → Audit-Nr.-Zelle bleibt die nackte Nummer',
     internal.calls[0].texts.includes(String(intLine.audit_no))
     && !internal.calls[0].texts.some(t => t.startsWith('Beanstandungsbericht')));
+  check('  → Audit-Title-Zelle bleibt ohne den Behördensatz',
+    !internal.calls[0].texts.some(t => t.startsWith('Beanstandungen durch')),
+    internal.calls[0].texts.find(t => t.startsWith('Beanstandungen durch')) || '—');
 
   // ── 5. Der Versandweg fährt denselben Renderer ──
   // generateCapItemsPdfBuffer() ist die Quelle des E-Mail-Anhangs; ohne SMTP ist die
