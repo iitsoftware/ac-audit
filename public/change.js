@@ -1,9 +1,16 @@
 /* ── AC-Change Module ──────────────────────────────────────── */
 
 (function () {
-  let companies = [];
-  let selectedId = null;
+  // ── Organisationskontext ────────────────────────────────────
+  // Firma und Abteilung stehen im Deeplink /departments/:departmentId/change und
+  // kommen über die Hidden-Fields der Seite herein; Tab-Leisten gibt es nicht
+  // mehr. Beide sind für die Lebensdauer der Seite konstant.
+  const companyId = document.getElementById('page-company-id')?.value || '';
+  const departmentId = document.getElementById('page-department-id')?.value || '';
+
+  let company = null;
   let departments = [];
+  // Wurzel ist immer die Abteilung aus der URL; alles dahinter ist Drill-down.
   let navPath = [];
   let changeRequests = [];
   let persons = [];
@@ -15,16 +22,17 @@
   const ICON_SHARE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 3 12 15"/><polyline points="8 7 12 3 16 7"/></svg>';
 
   function saveNav() {
-    saveNavState(NAV_STORAGE_KEY, { selectedId, navPath, statusFilter, categoryFilter });
+    saveNavState(NAV_STORAGE_KEY, { departmentId, navPath, statusFilter, categoryFilter });
   }
 
+  // Der gespeicherte Stand gehört genau einer Abteilung. Auf einer anderen ist
+  // er fremder Zustand und wird verworfen — die Abteilung kommt aus der URL,
+  // der Speicher trägt nur, was darunter liegt.
   function loadNav() {
-    return loadNavState(NAV_STORAGE_KEY);
+    const saved = loadNavState(NAV_STORAGE_KEY);
+    return saved && saved.departmentId === departmentId ? saved : null;
   }
 
-  const companyTabsEl = document.getElementById('company-tabs');
-  const deptTabsEl = document.getElementById('dept-tabs');
-  const deptTabBar = document.getElementById('dept-tab-bar');
   const emptyEl = document.getElementById('empty-state');
   const rightPane = document.getElementById('right-pane-content');
   const breadcrumbEl = document.getElementById('breadcrumb');
@@ -58,8 +66,8 @@
 
   // ── Persons ──────────────────────────────────────────────
   async function loadPersons() {
-    if (!selectedId) { persons = []; return; }
-    try { persons = await fetchJSON(`/api/companies/${selectedId}/persons`); }
+    if (!companyId) { persons = []; return; }
+    try { persons = await fetchJSON(`/api/companies/${companyId}/persons`); }
     catch { persons = []; }
   }
 
@@ -70,51 +78,20 @@
     return (qm.first_name + ' ' + qm.last_name).trim();
   }
 
-  // ── Company / Dept Tabs ──────────────────────────────────
-  async function loadCompanies() {
-    try { companies = await fetchJSON('/api/companies'); }
-    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); companies = []; }
-    renderCompanyTabsLocal();
-  }
-
-  function renderCompanyTabsLocal() {
-    renderCompanyTabs(companies, selectedId, companyTabsEl, selectCompany);
-  }
-
-  function renderDeptTabsLocal() {
-    const activeDeptId = navPath.length > 0 && navPath[0].type === 'department' ? navPath[0].id : null;
-    renderDeptTabs(departments, activeDeptId, deptTabsEl, selectDepartment);
+  // ── Firma / Abteilungen laden ────────────────────────────
+  // Eine Firma statt aller: die der URL. Die Abteilungsliste bleibt, weil die
+  // Seite den Datensatz zu einer Abteilungs-ID braucht (Kopfzeile, Versand) und
+  // es dafür keine Einzelroute gibt — als Auswahl dient sie nicht mehr.
+  async function loadCompany() {
+    if (!companyId) { company = null; return; }
+    try { company = await fetchJSON(`/api/companies/${companyId}`); }
+    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); company = null; }
   }
 
   async function loadDepartments() {
-    if (!selectedId) return;
-    try { departments = await fetchJSON(`/api/companies/${selectedId}/departments`); }
+    if (!companyId) return;
+    try { departments = await fetchJSON(`/api/companies/${companyId}/departments`); }
     catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); departments = []; }
-  }
-
-  async function selectCompany(id) {
-    selectedId = id;
-    navPath = [];
-    statusFilter = null;
-    categoryFilter = null;
-    saveNav();
-    renderCompanyTabsLocal();
-    emptyEl.style.display = 'none';
-    rightPane.style.display = 'block';
-    await loadDepartments();
-    await loadPersons();
-    deptTabBar.style.display = 'flex';
-    renderDeptTabsLocal();
-    await renderCurrentLevel();
-  }
-
-  function selectDepartment(id) {
-    const dept = departments.find(d => d.id === id);
-    if (!dept) return;
-    navPath = [{ type: 'department', id: dept.id, name: dept.name }];
-    saveNav();
-    renderDeptTabsLocal();
-    renderCurrentLevel();
   }
 
   // ── Navigation ──────────────────────────────────────────
@@ -124,10 +101,10 @@
     renderCurrentLevel();
   }
 
+  // Die Abteilung ist die Wurzel und bleibt stehen — unter ihr liegt nichts mehr.
   function navigateBack() {
-    navPath.pop();
+    if (navPath.length > 1) navPath.pop();
     saveNav();
-    renderDeptTabsLocal();
     renderCurrentLevel();
   }
 
@@ -135,9 +112,12 @@
     saveNav();
     paintBreadcrumb();
     const lastSegment = navPath.length > 0 ? navPath[navPath.length - 1] : null;
+    // Kann nicht eintreten, solange init() die Abteilung als Wurzel setzt \u2014 die
+    // Wache steht, damit ein leerer Pfad eine leere Liste ergibt und keinen
+    // TypeError.
     if (!lastSegment) {
       headerEl.innerHTML = '';
-      contentEl.innerHTML = '<div class="empty-state-inline">Abteilung ausw\u00e4hlen</div>';
+      contentEl.innerHTML = '<div class="empty-state-inline">Keine Abteilung ausgew\u00e4hlt</div>';
     } else if (lastSegment.type === 'department') {
       await renderChangeListLevel(lastSegment.id);
     } else if (lastSegment.type === 'change-detail') {
@@ -154,14 +134,16 @@
     renderBreadcrumb(segments, breadcrumbEl, (_seg, idx) => {
       navPath = navPath.slice(0, idx + 1);
       saveNav();
-      renderDeptTabsLocal();
       renderCurrentLevel();
     }, { separator: '/' });
   }
 
   // ── Change List ─────────────────────────────────────────
-  async function renderChangeListLevel(departmentId) {
-    currentDeptId = departmentId;
+  // Parametername bewusst nicht `departmentId`: der ist seit dem Deeplink die
+  // Konstante der Seite, und ein Schatten darüber wäre genau die Stelle, an der
+  // die beiden auseinanderlaufen.
+  async function renderChangeListLevel(deptId) {
+    currentDeptId = deptId;
     headerEl.innerHTML = `
       <h2>Change Requests</h2>
       <button class="btn-icon" id="btn-add-change" title="Change Request hinzuf\u00fcgen">+</button>
@@ -818,7 +800,7 @@
     let saved = {};
     try { saved = JSON.parse(currentCR.form2_data || '{}'); } catch {}
 
-    const comp = companies.find(c => c.id === selectedId);
+    const comp = company;
 
     document.getElementById('easa-form2-antragsart').value = saved.antragsart || 'aenderung';
     document.getElementById('easa-form2-standorte').value = saved.standorte || 'siehe oben';
@@ -1407,22 +1389,36 @@
 
   // ── Init ──────────────────────────────────────────────────
   async function init() {
-    await loadCompanies();
+    // Ohne Abteilung in der URL gibt es nichts zu zeigen — die Route liefert für
+    // eine unbekannte Abteilung ohnehin 404, das hier ist der Fall einer Route,
+    // die das Hidden-Field gar nicht erst setzt.
+    if (!departmentId) {
+      emptyEl.textContent = 'Keine Abteilung ausgewählt';
+      emptyEl.style.display = 'flex';
+      rightPane.style.display = 'none';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    rightPane.style.display = 'block';
+
+    await loadCompany();
+    await loadDepartments();
+    await loadPersons();
+
+    // Wurzel des Pfads ist die Abteilung aus der URL; ein gespeicherter
+    // Drill-down darunter wird nur übernommen, wenn er zu genau dieser
+    // Abteilung gehört — loadNav() verwirft jeden anderen.
+    const dept = departments.find(d => d.id === departmentId);
+    navPath = [{ type: 'department', id: departmentId, name: dept ? dept.name : 'Abteilung' }];
+
     const saved = loadNav();
-    if (saved && saved.selectedId && companies.find(c => c.id === saved.selectedId)) {
-      selectedId = saved.selectedId;
-      navPath = Array.isArray(saved.navPath) ? saved.navPath : [];
+    if (saved) {
+      if (Array.isArray(saved.navPath) && saved.navPath.length > 0) navPath = saved.navPath;
       statusFilter = saved.statusFilter || null;
       categoryFilter = saved.categoryFilter || null;
-      renderCompanyTabsLocal();
-      emptyEl.style.display = 'none';
-      rightPane.style.display = 'block';
-      await loadDepartments();
-      await loadPersons();
-      deptTabBar.style.display = 'flex';
-      renderDeptTabsLocal();
-      await renderCurrentLevel();
     }
+
+    await renderCurrentLevel();
   }
 
   init();

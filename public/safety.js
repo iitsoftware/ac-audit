@@ -14,9 +14,15 @@
 //   GET        /api/spi-evaluations/pdf?ids=…  (Jahrespaket fürs SRB)
 
 (function () {
-  let companies = [];
-  let selectedId = null;
-  let departments = [];
+  // ── Organisationskontext ────────────────────────────────────
+  // Die Abteilung steht im Deeplink /departments/:departmentId/safety und kommt
+  // über das Hidden-Field der Seite herein; Tab-Leisten gibt es nicht mehr.
+  // #page-company-id liest diese Seite bewusst nicht: jede AC-SMS-Route hängt an
+  // der Abteilung, die Firma zieht sich der Server für seine PDFs selbst.
+  // `currentDeptId` ist damit die Abteilung der URL und wechselt nicht mehr zur
+  // Laufzeit — der Name bleibt, weil die ganze Datei darauf liest.
+  const departmentId = document.getElementById('page-department-id')?.value || '';
+
   let currentDeptId = null;
   let years = [];
   let currentYearId = null;
@@ -30,9 +36,6 @@
   const NAV_STORAGE_KEY = 'ac-safety-nav-state';
   const ICON_SHARE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 3 12 15"/><polyline points="8 7 12 3 16 7"/></svg>';
 
-  const companyTabsEl = document.getElementById('company-tabs');
-  const deptTabsEl = document.getElementById('dept-tabs');
-  const deptTabBar = document.getElementById('dept-tab-bar');
   const emptyEl = document.getElementById('empty-state');
   const contentEl = document.getElementById('safety-content');
   const deptEmptyEl = document.getElementById('safety-dept-empty');
@@ -46,53 +49,33 @@
   const objectivesSelectAll = document.getElementById('objectives-select-all');
 
   // ── Helpers ──────────────────────────────────────────────
+  // Gespeichert wird allein das offene Jahr — Firma und Abteilung stehen in der
+  // URL. Die Abteilung reist trotzdem mit: der Speicher gehört genau ihr, und
+  // auf einer anderen wäre ein Jahr fremder Zustand.
   function saveNav() {
-    saveNavState(NAV_STORAGE_KEY, { selectedId, currentDeptId, currentYearId });
+    saveNavState(NAV_STORAGE_KEY, { departmentId, currentYearId });
+  }
+
+  function loadNav() {
+    const saved = loadNavState(NAV_STORAGE_KEY);
+    return saved && saved.departmentId === departmentId ? saved : null;
   }
 
   function currentYear() {
     return years.find(y => y.id === currentYearId) || null;
   }
 
-  // ── Company / Dept Tabs ──────────────────────────────────
-  async function loadCompanies() {
-    try { companies = await fetchJSON('/api/companies'); }
-    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); companies = []; }
-    renderCompanyTabs(companies, selectedId, companyTabsEl, selectCompany);
-  }
-
-  async function selectCompany(id, restoreDeptId, restoreYearId) {
-    selectedId = id;
-    currentDeptId = null;
+  // ── Abteilung der URL öffnen ─────────────────────────────
+  async function openDepartment(restoreYearId) {
+    currentDeptId = departmentId;
     currentYearId = null;
     saveNav();
-    renderCompanyTabs(companies, selectedId, companyTabsEl, selectCompany);
     emptyEl.style.display = 'none';
     contentEl.style.display = 'block';
-    deptEmptyEl.style.display = '';
-    yearsEl.style.display = 'none';
-    yearDetailEl.style.display = 'none'; // stale year detail must not survive a company switch
-    meetingDetailEl.style.display = 'none'; // stale detail form must not survive a company switch
-    spiDetailEl.style.display = 'none'; // dito für das CM-006-Formular
-    resetObjectives();
-    try { departments = await fetchJSON(`/api/companies/${selectedId}/departments`); }
-    catch (e) { toast(e?.message || 'Vorgang fehlgeschlagen', 'error'); departments = []; }
-    deptTabBar.style.display = 'flex';
-    renderDeptTabs(departments, currentDeptId, deptTabsEl, selectDepartment);
-    if (restoreDeptId && departments.some(d => d.id === restoreDeptId)) {
-      await selectDepartment(restoreDeptId, restoreYearId);
-    }
-  }
-
-  async function selectDepartment(id, restoreYearId) {
-    currentDeptId = id;
-    currentYearId = null;
-    saveNav();
-    renderDeptTabs(departments, currentDeptId, deptTabsEl, selectDepartment);
     deptEmptyEl.style.display = 'none';
-    yearDetailEl.style.display = 'none'; // stale year detail must not survive a department switch
-    meetingDetailEl.style.display = 'none'; // stale detail form must not survive a department switch
-    spiDetailEl.style.display = 'none'; // dito für das CM-006-Formular
+    yearDetailEl.style.display = 'none';
+    meetingDetailEl.style.display = 'none';
+    spiDetailEl.style.display = 'none';
     resetObjectives();
     yearsEl.style.display = 'block';
     await loadYears();
@@ -820,11 +803,17 @@
   initDateAutoFormat(document.getElementById('spi-form-decided-at'));
 
   async function init() {
-    const saved = loadNavState(NAV_STORAGE_KEY);
-    await loadCompanies();
-    if (saved?.selectedId && companies.some(c => c.id === saved.selectedId)) {
-      await selectCompany(saved.selectedId, saved.currentDeptId, saved.currentYearId);
+    // Ohne Abteilung in der URL gibt es nichts zu zeigen — die Route liefert für
+    // eine unbekannte Abteilung ohnehin 404, das hier ist der Fall einer Route,
+    // die das Hidden-Field gar nicht erst setzt.
+    if (!departmentId) {
+      emptyEl.textContent = 'Keine Abteilung ausgewählt';
+      emptyEl.style.display = 'flex';
+      contentEl.style.display = 'none';
+      return;
     }
+    const saved = loadNav();
+    await openDepartment(saved?.currentYearId);
   }
 
   init();

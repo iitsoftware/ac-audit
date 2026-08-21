@@ -76,7 +76,10 @@ document.querySelectorAll('[data-toggle-page]').forEach(btn => {
   btn.addEventListener('click', () => {
     const target = btn.getAttribute('data-toggle-page');
     if (btn.classList.contains('active')) {
-      const returnPath = localStorage.getItem('nav_return_path') || '/home';
+      // Einstieg ist die Firmenkachelseite, seit /home entfallen ist — ein
+      // Fallback auf eine Route, die es nicht mehr gibt, wäre eine 404 statt
+      // eines Rücksprungs.
+      const returnPath = localStorage.getItem('nav_return_path') || '/companies';
       window.location.href = returnPath;
     } else {
       window.location.href = target;
@@ -111,6 +114,14 @@ function parseDateDE(val) {
 }
 
 // Generic nav state persistence (localStorage)
+// Der Organisationskontext gehört ausdrücklich NICHT mehr hierher: Firma und
+// Abteilung stehen seit der organisationsgeführten Navigation in der URL und
+// kommen über #page-company-id / #page-department-id ins Frontend. Was hier
+// bleibt, ist allein der Zustand *unterhalb* der Abteilung — der Drill-down-Pfad
+// einer Modulseite, ihre Filter, das offene Jahr. Jeder Aufrufer legt die
+// Abteilung, für die er gespeichert hat, mit in den Datensatz und stellt nur
+// wieder her, wenn sie zu der aus der URL passt; sonst zeigte ein Reload auf
+// Abteilung B den Pfad von Abteilung A.
 function saveNavState(key, data) {
   try { localStorage.setItem(key, JSON.stringify(data)); }
   catch { /* quota exceeded or private mode */ }
@@ -122,41 +133,6 @@ function loadNavState(key) {
     if (!raw) return null;
     return JSON.parse(raw);
   } catch { return null; }
-}
-
-// Render company tabs into a container element
-// companies: array, selectedId: string, container: element, onSelect: callback(id)
-// Ohne Container ein No-op — dieselbe Wache wie makeRowClickable() weiter unten:
-// die drei Modulseiten beziehen ihre Abteilung seit dem Deeplink aus
-// #page-department-id und tragen keine Tab-Leiste mehr, nur /organization tut es
-// noch. Ein ungewachtes container.innerHTML wäre dort ein TypeError im
-// loadCompanies() des Seitenstarts und damit eine tote Seite.
-function renderCompanyTabs(companies, selectedId, container, onSelect) {
-  if (!container) return;
-  let html = '';
-  companies.forEach(c => {
-    const active = c.id === selectedId ? ' tab-active' : '';
-    html += `<button class="tab${active}" data-id="${c.id}">${escapeHtml(c.name)}</button>`;
-  });
-  container.innerHTML = html;
-  container.querySelectorAll('.tab').forEach(btn => {
-    btn.addEventListener('click', () => onSelect(btn.dataset.id));
-  });
-}
-
-// Render department tabs into a container element
-// departments: array, activeDeptId: string|null, container: element, onSelect: callback(id)
-function renderDeptTabs(departments, activeDeptId, container, onSelect) {
-  if (!container) return;
-  let html = '';
-  departments.forEach(d => {
-    const active = d.id === activeDeptId ? ' tab-active' : '';
-    html += `<button class="tab tab-secondary${active}" data-id="${d.id}">${escapeHtml(d.name)}</button>`;
-  });
-  container.innerHTML = html;
-  container.querySelectorAll('.tab').forEach(btn => {
-    btn.addEventListener('click', () => onSelect(btn.dataset.id));
-  });
 }
 
 // Make a row keyboard-accessible (Enter/Space activates handler)
