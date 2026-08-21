@@ -130,9 +130,13 @@ function drawCapFormHead(doc, { line, plan, dept, logoRow, y }) {
     x: colX[1] + 6, y: y + 12, w: colW[1] - 12,
     label: 'Audit Subject:', value: line.audit_subject || capVisitLine(line, plan),
   });
+  // Der Titel des Blattes. `audit_title` füllt allein der xlsx-Import interner Audits
+  // (imports/audit.js), ein Behördenbericht hat kein Feld dafür — dieselbe Lage wie bei
+  // `audit_subject` eine Zeile darüber, also derselbe Fallback statt einer dauerhaft
+  // leeren Zelle neben zwei sprechenden Nachbarn.
   drawHeadField(doc, {
     x: colX[1] + 6, y: y + 40, w: colW[1] - 12,
-    label: 'Audit Title:', value: line.audit_title,
+    label: 'Audit Title:', value: line.audit_title || capTitleLine(line, plan, dept),
   });
 
   let ry = y + 8;
@@ -179,6 +183,19 @@ function capAuditNoLine(line, plan) {
   const sentence = `Beanstandungsbericht ${authority} für Audit Nr. ${line.audit_no || ''}`.trim();
   const reportDate = formatDateDE(line.audit_end_date);
   return reportDate ? `${sentence} vom ${reportDate}` : sentence;
+}
+
+// Die Audit-Title-Zelle desselben Kopfes, im Idiom der beiden Helfer darüber. Auf einem
+// Behördenbericht benennt das Papierformular dort nicht einen Themenbereich, sondern
+// wofür das Blatt steht: die Beanstandungen, welche die Behörde in dieser Abteilung
+// erhoben hat. Die Abteilung kommt aus `dept`, das der Renderer ohnehin bekommt — es
+// wird nichts gespeichert und nichts nachgelesen. Ein interner Plan bekommt den leeren
+// String: sein Titel ist der importierte `audit_title` oder gar keiner, und ein Satz
+// über Beanstandungen der Behörde wäre auf seinem Blatt schlicht falsch.
+function capTitleLine(line, plan, dept) {
+  const isAuthority = plan && (plan.plan_type || 'AUDIT') === 'AUTHORITY';
+  if (!isAuthority) return '';
+  return `Beanstandungen durch die Behörde in der Abteilung ${(dept && dept.name) || ''}`.trim();
 }
 
 // ── Unterschriftenblock ──────────────────────────────────────────────────

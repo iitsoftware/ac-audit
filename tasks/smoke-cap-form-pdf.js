@@ -278,6 +278,23 @@ const check = (name, ok, info) => {
     noDate.texts.includes(`Beanstandungsbericht LBA für Audit Nr. ${line2.audit_no}`),
     noDate.texts.find(t => t.startsWith('Beanstandungsbericht')) || '—');
 
+  // ── 3b. Ein Bericht MIT eigenem Titel: die Titelzelle ist ein Fallback, keine
+  // Ersetzung — ein gefülltes `audit_title` (der Weg des xlsx-Imports) gewinnt. Die
+  // Spalte hat genau EINEN Schreibweg, die Anlage der Zeile (`createAuditPlanLine`);
+  // PUT schreibt sie nicht, der Test setzt sie deshalb dort, so wie ein Import es täte.
+  const titled = (await req('POST', `/api/audit-plans/${plan2.id}/lines`,
+    { audit_title: 'Nachaudit Werkstatt' })).payload;
+  const titledItem = (await req('POST', `/api/audit-plan-lines/${titled.id}/checklist-items`,
+    { compliance_check: 'Dritter Besuch', evaluation: 'L1' })).payload;
+  const titledCap = (await req('GET', `/api/audit-plans/${plan2.id}/cap-items`)).payload.items
+    .find(c => c.checklist_item_id === titledItem.id);
+
+  const withTitle = await pdf(`/api/cap-items/${titledCap.id}/pdf`);
+  check('ein gesetzter audit_title gewinnt gegen den Satz der Titelzelle',
+    withTitle.ok && headValue(withTitle.calls[0], 'Audit Title:') === 'Nachaudit Werkstatt'
+    && !withTitle.calls[0].texts.some(t => t.startsWith('Beanstandungen durch die Behörde')),
+    withTitle.ok ? headValue(withTitle.calls[0], 'Audit Title:') : 'kein Aufruf');
+
   // ── 4. Interner Auditplan druckt dasselbe Formular mit der internen Kurzform ──
   const intPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`, { year: 2026 })).payload;
   const intLine = (await req('POST', `/api/audit-plans/${intPlan.id}/lines`,
@@ -304,30 +321,7 @@ const check = (name, ok, info) => {
     && !internal.calls[0].texts.some(t => t.startsWith('Beanstandungen durch die Behörde')),
     JSON.stringify(headValue(internal.calls[0], 'Audit Title:')));
 
-  // ── 5. Ein gespeicherter audit_title gewinnt über den Behördensatz ──
-  // Die Spalte hat genau EINEN Schreibweg — createAuditPlanLine, also die Anlage der
-  // Zeile; der xlsx-Import interner Checklisten füllt sie über imports/audit.js, PUT
-  // schreibt sie nicht. Der Test setzt sie deshalb bei der Anlage einer Zeile, so wie
-  // ein Import es täte, und hängt sie an einen Behördenplan: nur dort gäbe es
-  // überhaupt einen Satz, den der gespeicherte Titel verdrängen kann.
-  const titledPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`,
-    { year: 2026, plan_type: 'AUTHORITY' })).payload;
-  const titledLine = (await req('POST', `/api/audit-plans/${titledPlan.id}/lines`,
-    { audit_title: 'Nachaudit Werkstatt 2026' })).payload;
-  const titledItem = (await req('POST', `/api/audit-plan-lines/${titledLine.id}/checklist-items`,
-    { compliance_check: 'Nachprüfung offen', evaluation: 'L1' })).payload;
-  const titledCap = (await req('GET', `/api/audit-plans/${titledPlan.id}/cap-items`)).payload.items
-    .find(c => c.checklist_item_id === titledItem.id);
-
-  const titled = await pdf(`/api/cap-items/${titledCap.id}/pdf`);
-  check('ein Behördenbericht MIT audit_title rendert sein Formular',
-    titled.ok && titled.calls.length === 1, `${titled.calls.length}`);
-  check('  → der gespeicherte Titel gewinnt, der Behördensatz erscheint nicht',
-    headValue(titled.calls[0], 'Audit Title:') === 'Nachaudit Werkstatt 2026'
-    && !titled.calls[0].texts.some(t => t.startsWith('Beanstandungen durch die Behörde')),
-    headValue(titled.calls[0], 'Audit Title:'));
-
-  // ── 6. Der Versandweg fährt denselben Renderer ──
+  // ── 5. Der Versandweg fährt denselben Renderer ──
   // generateCapItemsPdfBuffer() ist die Quelle des E-Mail-Anhangs; ohne SMTP ist die
   // Route nicht zu fahren, der Puffer selbst schon. Der Spy sieht diesen Aufruf
   // nicht — er ruft den Renderer modulintern und nicht über den Export —, geprüft
@@ -344,7 +338,7 @@ const check = (name, ok, info) => {
     e => check('  → eine Auswahl ohne Treffer wirft statt einen leeren Anhang zu liefern',
       e.statusCode === 404, e.message));
 
-  // ── 7. Eine Auswahl ohne existierende IDs ist 404 statt eines PDFs ohne Zeilen ──
+  // ── 6. Eine Auswahl ohne existierende IDs ist 404 statt eines PDFs ohne Zeilen ──
   const gone = await fetch(`${BASE}/api/cap-items/pdf?ids=nope`, { headers: { Cookie: cookie } });
   check('eine Auswahl, von der nichts übrig ist, liefert 404', gone.status === 404, String(gone.status));
 
