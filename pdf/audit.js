@@ -136,7 +136,7 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
       doc.strokeColor('#000000').lineWidth(0.5);
       doc.moveTo(50, footerY).lineTo(pageW - 50, footerY).stroke();
       doc.fontSize(7).fillColor('#000000').font('Helvetica');
-      doc.text('Erstellt mit ac-audit', 50, footerY + 4, { lineBreak: false });
+      doc.text('Erstellt mit ac-suite', 50, footerY + 4, { lineBreak: false });
       const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
       doc.text(pageLabel, 50, footerY + 4, { width: pageW - 100, align: 'right', lineBreak: false });
     }
@@ -222,7 +222,7 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
     doc.strokeColor('#000000').lineWidth(0.5);
     doc.moveTo(50, footerY).lineTo(tableRight, footerY).stroke();
     doc.fontSize(7).fillColor('#000000').font('Helvetica');
-    doc.text('Erstellt mit ac-audit', 50, footerY + 4, { lineBreak: false });
+    doc.text('Erstellt mit ac-suite', 50, footerY + 4, { lineBreak: false });
     const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
     doc.text(pageLabel, 50, footerY + 4, { width: tableRight - 50, align: 'right', lineBreak: false });
   }
