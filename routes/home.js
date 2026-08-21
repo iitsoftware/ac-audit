@@ -1,139 +1,95 @@
 const express = require('express');
-const { db, stmts } = require('../db');
+const { stmts } = require('../db');
+const { loadResource } = require('../middleware/load-resource');
 
 const router = express.Router();
 
-router.get('/api/home/stats', (req, res) => {
-  try {
-    const openCount = stmts.getCapStatsOpen.get().cnt;
-    const overdueCount = stmts.getCapStatsOverdue.get().cnt;
-    const totalAudits = stmts.getTotalAudits.get().cnt;
-    const openChanges = stmts.getOpenChangeRequests.get().cnt;
-    const totalChanges = stmts.getTotalChangeRequests.get().cnt;
-    const openTasks = db.prepare(`SELECT COUNT(*) AS cnt FROM change_task WHERE (completion_date IS NULL OR completion_date = '')`).get().cnt;
-    const totalTasks = db.prepare('SELECT COUNT(*) AS cnt FROM change_task').get().cnt;
+// Die vier Levels in der Reihenfolge, in der sie überall stehen (Findingliste,
+// Zusammenfassung, Legende des Audit-Line-PDFs). Gespeichert wird der rohe
+// Wert; der Klartext ("Bemerkung") ist Beschriftungssache der Oberfläche und
+// hat in einem Aggregat nichts verloren — sonst gäbe es ihn zweimal.
+const FINDING_LEVELS = ['O', 'L1', 'L2', 'L3'];
 
-    // Build enriched CAP items list via multi-query approach
-    const openCaps = stmts.getOpenCapItems.all();
-    const capItems = [];
+// Kennzahlen EINER Abteilung für die Dashboard-Charts. Ein Aufruf, fünf
+// Aggregate, alle fertig gezählt in SQL — die Route rechnet nichts, sie formt
+// nur die Antwort. Ein globales Dashboard gibt es nicht mehr: nach dem Login
+// kommen die Firmenkacheln, und jede Abteilung trägt ihre eigenen Zahlen.
+router.get(
+  '/api/departments/:id/dashboard',
+  loadResource('getDepartment', 'id', 'Department not found'),
+  (req, res) => {
+    try {
+      const deptId = req.resource.id;
+      // Das laufende Kalenderjahr ist der Bezug von Auditplan (audit_plan.year)
+      // und Sicherheitsjahr (safety_year.year) gleichermaßen — beide sind eine
+      // Jahreszahl und kein Datum, deshalb genügt getFullYear().
+      const year = new Date().getFullYear();
 
-    if (openCaps.length > 0) {
-      // Step 2: Get checklist items
-      const checklistItemIds = [...new Set(openCaps.map(c => c.checklist_item_id))];
-      const checklistItems = db.prepare(
-        `SELECT id, audit_plan_line_id, evaluation, compliance_check, regulation_ref
-         FROM audit_checklist_item WHERE id IN (${checklistItemIds.map(() => '?').join(',')})`
-      ).all(...checklistItemIds);
-      const ciMap = Object.fromEntries(checklistItems.map(ci => [ci.id, ci]));
+      // Findings nach Level — jedes Level steht in der Antwort, auch mit 0:
+      // ein Chart braucht seine Kategorie, sonst verschieben sich die Balken
+      // zwischen zwei Abteilungen.
+      const levelRows = stmts.getDashboardFindingsByLevel.all(deptId);
+      const levelCounts = Object.fromEntries(levelRows.map(r => [r.level, r.cnt]));
+      const findings = {
+        total: levelRows.reduce((sum, r) => sum + r.cnt, 0),
+        byLevel: FINDING_LEVELS.map(level => ({ level, count: levelCounts[level] || 0 })),
+      };
 
-      // Step 3: Get plan lines
-      const planLineIds = [...new Set(checklistItems.map(ci => ci.audit_plan_line_id))];
-      const planLines = planLineIds.length > 0 ? db.prepare(
-        `SELECT id, audit_plan_id, audit_no, subject
-         FROM audit_plan_line WHERE id IN (${planLineIds.map(() => '?').join(',')})`
-      ).all(...planLineIds) : [];
-      const plMap = Object.fromEntries(planLines.map(pl => [pl.id, pl]));
+      // CAP-Fristen — drei sich ausschließende Töpfe über allen offenen CAP
+      // Items der Abteilung, quellenübergreifend (Audit, Change, manuell).
+      const d = stmts.getDashboardCapDeadlines.get(deptId);
+      const capDeadlines = {
+        total: d.total,
+        overdue: d.overdue,
+        dueSoon: d.due_soon,
+        open: d.later,
+      };
 
-      // Step 4: Get plans
-      const planIds = [...new Set(planLines.map(pl => pl.audit_plan_id))];
-      const plans = planIds.length > 0 ? db.prepare(
-        `SELECT id, department_id, year
-         FROM audit_plan WHERE id IN (${planIds.map(() => '?').join(',')})`
-      ).all(...planIds) : [];
-      const apMap = Object.fromEntries(plans.map(p => [p.id, p]));
+      // Audits des laufenden Jahres, geplant vs. durchgeführt.
+      const a = stmts.getDashboardAuditsByYear.get(deptId, year);
+      const audits = {
+        year,
+        planned: a.planned,
+        performed: a.performed,
+        // Ausdrücklich als eigene Zahl und nicht im Frontend gerechnet: sie ist
+        // die Aussage des Charts ("was steht noch aus"), und planned - performed
+        // an zwei Stellen zu bilden ist die Stelle, an der beide abdriften.
+        outstanding: a.planned - a.performed,
+      };
 
-      // Step 5: Get departments
-      const deptIds = [...new Set(plans.map(p => p.department_id))];
-      const depts = deptIds.length > 0 ? db.prepare(
-        `SELECT id, company_id, name
-         FROM department WHERE id IN (${deptIds.map(() => '?').join(',')})`
-      ).all(...deptIds) : [];
-      const dMap = Object.fromEntries(depts.map(d => [d.id, d]));
+      // Sicherheitsziele des Sicherheitsjahres zum laufenden Kalenderjahr. Ein
+      // Jahr ohne Katalog — oder gar kein Sicherheitsjahr — liefert lauter
+      // Nullen statt eines Fehlers: das ist ein Zustand und keine Störung.
+      const s = stmts.getDashboardSafetyObjectives.get(deptId, year);
+      const safetyObjectives = {
+        year,
+        total: s.total,
+        fulfilled: s.fulfilled,
+        missed: s.missed,
+        due: s.due,
+      };
 
-      // Step 6: Get companies
-      const companyIds = [...new Set(depts.map(d => d.company_id))];
-      const companies = companyIds.length > 0 ? db.prepare(
-        `SELECT id, name
-         FROM company WHERE id IN (${companyIds.map(() => '?').join(',')})`
-      ).all(...companyIds) : [];
-      const coMap = Object.fromEntries(companies.map(c => [c.id, c]));
+      // Change Requests nach Status, in der Reihenfolge, die das Statement
+      // liefert — welche Status es gibt, entscheiden die Daten.
+      const changeRows = stmts.getDashboardChangeRequestsByStatus.all(deptId);
+      const changeRequests = {
+        total: changeRows.reduce((sum, r) => sum + r.cnt, 0),
+        byStatus: changeRows.map(r => ({ status: r.status || '', count: r.cnt })),
+      };
 
-      // Step 7: Merge
-      const today = new Date().toISOString().slice(0, 10);
-      for (const cap of openCaps) {
-        const ci = ciMap[cap.checklist_item_id];
-        if (!ci) continue;
-        const pl = plMap[ci.audit_plan_line_id];
-        if (!pl) continue;
-        const ap = apMap[pl.audit_plan_id];
-        if (!ap) continue;
-        const dept = dMap[ap.department_id];
-        if (!dept) continue;
-        const co = coMap[dept.company_id];
-        if (!co) continue;
-
-        const isOverdue = cap.deadline && cap.deadline !== '' && cap.deadline < today;
-        capItems.push({
-          id: cap.id,
-          companyId: co.id,
-          companyName: co.name,
-          departmentId: dept.id,
-          departmentName: dept.name,
-          auditPlanId: ap.id,
-          auditPlanYear: ap.year,
-          auditNo: pl.audit_no,
-          auditSubject: pl.subject,
-          evaluation: ci.evaluation,
-          description: ci.compliance_check,
-          deadline: cap.deadline,
-          status: isOverdue ? 'OVERDUE' : 'OPEN',
-          isOverdue,
-          source: cap.source || 'audit',
-        });
-      }
-
-      // Sort: overdue first, then by deadline ASC
-      capItems.sort((a, b) => {
-        if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
-        return (a.deadline || '').localeCompare(b.deadline || '');
+      res.json({
+        departmentId: deptId,
+        departmentName: req.resource.name,
+        findings,
+        capDeadlines,
+        audits,
+        safetyObjectives,
+        changeRequests,
       });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
-
-    // SRB meetings across all departments. The safety year — not the meeting
-    // date — decides which calendar year a meeting belongs to, so join through
-    // safety_year instead of parsing meeting_date.
-    const currentYear = new Date().getFullYear();
-    const meetingsThisYear = db.prepare(
-      `SELECT COUNT(*) AS cnt
-       FROM sms_meeting m
-       JOIN safety_year y ON y.id = m.safety_year_id
-       WHERE y.year = ?`
-    ).get(currentYear).cnt;
-    const totalMeetings = db.prepare('SELECT COUNT(*) AS cnt FROM sms_meeting').get().cnt;
-
-    res.json({
-      modules: {
-        audit: {
-          openCaps: openCount,
-          overdueCaps: overdueCount,
-          totalAudits,
-        },
-        change: {
-          openChanges,
-          totalChanges,
-          openTasks,
-          totalTasks,
-        },
-        safety: {
-          meetingsThisYear,
-          totalMeetings,
-        },
-      },
-      capItems,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 module.exports = router;
