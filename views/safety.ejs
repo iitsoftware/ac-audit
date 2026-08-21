@@ -1,12 +1,12 @@
-<!-- Company Tabs (read-only) -->
-<div class="tab-bar" id="company-tab-bar">
-  <div class="tab-bar-scroll" id="company-tabs"></div>
-</div>
-
-<!-- Department Tabs (read-only) -->
-<div class="tab-bar tab-bar-secondary" id="dept-tab-bar" style="display:none">
-  <div class="tab-bar-scroll" id="dept-tabs"></div>
-</div>
+<!-- Abteilung und Firma des Deeplinks /departments/:departmentId/safety. Die Seite
+     bekommt ihre Abteilung aus der URL und nicht mehr aus einer Tab-Leiste: die
+     Route setzt beide Angaben als EJS-Local, das Frontend liest sie aus dem DOM
+     &mdash; dasselbe Muster wie das #srb-default-topics weiter unten.
+     `locals.` statt der nackten Variablen, weil EJS eine nicht gesetzte Local als
+     ReferenceError wirft: eine Route, die noch keine der beiden Angaben setzt,
+     rendert so eine Seite ohne Abteilung statt einer 500. -->
+<input type="hidden" id="page-department-id" value="<%= locals.departmentId || '' %>">
+<input type="hidden" id="page-company-id" value="<%= locals.companyId || '' %>">
 
 <!-- Main Content -->
 <main class="main-content-full" id="main-content">
