@@ -1,9 +1,10 @@
 // Smoke test für die Seitenaufteilung je Finding im Behördenaudit-PDF
 // (renderAuthorityFindingPages() in pdf/audit.js).
 //
-// Geprüft wird genau die Regel: je Finding vier Seiten — Findingdaten (mit
-// Briefkopf) | CM-002 Seite 1 | CM-002 Seite 2 | Maßnahmentabellen —, jeder Block
-// auf einer frischen Seite. Der gesetzte Seitenschnitt des Formulars bleibt dabei
+// Geprüft wird genau die Regel: je Finding drei Seiten — Findingdaten (mit
+// Briefkopf) | CM-002 Seite 1 | CM-002 Seite 2 —, jeder Block auf einer frischen
+// Seite. Die Maßnahmen stehen ausdrücklich nicht dabei: sie werden am Schluss des
+// Bogens im CM-003 gedruckt. Der gesetzte Seitenschnitt des Formulars bleibt dabei
 // heil — Why 1–3 (PRIMARY_CAUSE_STEPS = 3 in pdf/five-why.js) auf CM-002 Seite 1,
 // Why 4–5 samt Final Root Cause Statement und Unterzeichnerzeile auf CM-002
 // Seite 2. Hinter dem Datenblock beginnend passten nur Why 1+2 auf die erste
@@ -111,17 +112,18 @@ check('Why 4–5 stehen auf CM-002 Seite 2',
   ['4. Why is that?', '5. Why is that?'].every(s => on(p + 2, s)));
 check('Statement und Unterzeichnerzeile stehen auf CM-002 Seite 2',
   on(p + 2, 'FINAL ROOT CAUSE STATEMENT') && on(p + 2, 'Compliance Monitoring Manager'));
-// Die Maßnahmen beginnen ihrerseits auf einer eigenen Seite: unmittelbar unter der
-// Unterzeichnerzeile las sich "Behebungsmaßnahmen" wie eine weitere Rubrik des
-// Formulars. Geprüft wird deshalb die Seite selbst und nicht bloß "irgendwo
-// dahinter" — die Präventivmaßnahmen dürfen bei vielen Zeilen weiterwandern,
-// die erste Tabelle nicht.
-check('die Maßnahmen beginnen auf einer eigenen Seite hinter dem Formular',
-  pageOf('Behebungsmaßnahmen') === p + 3, `Seite ${pageOf('Behebungsmaßnahmen')} statt ${p + 3}`);
-check('auf der Unterschriftenseite des CM-002 steht keine Maßnahmentabelle',
-  !on(p + 2, 'Behebungsmaßnahmen') && !on(p + 2, 'Präventivmaßnahmen'));
-check('die Präventivmaßnahmen folgen den Behebungsmaßnahmen',
-  pageOf('Präventivmaßnahmen') >= p + 3);
+// Die Maßnahmen stehen auf keinem Blatt dieses Renderers — weder als Tabelle noch
+// als Beschreibung einer einzelnen Maßnahme: sie gehören ins CM-003 am Schluss des
+// Bogens, und zwei Orte für dieselbe Sache sind genau der Fehler, den der Umbau
+// beseitigt hat. Die Findingseiten führen deshalb auch die capActions nicht mehr,
+// die der Fixture ihnen weiterhin mitgibt.
+check('keine Maßnahmentabelle auf dem ganzen Bogen',
+  pageOf('Behebungsmaßnahmen') === undefined && pageOf('Präventivmaßnahmen') === undefined,
+  `Seite ${pageOf('Behebungsmaßnahmen')} / ${pageOf('Präventivmaßnahmen')}`);
+check('auch keine einzelne Maßnahme wird gedruckt',
+  pageOf('Behebung A') === undefined && pageOf('Prävention B') === undefined);
+check('hinter dem CM-002 folgt direkt das nächste Finding',
+  on(p + 3, 'Finding 3'), `Seite ${p + 3}: ${(perPage[p + 3] || [])[0]}`);
 
 // Ein Finding ohne Level hat kein CAP-Item — seine Seite bleibt der Datenblock.
 const p2 = pageOf('Finding 3');
