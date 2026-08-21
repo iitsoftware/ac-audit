@@ -107,7 +107,10 @@ const check = (name, ok, info) => {
   // audit_no wird serverseitig vergeben und von PUT nicht geschrieben — dieselbe
   // Nummer muss im Kopf des Formulars stehen.
   const auditNo = line.audit_no;
-  await req('PUT', `/api/audit-plan-lines/${lineId}`, { ...line, audit_end_date: '2026-03-12' });
+  // Die Behörde ist ein editierbares Feld — ein abweichender Wert muss im Satz der
+  // Audit-Nr.-Zelle stehen, sonst wäre der 'LBA'-Fallback hart gedruckt.
+  await req('PUT', `/api/audit-plan-lines/${lineId}`,
+    { ...line, auditor_team: 'LBA Braunschweig', audit_end_date: '2026-03-12' });
 
   const first = (await req('POST', `/api/audit-plan-lines/${lineId}/checklist-items`,
     { compliance_check: 'Werkzeugkontrolle unvollständig', document_ref: 'LBA-2026-1',
@@ -146,7 +149,12 @@ const check = (name, ok, info) => {
 
   const has = (call, txt) => call.texts.includes(txt);
   check('  → Kopf links: Formularname + Audit No.',
-    has(one, 'Corrective Action Plan (CAP) Rev. 0') && has(one, 'Audit No.:') && has(one, String(auditNo)));
+    has(one, 'Corrective Action Plan (CAP) Rev. 0') && has(one, 'Audit No.:'));
+  // Die Zelle trägt beim Behördenbericht den Satz des Papierformulars, nicht die
+  // nackte Nummer — mit der eingetragenen Behörde und dem Datum des Besuchs.
+  check('  → Audit-Nr.-Zelle benennt den Beanstandungsbericht',
+    has(one, `Beanstandungsbericht LBA Braunschweig für Audit Nr. ${auditNo} vom 12.03.2026`),
+    one.texts.find(t => t.startsWith('Beanstandungsbericht')) || '—');
   check('  → Kopf Mitte: Audit Subject (Besuchszeile) + Audit Title',
     has(one, 'Audit Subject:') && has(one, 'Audit Title:')
     && has(one, 'Behördenaudit 12.03.2026'), one.texts.slice(0, 8).join(' | '));
@@ -200,6 +208,13 @@ const check = (name, ok, info) => {
   check('  → jedes Formular trägt nur die Findings SEINES Berichts',
     across.calls.every(c => (c.args.entries || []).length === 1
       && c.args.entries[0].cap.checklist_item_id !== undefined));
+  // plan2 hat kein Datum und keine geänderte Behörde: der Satz endet bei der Nummer
+  // (kein leeres `vom `) und trägt den 'LBA'-Fallback der Vorbelegung.
+  const line2 = (await req('GET', `/api/audit-plan-lines/${plan2.authority_line_id}`)).payload;
+  const noDate = across.calls[1] || { texts: [] };
+  check('  → ohne Berichtsdatum endet der Satz bei der Nummer',
+    noDate.texts.includes(`Beanstandungsbericht LBA für Audit Nr. ${line2.audit_no}`),
+    noDate.texts.find(t => t.startsWith('Beanstandungsbericht')) || '—');
 
   // ── 4. Interner Auditplan druckt dasselbe Formular mit der internen Kurzform ──
   const intPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`, { year: 2026 })).payload;
@@ -216,6 +231,9 @@ const check = (name, ok, info) => {
     internal.calls[0].texts.includes('L1') && !internal.calls[0].texts.includes('Level 1'));
   check('  → Audit Subject fällt auf den Themenbereich zurück',
     internal.calls[0].texts.includes('Themenbereich Technik'));
+  check('  → Audit-Nr.-Zelle bleibt die nackte Nummer',
+    internal.calls[0].texts.includes(String(intLine.audit_no))
+    && !internal.calls[0].texts.some(t => t.startsWith('Beanstandungsbericht')));
 
   // ── 5. Der Versandweg fährt denselben Renderer ──
   // generateCapItemsPdfBuffer() ist die Quelle des E-Mail-Anhangs; ohne SMTP ist die
