@@ -191,6 +191,12 @@ function runMigrations(db) {
     // additiv: bestehende Zeilen bekommen den Default '' und behalten ihr
     // auditor_team unverändert, es wird nichts umgeschichtet.
     { name: 'authority_auditor', sql: "ALTER TABLE audit_plan_line ADD COLUMN authority_auditor TEXT DEFAULT ''" },
+    // Das Datum des Beanstandungsberichts der Behörde — das Datum ihres
+    // Schreibens und nicht das des Besuchs, der im COALESCE von authority_date
+    // steht (siehe schema.sql). Wie ein Datum dieser Tabelle ohne Default, also
+    // NULL: bestehende Zeilen tragen kein Berichtsdatum, und ein leerer Wert ist
+    // hier "noch nicht eingetragen" und nicht der leere String.
+    { name: 'authority_report_date', sql: 'ALTER TABLE audit_plan_line ADD COLUMN authority_report_date TEXT' },
   ];
 
   for (const col of planLineMigrations) {
