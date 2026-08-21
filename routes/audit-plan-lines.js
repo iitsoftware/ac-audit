@@ -75,14 +75,17 @@ router.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
 
 // Alles, was das Blatt eines Behördenaudits über die Findingliste hinaus trägt:
 // die CAP-Items des Berichts, je CAP die Ursachenanalyse und ihre Maßnahmen, die
-// Fristen der Line und den QM als Unterzeichner des eingebetteten CM-002.
+// Fristen der Line, den QM als Unterzeichner des eingebetteten CM-002 und die
+// Signaturbilder des CM-003-Unterschriftenblocks.
 // Geladen wird es HIER und dem Renderer übergeben — der Renderer liest nichts
 // selbst, dieselbe Hausregel, nach der routes/cap-items.js fiveWhy und capActions
 // fürs CM-003 lädt. Beide PDF-Routen spreizen dasselbe Ergebnis in denselben
 // renderAuditLinePdf()-Aufruf, statt die Ladeschritte zweimal auszuschreiben.
+// `personsAll` kommt von dort mit herein, statt hier ein zweites Mal gelesen zu
+// werden: beide Routen laden die Liste ohnehin und geben sie dem Renderer.
 // Für interne Pläne bleibt es bei genau den Abfragen, die der Aufruf schon immer
 // gemacht hat: die Funktion steigt am plan_type aus und gibt nichts zurück.
-function authorityPdfData(line, plan, dept, company) {
+function authorityPdfData(line, plan, dept, company, personsAll) {
   if ((plan.plan_type || 'AUDIT') !== 'AUTHORITY') return {};
 
   // Wie loadLineData() im Frontend: die Abfrage liefert die CAPs des ganzen Plans,
@@ -116,7 +119,38 @@ function authorityPdfData(line, plan, dept, company) {
   // Formular nicht verschiedene Namen tragen.
   const signer = getQmForDepartment(company.id, dept.id);
 
-  return { caps, deadlines, signer };
+  // Die Bilder des CM-003-Unterschriftenblocks am Schluss des Bogens: QM,
+  // Abteilungsleiter und Accountable Manager — dieselben drei Rollen und dieselbe
+  // Quelle (stmts.getPersonSignature), aus denen der interne Zweig von
+  // renderAuditLinePdf() seine Unterschriftenzeile zieht, nur eben hier gelesen.
+  // Die PERSONEN reichen wir nicht mit: sie stehen dem Renderer über das
+  // ohnehin übergebene personsAll schon zur Verfügung, ergänzt wird allein das
+  // BLOB, das dort fehlt.
+  //
+  // Geschlüsselt wird deshalb nach person_id und nicht nach Rolle: so hängt das
+  // Bild an genau der Zeile, deren Namen der Block druckt, und Name und
+  // Unterschrift können nicht auseinanderlaufen, falls Route und Renderer bei
+  // mehreren Trägern einer Rolle verschiedene Zeilen fänden. Für den QM ist das
+  // ohnehin ausgeschlossen — getQmForDepartment() sucht mit demselben Prädikat
+  // über dieselbe Liste.
+  //
+  // has_signature bringt getPersonsByCompany schon mit, ein Unterzeichner ohne
+  // Unterschrift kostet also keinen BLOB-Read. Ein fehlender Schlüssel ist kein
+  // Fehler, sondern der leere Unterschriftenkasten, den auch der interne Zweig
+  // zeichnet, wenn die Person keine hinterlegt hat.
+  const signatures = {};
+  const signaturePersons = [
+    signer,
+    personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id),
+    personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id),
+  ];
+  for (const person of signaturePersons) {
+    if (!person || !person.has_signature || signatures[person.id]) continue;
+    const sigRow = stmts.getPersonSignature.get(person.id);
+    if (sigRow && sigRow.signature) signatures[person.id] = sigRow.signature;
+  }
+
+  return { caps, deadlines, signer, signatures };
 }
 
 // Fußzeile des Behördenblatts: sie benennt den Besuch, zu dem das Blatt gehört,
@@ -167,7 +201,7 @@ router.get('/api/audit-plan-lines/pdf', (req, res) => {
     if (idx > 0) doc.addPage();
     renderAuditLinePdf(doc, {
       line, plan, dept, company, logoRow, checklistItems, personsAll,
-      ...authorityPdfData(line, plan, dept, company),
+      ...authorityPdfData(line, plan, dept, company, personsAll),
       startY: 50,
     });
   }
@@ -201,7 +235,7 @@ router.get('/api/audit-plan-lines/:id/pdf', (req, res) => {
 
   renderAuditLinePdf(doc, {
     line, plan, dept, company, logoRow, checklistItems, personsAll,
-    ...authorityPdfData(line, plan, dept, company),
+    ...authorityPdfData(line, plan, dept, company, personsAll),
     startY: 50,
   });
   const footerLabel = authorityFooterLabel(line, plan);
