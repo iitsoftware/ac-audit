@@ -43,4 +43,20 @@ function authorityEvalLabel(value) {
   return AUTHORITY_EVAL_LABELS[value] || value || '';
 }
 
-module.exports = { createPdfDoc, addPdfFooter, authorityEvalLabel };
+// Beschriftung, kein Datenmodell: die Rolle bleibt gespeichert als 'ABTEILUNGSLEITER', gedruckt
+// wird die Bezeichnung, die das jeweilige Regelwerk der Abteilung dafür führt. Gelesen werden
+// Name und Regulation gemeinsam, weil beide Felder die Genehmigungsart tragen können.
+// Steht hier, weil das Auditplan-PDF und das Audit-Line-PDF (beide pdf/audit.js) dieselbe
+// Unterschriftenspalte beschriften und eine dritte Fundstelle die erste wäre, die abdriftet.
+// Die Reihenfolge der Zweige ist Teil der Regel und keine Kosmetik: 'flugschule' enthält 'flug',
+// eine ATO stünde hinter dem OPS-Zweig also als Flugbetriebsleiter auf dem Blatt.
+function departmentLeaderLabel(dept) {
+  const deptText = `${dept?.name || ''} ${dept?.regulation || ''}`.toLowerCase();
+  if (deptText.includes('145')) return 'Maintenance Manager';
+  if (deptText.includes('camo') || deptText.includes('part-m')) return 'Leiter CAMO';
+  if (deptText.includes('ato') || deptText.includes('flugschule') || deptText.includes('training')) return 'Head of Training';
+  if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) return 'Flugbetriebsleiter';
+  return 'Abteilungsleiter';
+}
+
+module.exports = { createPdfDoc, addPdfFooter, authorityEvalLabel, departmentLeaderLabel };
