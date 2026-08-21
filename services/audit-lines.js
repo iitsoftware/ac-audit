@@ -9,8 +9,8 @@ const DEFAULT_AUTHORITY = 'LBA';
 // Vorbelegung der Beanstandungsbericht-Zeile eines Behördenaudits: der Kopfblock
 // eines Besuchs trennt drei Rollen — auditor_team ist die *Behörde*,
 // authority_auditor ihr zuständiger Bearbeiter (der Wert, den
-// views/organization.ejs als "Zuständige Aufsichtsperson Behörde" pflegt, also
-// department.authority_name) und auditee der QM der Abteilung. Beide Anlagewege
+// views/partials/dept-dialog.ejs als "Zuständige Aufsichtsperson Behörde"
+// pflegt, also department.authority_name) und auditee der QM. Beide Anlagewege
 // lesen dieselbe Quelle — der Plan, der seinen einen Bericht gleich mitanlegt
 // (POST /api/departments/:departmentId/audit-plans), und das manuelle Anlegen
 // einer Zeile (POST /api/audit-plans/:auditPlanId/lines).

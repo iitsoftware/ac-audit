@@ -1,0 +1,90 @@
+<%
+// Abteilungsdialoge: Anlegen/Bearbeiten (#dept-dialog) und Löschen (#dept-delete-dialog).
+// Keine Locals — das Partial ist reines Markup.
+//
+// Jede Seite, die es inkludiert, lädt public/org-dialogs.js und ruft
+// initDeptDialogs(companyId) auf; die Firmen-ID kommt aus dem Hidden-Field, das
+// die Route der Seite setzt. Der Personenabschnitt (#dept-persons-section, QM/CMM
+// und Abteilungsleiter samt Signatur) steckt IM Dialog und ist kein eigener
+// Sub-Dialog — es bleibt bei genau einer Person je Rolle.
+%>
+<!-- Department Add / Edit dialog -->
+<dialog id="dept-dialog" aria-labelledby="dept-dialog-title">
+  <div class="dialog-header" id="dept-dialog-title">Abteilung hinzuf&uuml;gen</div>
+  <form id="dept-form" method="dialog">
+    <div class="dialog-body">
+      <input type="hidden" id="dept-form-id">
+      <div class="form-group">
+        <label for="dept-form-name">Name *</label>
+        <input type="text" id="dept-form-name" required>
+      </div>
+      <div class="form-group">
+        <label for="dept-form-easa">EASA Genehmigungsnummer</label>
+        <input type="text" id="dept-form-easa">
+      </div>
+      <div class="form-group">
+        <label for="dept-form-regulation">Regulation</label>
+        <input type="text" id="dept-form-regulation">
+      </div>
+      <hr class="form-divider">
+      <div class="form-group">
+        <label>Zust&auml;ndige Aufsichtsperson Beh&ouml;rde</label>
+        <div class="form-row">
+          <select id="dept-form-authority-salutation" class="form-input form-input--auto">
+            <option value="">Anrede</option>
+            <option value="Herr">Herr</option>
+            <option value="Frau">Frau</option>
+          </select>
+          <input type="text" id="dept-form-authority-name" placeholder="Name" class="form-group">
+        </div>
+        <input type="email" id="dept-form-authority-email" placeholder="E-Mail Betriebspr&uuml;fer" class="form-input form-input--mt">
+        <input type="email" id="dept-form-initial-approval-email" placeholder="E-Mail Erstgenehmigung (z.B. RefT5@lba.de)" class="form-input form-input--mt">
+      </div>
+      <div id="dept-persons-section">
+        <hr class="form-divider">
+        <div class="form-group">
+          <label>Compliance Monitoring Manager</label>
+          <div class="form-row">
+            <input type="text" id="dept-form-qm-firstname" placeholder="Vorname" aria-label="Compliance Monitoring Manager Vorname" class="form-group">
+            <input type="text" id="dept-form-qm-lastname" placeholder="Nachname" aria-label="Compliance Monitoring Manager Nachname" class="form-group">
+          </div>
+          <input type="email" id="dept-form-qm-email" placeholder="E-Mail" class="form-input form-input--mt">
+          <div class="sig-upload-row">
+            <input type="file" id="dept-form-qm-sig" accept="image/*" class="sig-file-input">
+            <div class="logo-preview-row" id="dept-form-qm-sig-preview-row" style="display:none">
+              <img id="dept-form-qm-sig-preview" class="sig-preview" alt="Compliance Monitoring Manager Unterschrift">
+              <button type="button" class="remove-logo-btn" data-sig="dept-form-qm">Entfernen</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label id="dept-form-al-label">Abteilungsleiter</label>
+          <div class="form-row">
+            <input type="text" id="dept-form-al-firstname" placeholder="Vorname" aria-label="Abteilungsleiter Vorname" class="form-group">
+            <input type="text" id="dept-form-al-lastname" placeholder="Nachname" aria-label="Abteilungsleiter Nachname" class="form-group">
+          </div>
+          <input type="email" id="dept-form-al-email" placeholder="E-Mail" class="form-input form-input--mt">
+          <div class="sig-upload-row">
+            <input type="file" id="dept-form-al-sig" accept="image/*" class="sig-file-input">
+            <div class="logo-preview-row" id="dept-form-al-sig-preview-row" style="display:none">
+              <img id="dept-form-al-sig-preview" class="sig-preview" alt="Abteilungsleiter Unterschrift">
+              <button type="button" class="remove-logo-btn" data-sig="dept-form-al">Entfernen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" id="dept-btn-cancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="dept-btn-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Department Delete confirmation dialog -->
+<%- include('dialog', {
+  id: 'dept-delete-dialog',
+  title: 'Abteilung l&ouml;schen',
+  body: '<p>Soll <strong id="dept-delete-name"></strong> wirklich gel&ouml;scht werden?</p>',
+  footer: '<button class="btn btn-secondary" id="dept-delete-cancel">Abbrechen</button><button class="btn btn-danger" id="dept-delete-confirm">L&ouml;schen</button>'
+}) %>
