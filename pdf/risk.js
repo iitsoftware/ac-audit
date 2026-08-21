@@ -161,29 +161,36 @@ function renderRiskAnalysisPdf(doc, { ra, cr, dept, company, logoRow, items, qm 
   }
   y += 30;
 
-  // ── Signature block ──
-  const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : (ra.safety_manager || '');
+  // ── Signature block (only on a released analysis) ──
+  // The whole block hangs on ra.signed_at, the Freigabe the frontend maintains:
+  // without it the analysis is a draft, and Ort/Datum, Unterschrift and the
+  // Funktionsbezeichnung would claim a release nobody gave. Same gate as the
+  // CM-006 evaluation in pdf/safety.js (`if (qm && ev.decided_at)`), only that
+  // the printed date is the Freigabe itself and never the day of the export.
+  if (ra.signed_at) {
+    const qmName = qm ? `${qm.first_name} ${qm.last_name}`.trim() : (ra.safety_manager || '');
 
-  // Ort, Datum above signature
-  doc.fontSize(9).font('Helvetica');
-  doc.text(`${company ? company.city || '' : ''}, ${formatDateDE(new Date().toISOString().slice(0, 10))}`, marginL, y);
-  y += 20;
+    // Ort, Datum above signature
+    doc.fontSize(9).font('Helvetica');
+    doc.text(`${company ? company.city || '' : ''}, ${formatDateDE(ra.signed_at)}`, marginL, y);
+    y += 20;
 
-  // Signature image
-  if (qm) {
-    const sigRow = stmts.getPersonSignature.get(qm.id);
-    if (sigRow && sigRow.signature) {
-      try { doc.image(sigRow.signature, marginL, y, { height: 40 }); y += 45; } catch { /* skip */ }
+    // Signature image
+    if (qm) {
+      const sigRow = stmts.getPersonSignature.get(qm.id);
+      if (sigRow && sigRow.signature) {
+        try { doc.image(sigRow.signature, marginL, y, { height: 40 }); y += 45; } catch { /* skip */ }
+      }
     }
-  }
 
-  // Line
-  doc.moveTo(marginL, y).lineTo(marginL + 200, y).strokeColor('#000').lineWidth(0.5).stroke();
-  y += 5;
-  doc.fontSize(9).font('Helvetica');
-  doc.text(qmName, marginL, y);
-  y += 12;
-  doc.text('Safety Manager', marginL, y);
+    // Line
+    doc.moveTo(marginL, y).lineTo(marginL + 200, y).strokeColor('#000').lineWidth(0.5).stroke();
+    y += 5;
+    doc.fontSize(9).font('Helvetica');
+    doc.text(qmName, marginL, y);
+    y += 12;
+    doc.text('Safety Manager', marginL, y);
+  }
 
   // ── Risk Matrix Legend (right side, matching XLSX layout) ──
   const matrixRight = marginL + tableW; // align with table right edge
