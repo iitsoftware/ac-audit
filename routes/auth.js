@@ -11,7 +11,7 @@ const router = express.Router();
 
 router.get('/login', (req, res) => {
   const cookies = parseCookies(req);
-  if (verifySessionToken(cookies.session)) return res.redirect('/home');
+  if (verifySessionToken(cookies.session)) return res.redirect('/companies');
   res.render('login', { error: null });
 });
 
@@ -20,7 +20,7 @@ router.post('/login', (req, res) => {
   if (password === LOGIN_PASSWORD) {
     const token = createSessionToken();
     res.setHeader('Set-Cookie', `session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE / 1000}`);
-    return res.redirect('/home');
+    return res.redirect('/companies');
   }
   res.render('login', { error: 'Falsches Passwort' });
 });
