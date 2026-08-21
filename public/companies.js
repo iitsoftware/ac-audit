@@ -1829,9 +1829,11 @@
     const cap = currentFindingCap;
 
     // ── Teilen ── (CM-003-CAP-PDF genau dieses Findings)
-    // Das Dokument des Findings ist das CAP-PDF: bei einem Behördenaudit
-    // trägt es die 5-Why-Sektion und den Stufen-Klartext bereits (capHasFiveWhy()
-    // und capEvalLabel() in pdf/cap.js), an der Erzeugung ist also nichts zu tun.
+    // Das Dokument des Findings ist das CAP-PDF: bei einem Behördenaudit trägt
+    // capFormGroups() die eine Formularzeile und capEvalLabel() den Stufen-Klartext
+    // bereits (pdf/cap.js), an der Erzeugung ist also nichts zu tun. Die
+    // Ursachenanalyse steht nicht darauf — sie ist mit dem CM-002 ein Blatt für
+    // sich und über die Dokumentenwahl des Dialogs zu haben.
     // Es hängt aber — wie Maßnahme, Ursachenanalyse und Beweismittel — am
     // CAP-Item, und das entsteht erst mit der Stufe. Statt zu verschwinden bleibt
     // der Button dann sichtbar und deaktiviert, damit der Grund dort steht, wo
