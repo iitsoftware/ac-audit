@@ -820,6 +820,10 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   // Zählzeile 'Summary' darüber und die 'Legend' darunter bleiben, sie
   // beschreiben die Findings und nicht deren Bewertung durch uns.
   //
+  // Es sind deshalb ZWEI Blöcke mit zwei Bedingungen und nicht einer: intern
+  // steht die Empfehlung immer, die Unterschriftenzeile erst mit dem Enddatum
+  // (siehe ihren eigenen Kommentar unten).
+  //
   // Der QM steht dabei VOR dem Zweig: er ist im internen Zweig der Unterzeichner
   // der dritten Unterschriftenspalte und im Behördenzweig der Fallback für den
   // Unterzeichner des eingebetteten CM-002. Innerhalb des `!isAuthority`-Blocks
@@ -838,7 +842,23 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
     doc.rect(50, y, tableRight - 50, Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10)).stroke();
     doc.text(recText, 55, y + 5, { width: tableRight - 60 });
     y += Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10) + 15;
+  }
 
+  // ── Unterschriftenzeile (nur bei abgeschlossenem Audit) ──
+  // Der ganze Block hängt an line.audit_end_date: seine erste Spalte druckt
+  // ohnehin formatDateDE(line.audit_end_date), ein laufendes Audit stellte also
+  // drei Signaturbilder über eine leere Datumszelle und wiese ein ungezeichnetes
+  // Dokument als freigegeben aus. Dieselbe Grenze wie beim Unterschriftenblock
+  // der Risikoanalyse (`if (ra.signed_at)` in pdf/risk.js) und bei der CM-006-
+  // Bewertung (`if (qm && ev.decided_at)` in pdf/safety.js) — dort ist allerdings
+  // nur das Bild gegated, hier entfällt der Kasten als Ganzes, statt leer
+  // dazustehen.
+  //
+  // Die Empfehlung darüber ist ausdrücklich NICHT mitgegatet: sie ist das Urteil
+  // des Auditors und kein Freigabeakt, und ein Audit darf sie tragen, bevor es
+  // abgeschlossen ist. Nebeneffekt, gewollt: mit dem Kasten entfallen auch seine
+  // bis zu drei getPersonSignature-BLOB-Reads.
+  if (!isAuthority && line.audit_end_date) {
     const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
     const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
 
