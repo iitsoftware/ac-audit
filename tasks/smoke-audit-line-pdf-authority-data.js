@@ -2,9 +2,9 @@
 // Behördenbericht mitgeben (authorityPdfData() in routes/audit-plan-lines.js).
 // Geprüft wird genau die Hausregel: der Renderer liest nichts selbst, also muss
 // alles — die CAPs der Line mit je ihrem 5-Why-Satz und ihren Maßnahmen, die
-// Fristen und der QM als Unterzeichner — schon im Aufruf stehen, und zwar in der
-// Form, die renderAuditLinePdf() liest. Für interne Pläne darf davon nichts
-// mitreisen.
+// Fristen, der QM als Unterzeichner und die Unterschriftsbilder des
+// CM-003-Blocks — schon im Aufruf stehen, und zwar in der Form, die
+// renderAuditLinePdf() liest. Für interne Pläne darf davon nichts mitreisen.
 //
 // Der Test bootet den echten Server IN-PROCESS und legt sich vor dem Laden der
 // Routen einen Spy auf renderAuditLinePdf: die Routen destrukturieren die Funktion
@@ -66,9 +66,10 @@ const check = (name, ok, info) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`);
   if (!ok) failures++;
 };
-// Genau die drei Felder, die renderAuditLinePdf() für ein Behördenblatt entgegennimmt:
-// caps (checklist_item_id → { cap, fiveWhy, capActions }), deadlines und signer.
-const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
+// Genau die vier Felder, die renderAuditLinePdf() für ein Behördenblatt entgegennimmt:
+// caps (checklist_item_id → { cap, fiveWhy, capActions }), deadlines, signer und
+// signatures (person_id → Unterschriftsbild des CM-003-Blocks).
+const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer', 'signatures'];
 
 (async () => {
   await new Promise(r => setTimeout(r, 400));
@@ -87,6 +88,21 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
     { name: 'CAMO', regulation: 'Part-CAMO' })).payload;
   const qm = (await req('POST', `/api/companies/${company.id}/persons`,
     { role: 'QM', department_id: dept.id, first_name: 'Petra', last_name: 'Prüfer', email: 'qm@example.org' })).payload;
+
+  // Die drei Unterzeichner des CM-003-Blocks. Der Abteilungsleiter bekommt
+  // ABSICHTLICH keine Unterschrift: sein fehlender Schlüssel ist der leere
+  // Unterschriftenkasten und kein Fehler — und er belegt zugleich, dass die Route
+  // sich den BLOB-Read über has_signature spart.
+  const al = (await req('POST', `/api/companies/${company.id}/persons`,
+    { role: 'ABTEILUNGSLEITER', department_id: dept.id, first_name: 'Anton', last_name: 'Leiter' })).payload;
+  const acc = (await req('POST', `/api/companies/${company.id}/persons`,
+    { role: 'ACCOUNTABLE', first_name: 'Anja', last_name: 'Chefin' })).payload;
+  // 1×1-PNG — der Inhalt ist gleichgültig, geprüft wird, dass genau dieses Bild
+  // unter der person_id im Aufruf ankommt.
+  const PNG_QM = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const PNG_ACC = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  await req('PUT', `/api/persons/${qm.id}/signature`, { signature: PNG_QM });
+  await req('PUT', `/api/persons/${acc.id}/signature`, { signature: PNG_ACC });
 
   const plan = (await req('POST', `/api/departments/${dept.id}/audit-plans`,
     { year: 2026, plan_type: 'AUTHORITY' })).payload;
@@ -130,7 +146,7 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
     single.status === 200 && single.isPdf && single.bytes > 1000,
     `${single.status}, ${single.bytes} bytes`);
   const opts = single.calls[0] || {};
-  check('  → alle drei Zusatzangaben stehen im Aufruf',
+  check('  → alle vier Zusatzangaben stehen im Aufruf',
     AUTHORITY_KEYS.every(k => opts[k] !== undefined),
     AUTHORITY_KEYS.filter(k => opts[k] === undefined).join(', ') || 'vollständig');
   const entry = (opts.caps || {})[withLevel.id] || {};
@@ -160,6 +176,26 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
     opts.signer && opts.signer.id === qm.id,
     opts.signer && `${opts.signer.first_name} ${opts.signer.last_name}`);
 
+  // Die Bilder des CM-003-Unterschriftenblocks: geschlüsselt nach person_id, damit
+  // das Bild an genau der Zeile hängt, deren Namen der Block druckt. Die Personen
+  // selbst reisen nicht mit — sie stehen schon in personsAll.
+  const sigs = opts.signatures || {};
+  check('  → die Unterschrift des QM steht unter seiner person_id',
+    Buffer.isBuffer(sigs[qm.id]) && sigs[qm.id].equals(Buffer.from(PNG_QM, 'base64')),
+    sigs[qm.id] && `${sigs[qm.id].length} bytes`);
+  check('  → die des Accountable Managers ebenso, und es ist SEIN Bild',
+    Buffer.isBuffer(sigs[acc.id]) && sigs[acc.id].equals(Buffer.from(PNG_ACC, 'base64'))
+      && !sigs[acc.id].equals(sigs[qm.id]),
+    sigs[acc.id] && `${sigs[acc.id].length} bytes`);
+  check('  → ein Unterzeichner ohne hinterlegte Unterschrift fehlt schlicht',
+    sigs[al.id] === undefined, String(sigs[al.id]));
+  check('  → mehr als die drei Rollen des Blocks wird nicht geladen',
+    Object.keys(sigs).length === 2, `${Object.keys(sigs).length} Bild(er)`);
+  check('  → personsAll trägt die Personen, signatures nur die Bilder',
+    (opts.personsAll || []).some(p => p.id === qm.id)
+      && Object.values(sigs).every(v => Buffer.isBuffer(v)),
+    `${(opts.personsAll || []).length} Person(en)`);
+
   check('  → der Bogen läuft vollständig durch (%%EOF)',
     single.tail.includes('%%EOF'), single.tail.trim().slice(-12));
   // Die Findingseiten hängen an dem, was die Route lädt: ohne caps bliebe es beim
@@ -176,7 +212,7 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('Einzel-PDF eines internen Audits wird ausgeliefert',
     internal.status === 200 && internal.isPdf, `${internal.status}, ${internal.bytes} bytes`);
   const intOpts = internal.calls[0] || {};
-  check('  → der Aufruf ist unverändert: keine der drei Angaben reist mit',
+  check('  → der Aufruf ist unverändert: keine der vier Angaben reist mit',
     AUTHORITY_KEYS.every(k => intOpts[k] === undefined),
     AUTHORITY_KEYS.filter(k => intOpts[k] !== undefined).join(', ') || 'keine');
 
@@ -222,6 +258,12 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('  → sein Unterzeichner bleibt leer, statt den Bogen zu sprengen',
     (noQm.calls[0] || {}).signer === undefined || !noQm.calls[0].signer,
     String((noQm.calls[0] || {}).signer));
+  // Ohne QM und ohne Abteilungsleiter bleibt der Accountable Manager: der hängt an
+  // der Firma (department_id NULL) und gilt deshalb für jede ihrer Abteilungen.
+  const noQmSigs = (noQm.calls[0] || {}).signatures || {};
+  check('  → der Accountable Manager der Firma unterschreibt auch dort',
+    Object.keys(noQmSigs).length === 1 && Buffer.isBuffer(noQmSigs[acc.id]),
+    `${Object.keys(noQmSigs).length} Bild(er)`);
   // Deckblatt + die drei Seiten des einen Findings (Findingdaten | CM-002 Seite 1 |
   // CM-002 Seite 2). Ohne 5-Why-Satz bleibt es bei dessen leerem, von Hand
   // ausfüllbarem Formular — es steht auch dann, wenn niemand es unterschreibt.
