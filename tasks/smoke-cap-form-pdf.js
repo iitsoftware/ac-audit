@@ -7,11 +7,14 @@
 // Fußzeilentabelle. Dazu die Gruppierung: eine Mehrfachauswahl über zwei Berichte
 // ergibt zwei Formulare, nicht ein gemischtes.
 //
-// Die beiden beschrifteten Zellen des Kopfes stehen mit je drei Fällen darin, weil
+// Die beiden beschrifteten Zellen des Kopfes stehen mit allen ihren Fällen darin, weil
 // beide auf einem Behördenbericht etwas anderes tragen als auf einem internen Plan:
 // `Audit No.:` den Satz, der den Beanstandungsbericht benennt (mit Datum, ohne Datum,
 // intern die nackte Nummer), und `Audit Title:` den Satz über die Beanstandungen der
-// Abteilung (ohne gespeicherten Titel, mit gespeichertem Titel, intern leer).
+// Abteilung (ohne gespeicherten Titel, mit gespeichertem Titel, ohne Abteilungsnamen,
+// intern leer). Die beiden leeren Fälle sind der Grund für headValue() weiter unten:
+// ein bloßes includes() unterscheidet eine leere Zelle nicht von einer, die gar nicht
+// gezeichnet wurde.
 //
 // Der Test bootet den echten Server IN-PROCESS und legt sich vor dem Laden der
 // Routen einen Spy auf renderCapFormPdf: die Routen destrukturieren die Funktion
@@ -305,9 +308,8 @@ const check = (name, ok, info) => {
   const noDept = await pdf(`/api/cap-items/${capC.id}/pdf`);
   db.prepare('UPDATE department SET name = ? WHERE id = ?').run(deptName, dept.id);
   check('ohne Abteilungsnamen bleibt die Titelzelle leer',
-    noDept.ok && !noDept.calls[0].texts.some(t => t.startsWith('Beanstandungen durch')),
-    (noDept.calls[0] || { texts: [] }).texts.find(t => t.startsWith('Beanstandungen durch'))
-    || 'leer');
+    noDept.ok && headValue(noDept.calls[0], 'Audit Title:') === '',
+    noDept.ok ? JSON.stringify(headValue(noDept.calls[0], 'Audit Title:')) : 'kein Aufruf');
 
   // ── 4. Interner Auditplan druckt dasselbe Formular mit der internen Kurzform ──
   const intPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`, { year: 2026 })).payload;
