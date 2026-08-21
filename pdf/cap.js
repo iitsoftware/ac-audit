@@ -107,6 +107,12 @@ function drawCapFormHead(doc, { line, plan, dept, logoRow, y }) {
   for (let c = 1; c < colX.length; c++) {
     doc.moveTo(colX[c], y).lineTo(colX[c], y + headH).stroke();
   }
+  // Die waagerechte Trennlinie des Papierformulars läuft auf halber Höhe und nur über
+  // die ersten beiden Spalten: dort stehen je zwei Angaben übereinander (Dokumenttitel
+  // über Audit No., Audit Subject über Audit Title), die Logospalte rechts trägt
+  // dagegen EINE Angabe — Logo über der Genehmigungsnummer —, durch die ein Strich
+  // mitten hindurchliefe. Sie endet deshalb an colX[2], der linken Kante dieser Spalte.
+  doc.moveTo(FORM_LEFT, y + headH / 2).lineTo(colX[2], y + headH / 2).stroke();
   doc.fillColor('#000000');
 
   doc.font('Helvetica-Bold').fontSize(12)
