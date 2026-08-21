@@ -1,21 +1,22 @@
-// Smoke test für die Enddatum-Grenze des internen Unterschriftenblocks im
-// Audit-Line-PDF (renderAuditLinePdf() in pdf/audit.js) — die Audit-Hälfte der
-// Regel, deren Schwester `tasks/smoke-risk-signature-gate.js` abdeckt.
+// Smoke test für das Gate des internen Unterschriftenblocks im Audit-Line-PDF
+// (renderAuditLinePdf() in pdf/audit.js).
 //
-// Geprüft wird genau die Regel: der vierspaltige Kasten
-// `Date | Auditor | <Abteilungsleiter-Rolle> | Accountable Manager` behauptet
-// eine Freigabe und wird deshalb nur mit gesetztem `audit_end_date` gezeichnet.
-// Ohne Enddatum entfällt er ersatzlos — samt seiner bis zu drei
-// getPersonSignature-BLOB-Reads —, während die `Recommendation for Management`
-// darüber ausdrücklich stehen bleibt: sie ist das Urteil des Auditors und kein
-// Freigabeakt. Der Behördenbericht hat ohnehin keine Unterschriftenzeile und ist
-// von der Änderung nicht betroffen.
+// Geprüft wird genau die Grenze: die vierspaltige Unterschriftenzeile
+// Date | Auditor | <Abteilungsleiter-Rolle> | Accountable Manager hängt am
+// `audit_end_date` der Zeile — ohne Enddatum ist das Audit noch nicht
+// durchgeführt, das Blatt ist die leere Checkliste, und drei Unterschriftenkästen
+// unter einem leeren Datum behaupteten eine Freigabe, die niemand erteilt hat.
+// Die `Recommendation for Management` darüber ist ausdrücklich NICHT mitgegatet:
+// sie ist das Feld, das der Auditor auf genau diesem leeren Blatt von Hand füllt.
+// Ein späterer Umbau, der sie mit ins Gate zieht oder das Gate an
+// `performed_date` / `audit_start_date` hängt, fällt hier auf.
 //
 // Der Test bootet den echten Server IN-PROCESS und legt sich vor dem Laden der
-// Routen einen Spy auf renderAuditLinePdf: die Routen destrukturieren die
-// Funktion beim Require, ein späteres Patchen käme zu spät. Der Spy ruft den
-// echten Renderer auf und spiegelt doc.text() und doc.image() — im fertigen PDF
-// ist beides komprimiert, geprüft wird also, was wirklich gezeichnet wird.
+// Routen einen Spy auf renderAuditLinePdf: die Routen destrukturieren die Funktion
+// beim Require, ein späteres Patchen käme zu spät. Der Spy ruft den echten Renderer
+// auf und spiegelt zusätzlich doc.text() und doc.image() — im fertigen PDF ist der
+// Text komprimiert und nicht mehr zu lesen, geprüft wird also, was wirklich
+// gezeichnet wird.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -26,19 +27,19 @@ const BASE = `http://127.0.0.1:${PORT}`;
 process.env.DATA_DIR = DATA_DIR;
 process.env.PORT = String(PORT);
 
-const pdfAudit = require('../pdf/audit');
-const realRender = pdfAudit.renderAuditLinePdf;
+const auditPdf = require('../pdf/audit');
+const realRender = auditPdf.renderAuditLinePdf;
 let renderCalls = [];
-pdfAudit.renderAuditLinePdf = (doc, args) => {
+auditPdf.renderAuditLinePdf = (doc, args) => {
   const call = { args, texts: [], images: [] };
   const realText = doc.text.bind(doc);
   doc.text = (txt, ...rest) => {
     call.texts.push(String(txt));
     return realText(txt, ...rest);
   };
-  // Die Signaturbilder sind das einzige, was der Kasten zeichnet statt zu
-  // schreiben — ohne diesen Spy bliebe der entfallene Kasten von einem mit
-  // lauter leeren Zellen ununterscheidbar.
+  // Die Unterschriftsbilder sind das einzige, was der Block zeichnet statt zu
+  // schreiben — ohne diesen Spy bliebe eine leere Zelle vom vollen Kasten
+  // ununterscheidbar, denn im fertigen PDF ist beides komprimiert.
   const realImage = doc.image.bind(doc);
   doc.image = (src, x, y, ...rest) => {
     call.images.push({ x, y });
@@ -53,18 +54,15 @@ pdfAudit.renderAuditLinePdf = (doc, args) => {
 
 require('../server');
 
-// Die gesparten BLOB-Reads sind am Statement zu sehen, nicht am Blatt.
+// Ohne Unterschriftenblock hat niemand ein Bild zu zeichnen, also darf auch kein
+// BLOB gelesen werden — das ist am Statement zu sehen und nicht am Blatt, genau
+// wie der has_signature-Guard in tasks/smoke-cap-form-pdf.js.
 const { stmts } = require('../db');
 const realSigStmt = stmts.getPersonSignature;
 let sigReads = [];
 stmts.getPersonSignature = {
   get: (id) => { sigReads.push(id); return realSigStmt.get(id); },
 };
-
-const { departmentLeaderLabel } = require('../pdf/common');
-
-// 1x1-PNG, damit doc.image() wirklich etwas zu zeichnen bekommt.
-const PNG_1X1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 let cookie = '';
 const req = async (method, url, body) => {
@@ -85,13 +83,13 @@ const pdf = async (url) => {
   const buf = Buffer.from(await res.arrayBuffer());
   // Ein Wurf mitten im Renderer liefert trotzdem 200 mit gültigem %PDF-Kopf —
   // doc.pipe(res) läuft, bevor gezeichnet wird. Erst %%EOF zeigt den Abschluss.
-  const tail = buf.toString('latin1').slice(-40);
+  const text = buf.toString('latin1');
   return {
     status: res.status,
-    isPdf: buf.slice(0, 4).toString() === '%PDF',
-    complete: tail.includes('%%EOF'),
+    ok: res.status === 200 && buf.slice(0, 4).toString() === '%PDF' && text.slice(-40).includes('%%EOF'),
+    bytes: buf.length,
     call: renderCalls[0] || { texts: [], images: [] },
-    sigReads: sigReads.slice(),
+    sigReads,
   };
 };
 
@@ -100,6 +98,13 @@ const check = (name, ok, info) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`);
   if (!ok) failures++;
 };
+
+// Die Kopfzeile des Blocks wird EXAKT verglichen und nicht mit includes():
+// 'Auditor' steht auch im Behörden-Kopfblock als Feldbeschriftung, und
+// 'Accountable Manager' steckt im CM-003 in 'Copy to: Accountable Manager'.
+// Eine Teilstring-Prüfung könnte den Block also dort finden, wo er gerade nicht
+// steht — und wäre damit blind für genau den Fehler, den dieser Test sucht.
+const drew = (call, label) => call.texts.some(t => t === label);
 
 (async () => {
   await new Promise(r => setTimeout(r, 400));
@@ -112,91 +117,124 @@ const check = (name, ok, info) => {
   });
   cookie = (login.headers.get('set-cookie') || '').split(';')[0];
 
+  // ── seed: eine Abteilung mit allen drei Unterzeichnern ──
   const company = (await req('POST', '/api/companies', { name: 'Smoke Air GmbH', city: 'Bremen' })).payload;
   const dept = (await req('POST', `/api/companies/${company.id}/departments`,
     { name: 'CAMO', regulation: 'Part-CAMO' })).payload;
-  const alLabel = departmentLeaderLabel(dept);
+  // 'Leiter CAMO' ist das, was departmentLeaderLabel() für diese Abteilung liefert;
+  // die dritte Spalte trägt die Rolle und nicht das Wort 'Abteilungsleiter'.
+  const AL_LABEL = require('../pdf/common').departmentLeaderLabel(dept);
+  const SIG_HEADERS = ['Date', 'Auditor', AL_LABEL, 'Accountable Manager'];
 
-  // Alle drei Unterzeichner mit hinterlegter Unterschrift: nur so ist das
-  // Fehlen der Bilder ein Befund und nicht bloß ein fehlender Datensatz.
-  const persons = [
-    { role: 'QM', department_id: dept.id, first_name: 'Petra', last_name: 'Prüfer' },
-    { role: 'ABTEILUNGSLEITER', department_id: dept.id, first_name: 'Lars', last_name: 'Leiter' },
-    { role: 'ACCOUNTABLE', first_name: 'Anna', last_name: 'Accountable' },
-  ];
-  for (const p of persons) {
-    const created = (await req('POST', `/api/companies/${company.id}/persons`,
-      { ...p, email: `${p.role.toLowerCase()}@example.org` })).payload;
-    await req('PUT', `/api/persons/${created.id}/signature`, { signature: PNG_1X1 });
-  }
+  const qm = (await req('POST', `/api/companies/${company.id}/persons`,
+    { role: 'QM', department_id: dept.id, first_name: 'Petra', last_name: 'Prüfer', email: 'qm@example.org' })).payload;
+  const al = (await req('POST', `/api/companies/${company.id}/persons`,
+    { role: 'ABTEILUNGSLEITER', department_id: dept.id, first_name: 'Anton', last_name: 'Leiter' })).payload;
+  const acc = (await req('POST', `/api/companies/${company.id}/persons`,
+    { role: 'ACCOUNTABLE', first_name: 'Anja', last_name: 'Chefin' })).payload;
+  // 1×1-PNG — der Inhalt ist gleichgültig, geprüft wird, DASS gezeichnet wird.
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  await req('PUT', `/api/persons/${qm.id}/signature`, { signature: PNG });
+  await req('PUT', `/api/persons/${al.id}/signature`, { signature: PNG });
+  await req('PUT', `/api/persons/${acc.id}/signature`, { signature: PNG });
 
   const intPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`, { year: 2026 })).payload;
 
-  const makeInternalLine = async (fields) => {
-    const line = (await req('POST', `/api/audit-plans/${intPlan.id}/lines`,
-      { subject: 'Themenbereich Technik' })).payload;
-    await req('PUT', `/api/audit-plan-lines/${line.id}`,
-      { ...line, recommendation: 'Werkzeugverwaltung nachschärfen', ...fields });
-    await req('POST', `/api/audit-plan-lines/${line.id}/checklist-items`,
-      { section: 'THEORETICAL', compliance_check: 'Interner Prüfpunkt', evaluation: 'L1' });
-    return line;
-  };
+  // ── 1. Interner Auditplan MIT Enddatum: der Block steht ──
+  const doneLine = (await req('POST', `/api/audit-plans/${intPlan.id}/lines`, {
+    subject: 'Themenbereich Technik', audit_no: '1',
+    audit_start_date: '2026-03-02', audit_end_date: '2026-03-04',
+    recommendation: 'Werkzeugliste jährlich prüfen'
+  })).payload;
+  await req('POST', `/api/audit-plan-lines/${doneLine.id}/checklist-items`,
+    { section: 'THEORETICAL', compliance_check: 'Interner Prüfpunkt', evaluation: 'L1' });
 
-  const SIG_HEADERS = ['Date', 'Auditor', alLabel, 'Accountable Manager'];
-  const headersDrawn = (call) => SIG_HEADERS.filter(h => call.texts.includes(h));
-  // Auf einem Behördenbogen sind zwei dieser vier Köpfe mehrdeutig: der Kopfblock
-  // des Besuchs beschriftet eine Zeile mit 'Auditor', und die CM-003-Tabelle am
-  // Schluss trägt eine Spalte 'Date'. Unverwechselbar bleiben die beiden Rollen —
-  // der Unterschriftenblock des CM-003 schreibt `Copy to: …` davor.
-  const AUTHORITY_SAFE = [alLabel, 'Accountable Manager'];
-  const sigHeadersDrawn = (call) => AUTHORITY_SAFE.filter(h => call.texts.includes(h));
+  const done = await pdf(`/api/audit-plan-lines/${doneLine.id}/pdf`);
+  check('durchgeführtes internes Audit: das PDF läuft vollständig durch',
+    done.ok, `${done.status}, ${done.bytes} bytes`);
+  check('  → die vierspaltige Kopfzeile des Unterschriftenblocks steht auf dem Blatt',
+    SIG_HEADERS.every(h => drew(done.call, h)),
+    SIG_HEADERS.filter(h => !drew(done.call, h)).join(', ') || SIG_HEADERS.join(' | '));
+  // Das Enddatum in der ersten Spalte ist der Grund, warum das Gate an dieser
+  // Spalte hängt: der Block druckt genau den Wert, an dem er hängt.
+  check('  → das Enddatum steht in der ersten Spalte',
+    drew(done.call, '04.03.2026'), done.call.texts.filter(t => /^\d\d\.\d\d\.\d{4}$/.test(t)).join(', '));
+  check('  → die drei Unterzeichner werden gelesen und gezeichnet',
+    done.sigReads.length === 3 && done.call.images.length === 3,
+    `${done.sigReads.length} Read(s), ${done.call.images.length} Bild(er)`);
+  check('  → und es sind QM, Abteilungsleiter und Accountable Manager',
+    [qm.id, al.id, acc.id].every(id => done.sigReads.includes(id)),
+    `${done.sigReads.length} Read(s)`);
+  check('  → die Recommendation steht ebenfalls',
+    drew(done.call, 'Recommendation for Management')
+      && drew(done.call, 'Werkzeugliste jährlich prüfen'),
+    'mit Text');
 
-  // ── 1. Abgeschlossenes internes Audit: der Kasten steht ──
-  const done = await makeInternalLine({ audit_end_date: '2026-06-15' });
-  const withDate = await pdf(`/api/audit-plan-lines/${done.id}/pdf`);
-  check('internes PDF mit Enddatum rendert vollständig',
-    withDate.status === 200 && withDate.isPdf && withDate.complete, String(withDate.status));
-  check('  → die vier Spaltenköpfe der Unterschriftenzeile stehen auf dem Blatt',
-    headersDrawn(withDate.call).length === 4, headersDrawn(withDate.call).join(' | '));
-  check('  → die drei Signaturbilder werden gezeichnet',
-    withDate.call.images.length === 3, `${withDate.call.images.length} Bild(er)`);
-  check('  → die drei getPersonSignature-Reads laufen',
-    withDate.sigReads.length === 3, `${withDate.sigReads.length} Read(s)`);
-  check('  → Recommendation for Management steht darüber',
-    withDate.call.texts.includes('Recommendation for Management'));
+  // ── 2. Interner Auditplan OHNE Enddatum: kein Block, kein BLOB-Read ──
+  // Die leere Checkliste, die der Auditor mitnimmt. audit_start_date und
+  // performed_date sind dabei ABSICHTLICH gesetzt bzw. leer: hinge das Gate am
+  // falschen Datumsfeld, stünde der Block hier trotzdem.
+  const openLine = (await req('POST', `/api/audit-plans/${intPlan.id}/lines`, {
+    subject: 'Themenbereich Lager', audit_no: '2',
+    audit_start_date: '2026-04-06',
+    recommendation: 'Wird im Audit ausgefüllt'
+  })).payload;
+  await req('POST', `/api/audit-plan-lines/${openLine.id}/checklist-items`,
+    { section: 'THEORETICAL', compliance_check: 'Noch offener Prüfpunkt' });
 
-  // ── 2. Laufendes internes Audit: der Kasten entfällt, die Empfehlung bleibt ──
-  const running = await makeInternalLine({ audit_end_date: '' });
-  const noDate = await pdf(`/api/audit-plan-lines/${running.id}/pdf`);
-  check('internes PDF ohne Enddatum rendert vollständig',
-    noDate.status === 200 && noDate.isPdf && noDate.complete, String(noDate.status));
-  check('  → KEIN Spaltenkopf der Unterschriftenzeile wird gedruckt',
-    headersDrawn(noDate.call).length === 0, headersDrawn(noDate.call).join(' | ') || 'keiner');
-  check('  → kein Signaturbild wird gezeichnet',
-    noDate.call.images.length === 0, `${noDate.call.images.length} Bild(er)`);
-  check('  → und damit auch kein getPersonSignature-BLOB-Read',
-    noDate.sigReads.length === 0, `${noDate.sigReads.length} Read(s)`);
-  check('  → Recommendation for Management bleibt ausdrücklich stehen',
-    noDate.call.texts.includes('Recommendation for Management')
-    && noDate.call.texts.includes('Werkzeugverwaltung nachschärfen'));
-  check('  → Summary und Legend bleiben ebenfalls stehen',
-    noDate.call.texts.includes('Summary') && noDate.call.texts.includes('Legend'));
+  const open = await pdf(`/api/audit-plan-lines/${openLine.id}/pdf`);
+  check('noch nicht durchgeführtes internes Audit: das PDF läuft vollständig durch',
+    open.ok, `${open.status}, ${open.bytes} bytes`);
+  check('  → das Blatt trägt das begonnene Audit (Gate hängt nicht an audit_start_date)',
+    !open.call.args.line.audit_end_date && open.call.args.line.audit_start_date === '2026-04-06',
+    `start ${open.call.args.line.audit_start_date}, end ${String(open.call.args.line.audit_end_date)}`);
+  check('  → keine einzige Kopfzeile der vier Spalten wird gezeichnet',
+    SIG_HEADERS.every(h => !drew(open.call, h)),
+    SIG_HEADERS.filter(h => drew(open.call, h)).join(', ') || 'keine');
+  check('  → und damit auch kein Unterschriftsbild',
+    open.call.images.length === 0, `${open.call.images.length} Bild(er)`);
+  check('  → ausdrücklich KEIN getPersonSignature-Read: ein Bild ohne Kasten hat niemand zu zeichnen',
+    open.sigReads.length === 0, `${open.sigReads.length} Read(s)`);
 
-  // ── 3. Behördenbericht: hatte nie eine Unterschriftenzeile, mit Datum wie ohne ──
+  // ── 3. Die Recommendation ist nicht mitgegatet ──
+  check('die Recommendation steht auf BEIDEN Blättern',
+    drew(done.call, 'Recommendation for Management') && drew(open.call, 'Recommendation for Management'),
+    `mit Enddatum: ${drew(done.call, 'Recommendation for Management')}, ohne: ${drew(open.call, 'Recommendation for Management')}`);
+  check('  → samt ihrem Text, den der Auditor auf dem leeren Blatt von Hand füllt',
+    drew(open.call, 'Wird im Audit ausgefüllt'), 'Text steht');
+
+  // ── 4. Behördenplan: unverändert kein Block, mit Enddatum wie ohne ──
+  // Der Behördenzweig hat den Block nie gezeichnet; das Gate darf daran nichts
+  // ändern. Die getPersonSignature-Reads bleiben dort trotzdem möglich — sie
+  // gehören zum Unterschriftenblock des CM-003 am Schluss des Bogens und nicht
+  // zu diesem hier, weshalb nur auf die Kopfzeile geprüft wird.
   const authPlan = (await req('POST', `/api/departments/${dept.id}/audit-plans`,
     { year: 2026, plan_type: 'AUTHORITY' })).payload;
-  const authLine = (await req('GET', `/api/audit-plan-lines/${authPlan.authority_line_id}`)).payload;
-  await req('PUT', `/api/audit-plan-lines/${authLine.id}`, { ...authLine, audit_end_date: '2026-03-12' });
-  await req('POST', `/api/audit-plan-lines/${authLine.id}/checklist-items`,
+  const authLineId = authPlan.authority_line_id;
+  await req('POST', `/api/audit-plan-lines/${authLineId}/checklist-items`,
     { compliance_check: 'Werkzeugkontrolle unvollständig', evaluation: 'L2' });
 
-  const authority = await pdf(`/api/audit-plan-lines/${authLine.id}/pdf`);
-  check('der Behördenbericht rendert vollständig',
-    authority.status === 200 && authority.isPdf && authority.complete, String(authority.status));
-  check('  → er zeichnet trotz Enddatum keine Unterschriftenzeile und keine Empfehlung',
-    sigHeadersDrawn(authority.call).length === 0
-    && !authority.call.texts.includes('Recommendation for Management'),
-    sigHeadersDrawn(authority.call).join(' | ') || 'keiner');
+  const authOpen = await pdf(`/api/audit-plan-lines/${authLineId}/pdf`);
+  check('Behördenbericht ohne Datum: das PDF läuft vollständig durch',
+    authOpen.ok, `${authOpen.status}, ${authOpen.bytes} bytes`);
+  check('  → kein interner Unterschriftenblock',
+    !drew(authOpen.call, AL_LABEL) && !drew(authOpen.call, 'Accountable Manager'),
+    'keine Kopfzeile');
+  check('  → und keine Recommendation (die entfällt dort ersatzlos)',
+    !drew(authOpen.call, 'Recommendation for Management'), 'nicht gezeichnet');
+
+  const stored = (await req('GET', `/api/audit-plan-lines/${authLineId}`)).payload;
+  await req('PUT', `/api/audit-plan-lines/${authLineId}`,
+    Object.assign({}, stored, { audit_end_date: '2026-05-11' }));
+  const authDone = await pdf(`/api/audit-plan-lines/${authLineId}/pdf`);
+  check('Behördenbericht MIT Datum: das PDF läuft vollständig durch',
+    authDone.ok, `${authDone.status}, ${authDone.bytes} bytes`);
+  check('  → das Enddatum ist gesetzt und ändert am Behördenzweig nichts',
+    authDone.call.args.line.audit_end_date === '2026-05-11'
+      && !drew(authDone.call, AL_LABEL) && !drew(authDone.call, 'Accountable Manager'),
+    `end ${authDone.call.args.line.audit_end_date}, keine Kopfzeile`);
+  check('  → auch dort weiterhin keine Recommendation',
+    !drew(authDone.call, 'Recommendation for Management'), 'nicht gezeichnet');
 
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
   console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

@@ -820,10 +820,6 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   // Zählzeile 'Summary' darüber und die 'Legend' darunter bleiben, sie
   // beschreiben die Findings und nicht deren Bewertung durch uns.
   //
-  // Es sind deshalb ZWEI Blöcke mit zwei Bedingungen und nicht einer: intern
-  // steht die Empfehlung immer, die Unterschriftenzeile erst mit dem Enddatum
-  // (siehe ihren eigenen Kommentar unten).
-  //
   // Der QM steht dabei VOR dem Zweig: er ist im internen Zweig der Unterzeichner
   // der dritten Unterschriftenspalte und im Behördenzweig der Fallback für den
   // Unterzeichner des eingebetteten CM-002. Innerhalb des `!isAuthority`-Blocks
@@ -842,73 +838,73 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
     doc.rect(50, y, tableRight - 50, Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10)).stroke();
     doc.text(recText, 55, y + 5, { width: tableRight - 60 });
     y += Math.max(30, doc.heightOfString(recText, { width: tableRight - 60 }) + 10) + 15;
-  }
 
-  // ── Unterschriftenzeile (nur bei abgeschlossenem Audit) ──
-  // Der ganze Block hängt an line.audit_end_date: seine erste Spalte druckt
-  // ohnehin formatDateDE(line.audit_end_date), ein laufendes Audit stellte also
-  // drei Signaturbilder über eine leere Datumszelle und wiese ein ungezeichnetes
-  // Dokument als freigegeben aus. Dieselbe Grenze wie beim Unterschriftenblock
-  // der Risikoanalyse (`if (ra.signed_at)` in pdf/risk.js) und bei der CM-006-
-  // Bewertung (`if (qm && ev.decided_at)` in pdf/safety.js) — dort ist allerdings
-  // nur das Bild gegated, hier entfällt der Kasten als Ganzes, statt leer
-  // dazustehen.
-  //
-  // Die Empfehlung darüber ist ausdrücklich NICHT mitgegatet: sie ist das Urteil
-  // des Auditors und kein Freigabeakt, und ein Audit darf sie tragen, bevor es
-  // abgeschlossen ist. Nebeneffekt, gewollt: mit dem Kasten entfallen auch seine
-  // bis zu drei getPersonSignature-BLOB-Reads.
-  if (!isAuthority && line.audit_end_date) {
-    const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
-    const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
+    // Die Unterschriftenzeile hängt zusätzlich am Enddatum — die Empfehlung
+    // darüber ausdrücklich NICHT. Ohne `audit_end_date` ist das Audit noch nicht
+    // durchgeführt und das Blatt die leere Checkliste, die der Auditor mitnimmt:
+    // die erste Spalte des Blocks IST dieses Datum, also stünde dort eine
+    // Freigabezeile mit leerem Datum und drei Unterschriftenkästen darunter, die
+    // eine Freigabe behaupten, die niemand erteilt hat. Die Empfehlung ist
+    // umgekehrt genau das Feld, das auf dem leeren Blatt von Hand gefüllt wird,
+    // und bleibt deshalb außerhalb des Gates. Gegated wird auf `audit_end_date`
+    // und nicht auf `performed_date` (das keine Oberfläche schreibt) oder
+    // `audit_start_date` (ein begonnenes Audit ist noch keins mit Ergebnis) —
+    // es ist die eine Spalte, die der Block selbst druckt. Mit dem Block
+    // entfallen auch seine `getPersonSignature`-Reads: ein Bild ohne Kasten
+    // hätte niemand zu zeichnen. tasks/smoke-audit-line-signature-gate.js hält
+    // beide Hälften dieser Grenze fest.
+    if (line.audit_end_date) {
+      const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
+      const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
 
-    const alLabel = departmentLeaderLabel(dept);
+      const alLabel = departmentLeaderLabel(dept);
 
-    const sigCols = 4;
-    const sigColW = (tableRight - 50) / sigCols;
-    const sigHeaderH = 20;
-    const sigRowH = 50;
+      const sigCols = 4;
+      const sigColW = (tableRight - 50) / sigCols;
+      const sigHeaderH = 20;
+      const sigRowH = 50;
 
-    if (y + sigHeaderH + sigRowH + 10 > 740) { doc.addPage(); y = 50; }
+      if (y + sigHeaderH + sigRowH + 10 > 740) { doc.addPage(); y = 50; }
 
-    const sigHeaders = ['Date', 'Auditor', alLabel, 'Accountable Manager'];
+      const sigHeaders = ['Date', 'Auditor', alLabel, 'Accountable Manager'];
 
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.rect(50, y, tableRight - 50, sigHeaderH).fill('#2563eb');
-    doc.fillColor('#ffffff');
-    for (let c = 0; c < sigCols; c++) {
-      doc.text(sigHeaders[c], 50 + c * sigColW + 4, y + 5, { width: sigColW - 8, align: 'center' });
-    }
-    doc.fillColor('#000000');
-    y += sigHeaderH;
+      doc.fontSize(7).font('Helvetica-Bold');
+      doc.rect(50, y, tableRight - 50, sigHeaderH).fill('#2563eb');
+      doc.fillColor('#ffffff');
+      for (let c = 0; c < sigCols; c++) {
+        doc.text(sigHeaders[c], 50 + c * sigColW + 4, y + 5, { width: sigColW - 8, align: 'center' });
+      }
+      doc.fillColor('#000000');
+      y += sigHeaderH;
 
-    doc.strokeColor('#d0d0d0').lineWidth(0.5);
-    doc.rect(50, y, tableRight - 50, sigRowH).stroke();
-    for (let c = 1; c < sigCols; c++) {
-      doc.moveTo(50 + c * sigColW, y).lineTo(50 + c * sigColW, y + sigRowH).stroke();
-    }
+      doc.strokeColor('#d0d0d0').lineWidth(0.5);
+      doc.rect(50, y, tableRight - 50, sigRowH).stroke();
+      for (let c = 1; c < sigCols; c++) {
+        doc.moveTo(50 + c * sigColW, y).lineTo(50 + c * sigColW, y + sigRowH).stroke();
+      }
 
-    doc.fontSize(8).font('Helvetica');
-    doc.text(formatDateDE(line.audit_end_date), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
+      doc.fontSize(8).font('Helvetica');
+      doc.text(formatDateDE(line.audit_end_date), 50 + 4, y + 4, { width: sigColW - 8, align: 'center' });
 
-    const sigPersons = [qmPerson, alPerson, accPerson];
-    for (let c = 0; c < 3; c++) {
-      const person = sigPersons[c];
-      const cx = 50 + (c + 1) * sigColW;
-      if (person) {
-        const sigRow = stmts.getPersonSignature.get(person.id);
-        if (sigRow && sigRow.signature) {
-          try {
-            doc.image(sigRow.signature, cx + 4, y + 2, { fit: [sigColW - 8, sigRowH - 14], align: 'center', valign: 'center' });
-          } catch { /* unreadable */ }
-        }
-        const name = `${person.first_name} ${person.last_name}`.trim();
-        if (name) {
-          doc.fontSize(6).text(name, cx + 4, y + sigRowH - 10, { width: sigColW - 8, align: 'center' });
+      const sigPersons = [qmPerson, alPerson, accPerson];
+      for (let c = 0; c < 3; c++) {
+        const person = sigPersons[c];
+        const cx = 50 + (c + 1) * sigColW;
+        if (person) {
+          const sigRow = stmts.getPersonSignature.get(person.id);
+          if (sigRow && sigRow.signature) {
+            try {
+              doc.image(sigRow.signature, cx + 4, y + 2, { fit: [sigColW - 8, sigRowH - 14], align: 'center', valign: 'center' });
+            } catch { /* unreadable */ }
+          }
+          const name = `${person.first_name} ${person.last_name}`.trim();
+          if (name) {
+            doc.fontSize(6).text(name, cx + 4, y + sigRowH - 10, { width: sigColW - 8, align: 'center' });
+          }
         }
       }
+      y += sigRowH + 15;
     }
-    y += sigRowH + 15;
   }
 
   if (y + 60 > 740) { doc.addPage(); y = 50; }
