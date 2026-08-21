@@ -1,6 +1,6 @@
 const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
-const { createPdfDoc, authorityEvalLabel } = require('./common');
+const { createPdfDoc, authorityEvalLabel, departmentLeaderLabel } = require('./common');
 // Die Findingseiten drucken das vollständige CM-002 mit — zyklenfrei, weil
 // five-why.js nur ./common und db zieht und nichts aus dieser Datei.
 const { renderFiveWhyPdf } = require('./five-why');
@@ -144,12 +144,7 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
   const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
   const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
 
-  const deptText = `${dept.name} ${dept.regulation || ''}`.toLowerCase();
-  let alLabel = 'Abteilungsleiter';
-  if (deptText.includes('145')) alLabel = 'Maintenance Manager';
-  else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
-  else if (deptText.includes('ato') || deptText.includes('flugschule') || deptText.includes('training')) alLabel = 'Head of Training';
-  else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
+  const alLabel = departmentLeaderLabel(dept);
 
   const sigRowH = 50;
   const sigHeaderH = 28;
@@ -881,12 +876,7 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
     const alPerson = personsAll.find(p => p.role === 'ABTEILUNGSLEITER' && p.department_id === dept.id);
     const accPerson = personsAll.find(p => p.role === 'ACCOUNTABLE' && !p.department_id);
 
-    const deptText = `${dept.name} ${dept.regulation || ''}`.toLowerCase();
-    let alLabel = 'Abteilungsleiter';
-    if (deptText.includes('145')) alLabel = 'Maintenance Manager';
-    else if (deptText.includes('camo') || deptText.includes('part-m')) alLabel = 'Leiter CAMO';
-    else if (deptText.includes('ato') || deptText.includes('flugschule') || deptText.includes('training')) alLabel = 'Head of Training';
-    else if (deptText.includes('flug') || deptText.includes('ops') || deptText.includes('ore') || deptText.includes('965')) alLabel = 'Flugbetriebsleiter';
+    const alLabel = departmentLeaderLabel(dept);
 
     const sigCols = 4;
     const sigColW = (tableRight - 50) / sigCols;
