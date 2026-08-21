@@ -1,0 +1,141 @@
+<%
+// Abteilungs-Dashboard — der Einstieg in die Arbeit EINER Abteilung
+// (routes/pages.js: `/departments/:departmentId`). Drei Teile, in dieser
+// Reihenfolge: die Aufgabenbuttons (was man tun will), die Charts (wie es
+// steht) und die offenen Corrective Actions (was drängt).
+//
+// Modul-Kacheln gibt es hier bewusst KEINE mehr: die drei Module stehen als
+// Deeplink in der Navigationsleiste (views/layout.ejs), und eine Kachel, die
+// nur "AC-Audit" sagt, ist ein Klick ohne Aussage. An ihre Stelle treten
+// Aufgabenbuttons, die je eine Absicht benennen und mit ihrer Query gleich das
+// Ziel im Modul mitbringen.
+//
+// Die Buttons sind server-gerendert und echte `<a href>`: das Ziel ist eine
+// echte URL, also gehören Tastaturbedienung, Statuszeile und "in neuem Tab
+// öffnen" dazu — dasselbe Argument, mit dem die Firmenkachel ein `<a>` ist.
+// Sie lesen `departmentId` als EJS-Local direkt; das Hidden-Field darunter ist
+// für public/dashboard.js da, das seine Abfragen daraus speist. Beide Werte
+// kommen aus derselben Local, können also nicht auseinanderlaufen.
+//
+// `locals.` statt der nackten Variablen, weil EJS eine nicht gesetzte Local als
+// ReferenceError wirft — dasselbe Muster wie in views/companies.ejs.
+const deptId = locals.departmentId || '';
+
+// Der Vertrag mit den drei Modulseiten: EIN Query-Parameter `action`, dessen
+// Wert das Ziel benennt. Ein Button ohne `action` ist der schlichte Sprung auf
+// die Modulseite, deren Abteilungsebene die gesuchte Liste ohnehin schon ist.
+// Die Module werten `action` in ihren eigenen Tasks aus (public/companies.js,
+// public/safety.js, public/change.js); bis dahin landet der Klick auf der
+// richtigen Seite und nur der letzte Schritt fehlt — die Seite ist der Hub,
+// nicht der Ausführende.
+const MODULES = [
+  {
+    key: 'audit',
+    title: 'AC-Audit',
+    actions: [
+      { label: 'Auditplan anlegen',      action: 'new-plan' },
+      { label: 'Behördenaudit anlegen',  action: 'new-authority-plan' },
+      { label: 'Auditpläne',             action: '' },
+      { label: 'Audit durchführen',      action: 'active-plan' },
+    ],
+  },
+  {
+    key: 'safety',
+    title: 'AC-SMS',
+    actions: [
+      { label: 'Safety-Jahr anlegen',  action: 'new-year' },
+      { label: 'SRB-Meeting anlegen',  action: 'new-meeting' },
+      { label: 'Zielkatalog',          action: 'objectives' },
+      { label: 'SPI bewerten',         action: 'new-spi' },
+    ],
+  },
+  {
+    key: 'change',
+    title: 'AC-Change',
+    actions: [
+      { label: 'Change Request anlegen', action: 'new-request' },
+      { label: 'Change Requests',        action: '' },
+      { label: 'Risikoanalyse',          action: 'risk' },
+    ],
+  },
+];
+
+// Die fünf Chart-Karten in der Reihenfolge, in der sie stehen. Hier steht nur
+// die leere Karte — sie ist im Markup und nicht im Skript, damit die Seite ihr
+// Raster schon vor dem ersten Fetch hat und beim Laden nicht springt.
+//
+// Die ÜBERSCHRIFT der Karte schreibt public/dashboard.js hinein und nicht
+// dieses Template: zwei der fünf nennen die Jahreszahl, die erst die Antwort
+// des Servers mitbringt. `<h4 class="dash-chart-title">` ist dabei die Klasse,
+// die public/style.css für die Karte vorsieht — den Rahmen samt Überschrift
+// stellt die Karte, den Körper zeichnet public/charts.js mit seinen eigenen
+// `.chart`-Klassen hinein. Deshalb wird `title` dort auch NICHT als Option
+// übergeben: `createFrame()` setzte sonst ein zweites `<h3 class="chart-title">`
+// direkt darunter.
+const CHARTS = ['chart-findings', 'chart-deadlines', 'chart-audits', 'chart-objectives', 'chart-changes'];
+%>
+<!-- Abteilung und Firma der Seite. public/dashboard.js liest die Abteilung von
+     hier — dasselbe Muster wie #srb-default-topics in views/safety.ejs. -->
+<input type="hidden" id="page-department-id" value="<%= deptId %>">
+<input type="hidden" id="page-company-id" value="<%= locals.companyId || '' %>">
+
+<div class="main-content-full">
+  <div class="pane-content-header">
+    <h2 id="dash-title">Übersicht</h2>
+  </div>
+
+  <!-- 1. Aufgabenbuttons, nach Modulen gruppiert.
+       `.dash-module--<key>` speist über `--mod-color` Rand, Überschrift und
+       Hover der Gruppe (public/style.css) — die drei Schlüssel sind dieselben
+       wie die Segmente der Moduldeeplinks, deshalb genügt der eine `mod.key`
+       für Klasse und URL. -->
+  <section class="dash-section">
+    <h3 class="dash-section-title">Aufgaben</h3>
+    <div class="dash-modules">
+      <% MODULES.forEach(function (mod) { %>
+        <div class="dash-module dash-module--<%= mod.key %>">
+          <h4 class="dash-module-title"><%= mod.title %></h4>
+          <div class="dash-actions">
+            <% mod.actions.forEach(function (a) { %>
+              <a class="dash-action" href="/departments/<%= deptId %>/<%= mod.key %><%= a.action ? '?action=' + a.action : '' %>"><%= a.label %></a>
+            <% }); %>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+  </section>
+
+  <!-- 2. Charts — gezeichnet von public/charts.js, gefüttert aus
+       GET /api/departments/:id/dashboard. Die Karte stellt Rahmen und
+       Überschrift, das Widget zeichnet seinen Körper hinein. -->
+  <section class="dash-section">
+    <h3 class="dash-section-title">Kennzahlen</h3>
+    <div class="dash-charts">
+      <% CHARTS.forEach(function (id) { %>
+        <div class="dash-chart" id="<%= id %>"></div>
+      <% }); %>
+    </div>
+  </section>
+
+  <!-- 3. Offene Corrective Actions dieser Abteilung. Klassen aus dem
+       vorhandenen `.home-cap-*`-Satz (public/style.css): es ist dieselbe
+       Tabelle, die auf der entfallenen /home-Seite stand, nur abteilungs-
+       gefiltert — ein zweiter Klassensatz daneben wäre eine zweite Fassung
+       derselben Sache, und das Stylesheet hält die Umbenennung ausdrücklich
+       für den Schritt zurück, der dieses Markup bringt. -->
+  <section class="dash-section">
+    <h3 class="dash-section-title">Offene Corrective Actions</h3>
+    <div class="audit-filter-bar" id="dash-cap-filters"></div>
+    <div id="dash-cap-table"></div>
+  </section>
+</div>
+
+<!--
+  Wie das Dialog-Partial der Firmenkachelseite lädt die Seite ihr eigenes
+  Zusatzskript selbst und nicht layout.ejs: ein weiterer `activePage`-Zweig dort
+  (wie der für risk-matrix.js) wäre eine zweite Stelle, die mit jeder neuen
+  Seite gepflegt werden müsste. Die Reihenfolge stimmt — layout.ejs hängt
+  app.js und das Seitenskript HINTER den Seitenrumpf, die Zeichenhelfer stehen
+  also bereit, wenn public/dashboard.js läuft.
+-->
+<script src="/charts.js"></script>
