@@ -1,12 +1,6 @@
 const { stmts } = require('../db');
 const { formatDateDE } = require('../services/audit-log');
-// APP_FOOTER, weil die beiden Fußzeilenschleifen von _renderAuditPlanPdf() bewusst
-// handgeschrieben bleiben statt über addPdfFooter() zu gehen — ihre abweichende
-// Geometrie (footerY 770 statt pageH-30, Rand 50 statt 40) ist der Grund, und ein
-// Umbau verschöbe die Fußzeile um ein paar Punkt. Den App-Namen dort trotzdem
-// auszuschreiben wäre die Fundstelle, an der das Auditplan-PDF als einziges Blatt
-// gegen alle anderen abdriftet; gelesen wird deshalb dieselbe eine Konstante.
-const { createPdfDoc, APP_FOOTER, authorityEvalLabel, authorityVisitLabel, departmentLeaderLabel } = require('./common');
+const { createPdfDoc, authorityEvalLabel, authorityVisitLabel, departmentLeaderLabel } = require('./common');
 // Die Findingseiten drucken das vollständige CM-002 mit — zyklenfrei, weil
 // five-why.js nur ./common und db zieht und nichts aus dieser Datei.
 const { renderFiveWhyPdf } = require('./five-why');
@@ -142,7 +136,7 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
       doc.strokeColor('#000000').lineWidth(0.5);
       doc.moveTo(50, footerY).lineTo(pageW - 50, footerY).stroke();
       doc.fontSize(7).fillColor('#000000').font('Helvetica');
-      doc.text(APP_FOOTER, 50, footerY + 4, { lineBreak: false });
+      doc.text('Erstellt mit ac-suite', 50, footerY + 4, { lineBreak: false });
       const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
       doc.text(pageLabel, 50, footerY + 4, { width: pageW - 100, align: 'right', lineBreak: false });
     }
@@ -228,7 +222,7 @@ function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClose
     doc.strokeColor('#000000').lineWidth(0.5);
     doc.moveTo(50, footerY).lineTo(tableRight, footerY).stroke();
     doc.fontSize(7).fillColor('#000000').font('Helvetica');
-    doc.text(APP_FOOTER, 50, footerY + 4, { lineBreak: false });
+    doc.text('Erstellt mit ac-suite', 50, footerY + 4, { lineBreak: false });
     const pageLabel = `Seite ${p - pages.start + 1}/${pages.count}`;
     doc.text(pageLabel, 50, footerY + 4, { width: tableRight - 50, align: 'right', lineBreak: false });
   }
