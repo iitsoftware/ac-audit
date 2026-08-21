@@ -120,8 +120,13 @@ check('Statement und Unterzeichnerzeile stehen auf CM-002 Seite 2',
 check('keine Maßnahmentabelle auf dem ganzen Bogen',
   pageOf('Behebungsmaßnahmen') === undefined && pageOf('Präventivmaßnahmen') === undefined,
   `Seite ${pageOf('Behebungsmaßnahmen')} / ${pageOf('Präventivmaßnahmen')}`);
-check('auch keine einzelne Maßnahme wird gedruckt',
-  pageOf('Behebung A') === undefined && pageOf('Prävention B') === undefined);
+// Gedruckt werden sie genau einmal, und zwar im CM-003 am Schluss des Bogens
+// (renderAuthorityCapForm()) — pageOf() liefert die ERSTE Seite mit dem Text, ein
+// Treffer auf dem Formularblatt heißt also zugleich: auf keiner Findingseite davor.
+const capForm = pageOf('Corrective Action Plan (CAP) Rev. 0');
+check('die einzelne Maßnahme steht nur im CM-003 am Schluss',
+  capForm !== undefined && pageOf('Behebung A') === capForm && pageOf('Prävention B') === capForm,
+  `Formular auf ${capForm}, Maßnahmen auf ${pageOf('Behebung A')} / ${pageOf('Prävention B')}`);
 check('hinter dem CM-002 folgt direkt das nächste Finding',
   on(p + 3, 'Finding 3'), `Seite ${p + 3}: ${(perPage[p + 3] || [])[0]}`);
 
@@ -129,7 +134,10 @@ check('hinter dem CM-002 folgt direkt das nächste Finding',
 const p2 = pageOf('Finding 3');
 check('ein Finding ohne Level bekommt eine Seite ohne CM-002',
   p2 !== undefined && on(p2, 'Zweites Finding ohne Level') && !on(p2, 'DEFINE THE PROBLEM'), `Seite ${p2}`);
-check('das zweite Finding ist das letzte Blatt des Bogens', p2 === page, `${p2} von ${page}`);
+// Hinter dem letzten Finding folgt nur noch das CM-003: die Findingseiten enden
+// mit dem zweiten Finding, den Schluss des Bogens macht das Formular.
+check('das zweite Finding ist die letzte Findingseite', p2 === capForm - 1, `${p2} von ${page}`);
+check('den Schluss des Bogens macht das CM-003', capForm === page, `Seite ${capForm} von ${page}`);
 check('auch die Seite eines Findings ohne Level trägt den Briefkopf',
   on(p2, 'Muster GmbH') && on(p2, 'CAMO  |  DE.MG.0815'));
 

@@ -4,6 +4,10 @@ const { createPdfDoc, authorityEvalLabel, authorityVisitLabel, departmentLeaderL
 // Die Findingseiten drucken das vollständige CM-002 mit — zyklenfrei, weil
 // five-why.js nur ./common und db zieht und nichts aus dieser Datei.
 const { renderFiveWhyPdf } = require('./five-why');
+// Am Schluss des Behördenbogens steht das vollständige CM-003 — aus demselben
+// Grund zyklenfrei: cap.js zieht db, ./common und die beiden services, nichts
+// aus dieser Datei.
+const { renderCapFormPdf } = require('./cap');
 
 // ── Internal: render audit plan PDF content ─────────────────
 function _renderAuditPlanPdf(doc, { plan, dept, company, logoRow, lines, isClosed, titleLabel }) {
@@ -613,6 +617,80 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
   return y;
 }
 
+// Der Rand, auf den pdf/cap.js seinen Satzspiegel zieht (FORM_LEFT dort). Er steht
+// hier als eigene Zahl und nicht als Import, weil er für das Formular selbst nichts
+// entscheidet — jede Koordinate des CM-003 ist absolut. Gebraucht wird er als
+// Seitenrand des Dokuments, damit PDFKit den automatischen Umbruch eines Textes
+// ohne width-Angabe nicht schon vor dem Rand des Formulars zieht.
+const CAP_FORM_MARGIN = 40;
+
+// ── PDF Helper: das CM-003 als Schlussblatt des Behördenbogens ───────
+// Ein Behördenbericht endet mit dem Formular, das zur Behörde zurückgeht: EIN
+// Corrective Action Plan mit einer Zeile je Finding. Gezeichnet wird es von
+// renderCapFormPdf() (pdf/cap.js) — demselben Renderer, den die CAP-Routen
+// aufrufen, nicht einer zweiten Fassung davon; das ist dasselbe Argument, mit dem
+// die Findingseiten das CM-002 einbetten, statt es nachzubauen.
+//
+// Geladen wird auch hier nichts: `caps` ist die checklist_item_id → { cap,
+// capActions }-Zuordnung, die authorityPdfData() (routes/audit-plan-lines.js) für
+// die Findingseiten ohnehin baut. Fehlt sie, zeichnet der Helfer nichts und liefert
+// null — ein Aufrufer ohne die Felder bekommt exakt das Dokument von vorher.
+function renderAuthorityCapForm(doc, { line, plan, dept, company, logoRow, checklistItems, caps, personsAll }) {
+  if (!caps) return null;
+
+  // Eine Formularzeile je Finding, das ein CAP-Item hat: ohne Level gibt es keins,
+  // und eine Zeile ohne Datensatz wäre eine Behauptung — dieselbe sprechende Leere,
+  // mit der die Findingseiten und der Finding-Screen ein Finding ohne Level zeigen.
+  // Die Reihenfolge ist die von `checklistItems`, also die der Findingliste und der
+  // Übersichtstabelle weiter vorn im Bogen.
+  const entries = [];
+  for (const item of checklistItems) {
+    const entry = caps[item.id];
+    if (!entry || !entry.cap) continue;
+    entries.push({
+      // Drei Angaben des Formulars wohnen nicht am cap_item: die vergebene Nr. und
+      // die Findingbericht Nr. stehen am audit_checklist_item, der Plantyp (der über
+      // den Klartext der Stufe entscheidet) am Plan. getCapItem liest sie mit,
+      // getCapItemsByPlan — die Abfrage hinter `caps` — nicht. Sie kommen deshalb aus
+      // der Zeile, die dieses Blatt ohnehin durchgehend druckt: Übersichtstabelle,
+      // Findingdatenseite und CM-003 tragen so dieselbe Nummer aus derselben Quelle,
+      // statt sie zweimal zu lesen.
+      cap: {
+        ...entry.cap,
+        sort_order: item.sort_order,
+        document_ref: item.document_ref,
+        plan_type: plan.plan_type,
+      },
+      capActions: entry.capActions,
+    });
+  }
+
+  // Das CM-003 ist Querformat — elf Formularspalten passen auf kein Hochformat, und
+  // sein Satzspiegel rechnet mit der Breite eines quer liegenden A4 (FORM_RIGHT in
+  // pdf/cap.js). Die Seite wird in das laufende Hochformat-Dokument gehängt: kein
+  // zweites Dokument und kein Merge, der Bogen bleibt eine Datei mit einer Fußzeile.
+  //
+  // Das Format wandert dafür für die Dauer des Formulars in doc.options, statt nur
+  // als Argument an das eine addPage() zu gehen: PDFKit übernimmt die
+  // Dokument-Optionen für jedes blanke doc.addPage() — und genau die legt
+  // renderCapFormPdf() selbst nach, sobald die Findings nicht auf ein Blatt passen
+  // oder der Unterschriftenblock kein Bein mehr hat. Ohne das läge die Fortsetzung
+  // des Querformat-Formulars wieder im Hochformat. Zurückgesetzt wird beides, weil
+  // die Batch-Route hinter einem Behördenbericht mit doc.addPage() den nächsten
+  // beginnt und der wieder hochkant steht.
+  const prevLayout = doc.options.layout;
+  const prevMargin = doc.options.margin;
+  doc.options.layout = 'landscape';
+  doc.options.margin = CAP_FORM_MARGIN;
+  try {
+    doc.addPage();
+    return renderCapFormPdf(doc, { line, plan, dept, company, logoRow, entries, personsAll });
+  } finally {
+    doc.options.layout = prevLayout;
+    doc.options.margin = prevMargin;
+  }
+}
+
 // ── PDF Helper: Render single audit line into doc ────────────
 // `caps`, `deadlines` und `signer` sind das Behörden-Beiwerk des Blatts und
 // werden vom Aufrufer geladen (authorityPdfData() in routes/audit-plan-lines.js).
@@ -847,6 +925,25 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
       signer: signer || qmPerson,
     });
     if (pagesY !== null) y = pagesY;
+
+    // Und ganz zum Schluss das CM-003: das Formular, das zur Behörde zurückgeht,
+    // mit allen Findings des Berichts als Zeilen. Es steht hinter den Findingseiten
+    // und nicht zwischen ihnen, weil es den Bericht als Ganzes beantwortet — genau
+    // wie die Maßnahmen NUR dort und auf keiner Findingseite stehen.
+    //
+    // `personsAll` reicht der Aufruf durch: der Unterschriftenblock des Formulars
+    // schlägt QM, Accountable Manager und Abteilungsleiter selbst darin nach
+    // (drawCapSignatures() in pdf/cap.js, der QM über getQmForDepartment() wie jede
+    // AC-Audit-Signatur). Die beiden Rollen-Lookups des internen Zweigs bleiben
+    // deshalb dort, wo sie stehen — sie gehören zu dessen Unterschriftenzeile, nicht
+    // zu diesem Blatt, und der Behördenzweig liest keinen von beiden. Was ihn
+    // ausdrücklich betrifft, ist die Blockskopierungs-Falle des `qmPerson` oben: ein
+    // `const` im `!isAuthority`-Block ist hier unten nicht sichtbar, und der Fehler
+    // käme mit HTTP 200 und gültigem %PDF-Kopf heraus, weil das Pipe längst läuft.
+    //
+    // Das zurückgegebene y bleibt liegen: es zählt auf einem Querformat-Blatt mit
+    // eigenem Satzspiegel, und der Bogen ist danach zu Ende.
+    renderAuthorityCapForm(doc, { line, plan, dept, company, logoRow, checklistItems, caps, personsAll });
   }
 
   return y;
