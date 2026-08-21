@@ -191,6 +191,11 @@ function runMigrations(db) {
     // additiv: bestehende Zeilen bekommen den Default '' und behalten ihr
     // auditor_team unverändert, es wird nichts umgeschichtet.
     { name: 'authority_auditor', sql: "ALTER TABLE audit_plan_line ADD COLUMN authority_auditor TEXT DEFAULT ''" },
+    // Das Datum des Beanstandungsberichts — die sechste Zeile des Kopfblocks,
+    // nicht der Tag des Besuchs (siehe schema.sql). Rein additiv: bestehende
+    // Zeilen bekommen NULL und behalten ihr audit_end_date unverändert, das
+    // abgeleitete Besuchsdatum liest diese Spalte nicht.
+    { name: 'authority_report_date', sql: 'ALTER TABLE audit_plan_line ADD COLUMN authority_report_date TEXT' },
   ];
 
   for (const col of planLineMigrations) {

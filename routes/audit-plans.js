@@ -63,7 +63,9 @@ router.post('/api/departments/:departmentId/audit-plans', (req, res) => {
         0, '', '', '', '',
         '1', '', '',
         auditorTeam, authorityAuditor, auditee,
-        null, null, '',
+        // Besuchsdatum, Berichtsdatum: beide leer — authorityLineDefaults()
+        // belegt nur die drei Rollen vor, die Daten tippt der Bericht selbst ein.
+        null, null, null, '',
         '', '', null,
         '', 'OPEN'
       );
@@ -138,7 +140,9 @@ router.post('/api/audit-plans/:id/copy', (req, res) => {
         newLineId, newId, line.sort_order,
         line.subject || '', line.regulations || '', line.location || '', '',
         '', '', '', '', '', '',
-        null, null, '',
+        // Eine Vorlage kopiert die Struktur, keine Auditdaten — das Berichtsdatum
+        // wird wie Besuchsdatum und Bearbeiter geleert.
+        null, null, null, '',
         '', '', null,
         '', 'OPEN'
       );
@@ -148,7 +152,8 @@ router.post('/api/audit-plans/:id/copy', (req, res) => {
         line.subject || '', line.regulations || '', line.location || '', line.planned_window || '',
         line.audit_no || '', line.audit_subject || '', line.audit_title || '',
         line.auditor_team || '', line.authority_auditor || '', line.auditee || '',
-        line.audit_start_date || null, line.audit_end_date || null, line.audit_location || '',
+        line.audit_start_date || null, line.audit_end_date || null,
+        line.authority_report_date || null, line.audit_location || '',
         line.document_ref || '', line.document_iss_rev || '', line.document_rev_date || null,
         line.recommendation || '', line.audit_status || 'OPEN'
       );
@@ -299,7 +304,9 @@ router.post('/api/departments/:departmentId/import-audit-plan',
           stmts.createAuditPlanLine.run(
             lineId, planId, line.sortOrder,
             line.subject, line.regulations, '', line.plannedWindow,
-            String(line.sortOrder), '', '', '', '', '', null, null, '', '', '', null, '', 'OPEN'
+            // Der docx-Import legt interne Zeilen an: authority_auditor ('') und
+            // authority_report_date (null) bleiben leer wie ihre Nachbarn.
+            String(line.sortOrder), '', '', '', '', '', null, null, null, '', '', '', null, '', 'OPEN'
           );
           if (line.performedDate) {
             stmts.updateAuditPlanLinePerformed.run(line.performedDate, lineId);
@@ -307,7 +314,7 @@ router.post('/api/departments/:departmentId/import-audit-plan',
           if (line.signature) {
             stmts.updateAuditPlanLine.run(
               line.sortOrder, line.subject, line.regulations, '', line.plannedWindow, line.signature,
-              '', '', '', null, null, '', '', '', null, '',
+              '', '', '', null, null, null, '', '', '', null, '',
               lineId
             );
           }

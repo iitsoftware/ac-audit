@@ -1135,9 +1135,15 @@
     // Beim Behördenaudit ein einziger Block über den Besuch, in den drei Rollen
     // von authorityLineDefaults(): Behörde (auditor_team, Default 'LBA'), ihr
     // zuständiger Bearbeiter (authority_auditor) und der Auditee (auditee, der QM
-    // der Abteilung), dazu Datum und Ort. Genau die drei belegt die Anlage vor —
-    // eine vorbelegte Spalte, die keine Oberfläche zeigt, wäre eine Vorbelegung
-    // und sonst nichts.
+    // der Abteilung), dazu Datum, Berichtsdatum und Ort. Genau die drei belegt die
+    // Anlage vor — eine vorbelegte Spalte, die keine Oberfläche zeigt, wäre eine
+    // Vorbelegung und sonst nichts.
+    // Berichtsdatum (authority_report_date) steht hinter dem Datum und vor dem
+    // Ort, in derselben Folge, die der Kopfblock des Audit-Line-PDFs druckt: es
+    // ist das Datum des Beanstandungsberichts, unter dem die Behörde ihr
+    // Schreiben führt, und ausdrücklich NICHT der Tag des Besuchs — das eine
+    // Datum darüber schreibt audit_end_date und datiert damit Kachel,
+    // Kachelsortierung und Überschriften, dieses hier tut das bewusst nicht.
     // Der Themenbereich-Kopf (Finding/Vorschriften) und der Rest des Blocks
     // "Audit-Informationen" (Audit Ort, Dokument Ref., Iss/Rev, Rev Datum,
     // Empfehlung) sind interne Auditfelder — sie beschreiben ein Themenbereichs-
@@ -1155,6 +1161,7 @@
           <label for="ld-authority-auditor">Auditor</label><input class="inline-input" id="ld-authority-auditor" value="${escapeHtml(currentLine.authority_auditor || '')}">
           <label for="ld-auditee">Auditee</label><input class="inline-input" id="ld-auditee" value="${escapeHtml(currentLine.auditee || '')}">
           <label for="ld-authority-date">Datum</label><input class="inline-input" id="ld-authority-date" value="${escapeHtml(formatDateDE(authorityInfo.date))}" placeholder="TT.MM.JJJJ">
+          <label for="ld-authority-report-date">Berichtsdatum</label><input class="inline-input" id="ld-authority-report-date" value="${escapeHtml(formatDateDE(currentLine.authority_report_date))}" placeholder="TT.MM.JJJJ">
           <label for="ld-location">Ort</label><input class="inline-input" id="ld-location" value="${escapeHtml(currentLine.location || '')}">
         </div>
       </div>`;
@@ -1253,7 +1260,7 @@
     // ── Auto-save on blur for all inline fields ──
     // Init date auto-format for all date text inputs
     const dateInputIds = isAuthorityLine
-      ? ['ld-authority-date']
+      ? ['ld-authority-date', 'ld-authority-report-date']
       : ['ld-audit-start-date', 'ld-audit-end-date', 'ld-doc-rev-date'];
     dateInputIds.forEach(id => {
       initDateAutoFormat(document.getElementById(id));
@@ -1281,8 +1288,18 @@
       const revDateIso = isAuthorityLine
         ? (currentLine.document_rev_date || null)
         : parseDateDE(document.getElementById('ld-doc-rev-date').value);
+      // Das Berichtsdatum ist die Datumsfassung derselben Regel wie fieldVal():
+      // nur der Behördenbericht rendert das Feld und wandelt es über parseDateDE()
+      // nach ISO, ein interner Plan reicht den gespeicherten Wert unverändert
+      // durch — der PUT ersetzt die ganze Zeile, ein fehlendes Feld leerte also
+      // die Spalte. fieldVal() selbst passt nicht, weil es einen getrimmten
+      // String liefert und diese Spalte ISO oder null trägt, genau wie startIso
+      // und revDateIso eine Zeile höher.
+      const reportDateIso = isAuthorityLine
+        ? parseDateDE(document.getElementById('ld-authority-report-date').value)
+        : (currentLine.authority_report_date || null);
       // Skip save if any date is invalid format
-      if (startIso === undefined || endIso === undefined || revDateIso === undefined) return;
+      if (startIso === undefined || endIso === undefined || revDateIso === undefined || reportDateIso === undefined) return;
 
       const data = {
         subject: fieldVal('ld-subject', currentLine.subject),
@@ -1298,6 +1315,7 @@
         auditee: fieldVal('ld-auditee', currentLine.auditee),
         audit_start_date: startIso,
         audit_end_date: endIso,
+        authority_report_date: reportDateIso,
         audit_location: fieldVal('ld-audit-location', currentLine.audit_location),
         document_ref: fieldVal('ld-doc-ref', currentLine.document_ref),
         document_iss_rev: fieldVal('ld-doc-iss-rev', currentLine.document_iss_rev),

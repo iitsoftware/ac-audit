@@ -724,15 +724,21 @@ function renderAuditLinePdf(doc, { line, plan, dept, company, logoRow, checklist
   y += 16;
 
   // Der Kopfblock eines Behördenberichts beschreibt den Besuch und nicht ein
-  // Themenbereichs-Audit: dieselben fünf Zeilen, die renderLineDetail() im
-  // Frontend zeichnet — die drei Rollen aus authorityLineDefaults() plus Datum
-  // und Ort. Der Ort ist hier `location` und nicht `audit_location`, weil der
-  // Kopfblock des Berichtsscreens genau diese Spalte schreibt.
+  // Themenbereichs-Audit: dieselben sechs Zeilen in derselben Folge, die
+  // renderLineDetail() im Frontend zeichnet — die drei Rollen aus
+  // authorityLineDefaults() plus Datum, Berichtsdatum und Ort. Der Ort ist hier
+  // `location` und nicht `audit_location`, weil der Kopfblock des
+  // Berichtsscreens genau diese Spalte schreibt.
+  // Datum und Berichtsdatum sind zwei Angaben und keine Dublette: das eine ist
+  // der Tag des Besuchs (das abgeleitete `visitDate` aus performed_date →
+  // audit_end_date → audit_start_date), das andere das Datum des
+  // Beanstandungsberichts, unter dem die Behörde ihr Schreiben führt.
   const infoItems = isAuthority ? [
     ['Behörde', line.auditor_team || 'LBA'],
     ['Auditor', line.authority_auditor || ''],
     ['Auditee', line.auditee || ''],
     ['Datum', visitDate],
+    ['Berichtsdatum', formatDateDE(line.authority_report_date)],
     ['Ort', line.location || ''],
   ] : [
     ['Auditplan', plan.year || ''],

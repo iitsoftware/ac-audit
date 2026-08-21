@@ -50,9 +50,9 @@ CREATE TABLE IF NOT EXISTS audit_plan (
 );
 
 -- Auf einem Behördenaudit (audit_plan.plan_type = 'AUTHORITY') ist diese Zeile
--- der Bericht EINES Besuchs, und sein Kopfblock ist fünfzeilig:
--- Behörde | Auditor | Auditee | Datum | Ort. auditor_team trägt dabei die
--- Behörde, authority_auditor den zuständigen Bearbeiter — den Wert, den
+-- der Bericht EINES Besuchs, und sein Kopfblock ist sechszeilig:
+-- Behörde | Auditor | Auditee | Datum | Berichtsdatum | Ort. auditor_team trägt
+-- dabei die Behörde, authority_auditor den zuständigen Bearbeiter — den Wert, den
 -- views/organization.ejs als "Zuständige Aufsichtsperson Behörde"
 -- (department.authority_name) pflegt. Die Vorbelegung 'LBA' der Behörde hängt
 -- an authorityLineDefaults() und bewusst NICHT am Spalten-Default: der gälte
@@ -60,6 +60,16 @@ CREATE TABLE IF NOT EXISTS audit_plan (
 -- Datenumschichtung: die Spalte kommt leer dazu, bestehende Zeilen behalten
 -- ihr auditor_team unverändert. Ein interner Auditplan liest auditor_team
 -- weiter als sein Auditorenteam und lässt authority_auditor leer.
+--
+-- authority_report_date ist die zweite dieser Behördenspalten: das Datum des
+-- Beanstandungsberichts, unter dem die Behörde ihr Schreiben führt — nicht der
+-- Tag des Besuchs. Die beiden fallen regelmäßig auseinander (der Bericht kommt
+-- Wochen nach dem Besuch), weshalb audit_end_date sie nicht beide tragen kann:
+-- diese Spalte speist das COALESCE des abgeleiteten Besuchsdatums
+-- (performed_date → audit_end_date → audit_start_date) bewusst NICHT, damit
+-- Kachel, Kachelsortierung und Überschriften weiter den Besuch datieren.
+-- Ebenfalls additiv: die Spalte kommt NULL dazu, ein interner Auditplan lässt
+-- sie leer und reicht sie unverändert durch.
 CREATE TABLE IF NOT EXISTS audit_plan_line (
   id TEXT PRIMARY KEY,
   audit_plan_id TEXT NOT NULL REFERENCES audit_plan(id) ON DELETE CASCADE,
@@ -78,6 +88,7 @@ CREATE TABLE IF NOT EXISTS audit_plan_line (
   auditee TEXT DEFAULT '',
   audit_start_date TEXT,
   audit_end_date TEXT,
+  authority_report_date TEXT,
   audit_location TEXT DEFAULT '',
   document_ref TEXT DEFAULT '',
   document_iss_rev TEXT DEFAULT '',
