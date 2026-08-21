@@ -7,6 +7,12 @@
 // Fußzeilentabelle. Dazu die Gruppierung: eine Mehrfachauswahl über zwei Berichte
 // ergibt zwei Formulare, nicht ein gemischtes.
 //
+// Die beiden beschrifteten Zellen des Kopfes stehen mit je drei Fällen darin, weil
+// beide auf einem Behördenbericht etwas anderes tragen als auf einem internen Plan:
+// `Audit No.:` den Satz, der den Beanstandungsbericht benennt (mit Datum, ohne Datum,
+// intern die nackte Nummer), und `Audit Title:` den Satz über die Beanstandungen der
+// Abteilung (ohne gespeicherten Titel, mit gespeichertem Titel, intern leer).
+//
 // Der Test bootet den echten Server IN-PROCESS und legt sich vor dem Laden der
 // Routen einen Spy auf renderCapFormPdf: die Routen destrukturieren die Funktion
 // beim Require, ein späteres Patchen käme zu spät. Der Spy ruft den echten Renderer
@@ -172,6 +178,14 @@ const check = (name, ok, info) => {
     (one.args.entries || []).length === 1, `${(one.args.entries || []).length}`);
 
   const has = (call, txt) => call.texts.includes(txt);
+  // drawHeadField() zeichnet erst die Beschriftung und unmittelbar danach den Wert —
+  // der Text direkt hinter dem Label IST also der Inhalt genau dieser Kopfzelle. Damit
+  // ist auch eine LEERE Zelle prüfbar, die ein bloßes includes() nicht von einer
+  // gar nicht gezeichneten unterscheiden könnte.
+  const headValue = (call, label) => {
+    const i = call.texts.indexOf(label);
+    return i === -1 ? null : call.texts[i + 1];
+  };
   check('  → Kopf links: Formularname + Audit No.',
     has(one, 'Corrective Action Plan (CAP) Rev. 0') && has(one, 'Audit No.:'));
   // Die Zelle trägt beim Behördenbericht den Satz des Papierformulars, nicht die
@@ -182,11 +196,12 @@ const check = (name, ok, info) => {
   check('  → Kopf Mitte: Audit Subject (Besuchszeile) + Audit Title',
     has(one, 'Audit Subject:') && has(one, 'Audit Title:')
     && has(one, 'Behördenaudit 12.03.2026'), one.texts.slice(0, 8).join(' | '));
-  // Die Titelzelle trägt beim Behördenbericht den Satz mit der Abteilung, statt leer
-  // zu bleiben — `audit_title` füllt nur der xlsx-Import interner Audits.
-  check('  → Audit-Title-Zelle benennt die Abteilung',
-    has(one, `Beanstandungen durch die Behörde in der Abteilung ${dept.name}`),
-    one.texts.find(t => t.startsWith('Beanstandungen durch')) || '—');
+  // Ein Behördenbericht hat kein Feld für `audit_title` — die Zelle benennt deshalb,
+  // wofür das Blatt steht, statt zwischen zwei sprechenden Nachbarn leer zu bleiben.
+  // Die Abteilung kommt aus `dept`, das der Renderer ohnehin bekommt.
+  check('  → Audit-Title-Zelle benennt die Beanstandungen dieser Abteilung',
+    headValue(one, 'Audit Title:') === `Beanstandungen durch die Behörde in der Abteilung ${dept.name}`,
+    headValue(one, 'Audit Title:'));
   check('  → Kopf rechts: EASA-Genehmigungsnummer', has(one, 'DE.MG.4711'));
 
   const HEADERS = ['No.', 'Finding description', 'Level', 'Deadline', 'Responsible person',
@@ -264,7 +279,9 @@ const check = (name, ok, info) => {
     noDate.texts.find(t => t.startsWith('Beanstandungsbericht')) || '—');
 
   // ── 3b. Ein Bericht MIT eigenem Titel: die Titelzelle ist ein Fallback, keine
-  // Ersetzung — ein gefülltes `audit_title` (der Weg des xlsx-Imports) gewinnt.
+  // Ersetzung — ein gefülltes `audit_title` (der Weg des xlsx-Imports) gewinnt. Die
+  // Spalte hat genau EINEN Schreibweg, die Anlage der Zeile (`createAuditPlanLine`);
+  // PUT schreibt sie nicht, der Test setzt sie deshalb dort, so wie ein Import es täte.
   const titled = (await req('POST', `/api/audit-plans/${plan2.id}/lines`,
     { audit_title: 'Nachaudit Werkstatt' })).payload;
   const titledItem = (await req('POST', `/api/audit-plan-lines/${titled.id}/checklist-items`,
@@ -274,10 +291,9 @@ const check = (name, ok, info) => {
 
   const withTitle = await pdf(`/api/cap-items/${titledCap.id}/pdf`);
   check('ein gesetzter audit_title gewinnt gegen den Satz der Titelzelle',
-    withTitle.ok && withTitle.calls[0].texts.includes('Nachaudit Werkstatt')
-    && !withTitle.calls[0].texts.some(t => t.startsWith('Beanstandungen durch')),
-    (withTitle.calls[0] || { texts: [] }).texts.find(t => t.startsWith('Beanstandungen durch'))
-    || 'Titel gewinnt');
+    withTitle.ok && headValue(withTitle.calls[0], 'Audit Title:') === 'Nachaudit Werkstatt'
+    && !withTitle.calls[0].texts.some(t => t.startsWith('Beanstandungen durch die Behörde')),
+    withTitle.ok ? headValue(withTitle.calls[0], 'Audit Title:') : 'kein Aufruf');
 
   // ── 3c. Ohne Abteilungsnamen bleibt die Zelle leer, statt den Satz auf
   // `… in der Abteilung` enden zu lassen — dieselbe sprechende Leere, die
@@ -311,9 +327,13 @@ const check = (name, ok, info) => {
   check('  → Audit-Nr.-Zelle bleibt die nackte Nummer',
     internal.calls[0].texts.includes(String(intLine.audit_no))
     && !internal.calls[0].texts.some(t => t.startsWith('Beanstandungsbericht')));
-  check('  → Audit-Title-Zelle bleibt ohne den Behördensatz',
-    !internal.calls[0].texts.some(t => t.startsWith('Beanstandungen durch')),
-    internal.calls[0].texts.find(t => t.startsWith('Beanstandungen durch')) || '—');
+  // Ohne importierten `audit_title` hat ein interner Plan schlicht keinen Titel — die
+  // Zelle bleibt leer, und der Satz über Beanstandungen der Behörde wäre auf seinem
+  // Blatt schlicht falsch.
+  check('  → Audit-Title-Zelle bleibt leer, kein Behördensatz',
+    headValue(internal.calls[0], 'Audit Title:') === ''
+    && !internal.calls[0].texts.some(t => t.startsWith('Beanstandungen durch die Behörde')),
+    JSON.stringify(headValue(internal.calls[0], 'Audit Title:')));
 
   // ── 5. Der Versandweg fährt denselben Renderer ──
   // generateCapItemsPdfBuffer() ist die Quelle des E-Mail-Anhangs; ohne SMTP ist die
