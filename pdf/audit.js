@@ -231,16 +231,6 @@ const EVAL_COLORS = {
   'L1': '#f8d7da', 'L2': '#f5c6cb', 'L3': '#f1b0b7'
 };
 
-// Die zwei Maßnahmenarten eines Findings samt ihrer Überschrift und der Spalte,
-// aus der ein CAP-Item ohne cap_action-Zeilen gedruckt wird. Zweite Fundstelle
-// derselben Liste: CAP_ACTION_GROUPS in public/companies.js beschriftet damit die
-// beiden Tabellen des Finding-Screens — Schirm und Blatt zeigen dieselben Gruppen
-// in derselben Folge, wer hier ein Wort ändert, ändert es dort mit.
-const CAP_ACTION_GROUPS = [
-  { kind: 'CORRECTIVE', label: 'Behebungsmaßnahmen', legacy: 'corrective_action' },
-  { kind: 'PREVENTIVE', label: 'Präventivmaßnahmen', legacy: 'preventive_action' },
-];
-
 // Die Überschrift eines Behördenberichts — dieselbe Regel wie authorityName(date, '')
 // im Frontend: ohne Datum sagt die Beschriftung genau das, statt eine Jahreszahl zu
 // erfinden. Steht hier einmal, weil Deckblatt und Findingseiten denselben Besuch
@@ -513,16 +503,18 @@ function renderAuthorityFindings(doc, { checklistItems, deadlines = {}, startY, 
 
 // ── PDF Helper: eine Seite je Finding eines Behördenaudits ──────────
 // Die flache Tabelle von renderAuthorityFindings() bleibt das Inhaltsverzeichnis
-// des Berichts, direkt hinter dem Kopfblock; hier bekommt jedes Finding sein
-// eigenes Blatt mit allem, was an ihm hängt — Findingdaten, das vollständige
-// zweiseitige CM-002 und die beiden Maßnahmentabellen. Die Kette Besuch → Finding
-// → 5-Why/Maßnahmen, die der Finding-Screen zeigt, steht damit auch auf dem Papier,
-// das zur Behörde zurückgeht.
+// des Berichts, direkt hinter dem Kopfblock; hier bekommt jedes Finding seine
+// eigenen Blätter mit dem, was an ihm hängt — Findingdaten und das vollständige
+// zweiseitige CM-002, also drei Seiten je Finding. Die Maßnahmen stehen
+// ausdrücklich NICHT dabei: sie werden am Schluss des Bogens im CM-003-Formular
+// gedruckt, und zwei Orte für dieselbe Sache sind genau der Fehler, den ein
+// LBA-Bogen nicht haben darf.
 //
 // Geladen wird nichts — Hausregel wie in pdf/cap.js, das Laden gehört in die Route:
 //   caps      checklist_item_id → { cap, fiveWhy, capActions }
 //             (cap ist eine getCapItem-Zeile, die Ursache dafür, dass das CM-002
-//             Audit-Nr., Referenz und Beschreibung im Kopf führen kann)
+//             Audit-Nr., Referenz und Beschreibung im Kopf führen kann;
+//             capActions liest dieser Renderer nicht, das CM-003 tut es)
 //   deadlines checklist_item_id → ISO-Datum, dieselbe Karte, aus der die
 //             Übersichtstabelle ihre Frist zieht
 // Fehlt `caps`, zeichnet der Renderer nichts und liefert null: ein Aufrufer ohne
@@ -559,96 +551,6 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     doc.fillColor('#000000').font('Helvetica-Bold').text(label, 54, y + 3, { width: labelW - 8 });
     doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').text(textVal, 50 + labelW + 4, y + 3, { width: valW - 8 });
     y += rowH;
-  }
-
-  // Der Satzspiegel der Maßnahmentabelle tilt dieselben 50 → 545.28 wie die
-  // Findingtabelle: Nr. druckt Zahlen, Zieldatum und Erledigt am je ein Datum
-  // (35pt bei 7pt), der Verantwortliche einen Namen — der Rest gehört der Maßnahme.
-  const actColX = [50, 82, 325.28, 425.28, 485.28];
-  const actColW = [32, 243.28, 100, 60, 60];
-  const actHeaders = ['Nr.', 'Maßnahme', 'Verantwortlich', 'Zieldatum', 'Erledigt am'];
-  const actHeaderH = 16;
-
-  function drawActionHeader() {
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.rect(50, y, tableRight - 50, actHeaderH).fill('#2563eb');
-    doc.fillColor('#ffffff');
-    for (let c = 0; c < actHeaders.length; c++) {
-      doc.text(actHeaders[c], actColX[c] + 3, y + 3, { width: actColW[c] - 6 });
-    }
-    doc.fillColor('#000000');
-    y += actHeaderH;
-    doc.font('Helvetica').fontSize(7);
-  }
-
-  // Die gedruckten Zeilen einer Gruppe. Wie in capActionCell() (pdf/cap.js) zählt
-  // eine Maßnahme ohne Beschreibung nicht mit — sie hat nichts zu drucken, und die
-  // abgeleitete Nummer bliebe sonst nicht lückenlos. Ausschlaggebend ist auch hier
-  // die leere Liste, nicht der leere Text: gibt es keine cap_action-Zeilen, ist der
-  // alte Textwert des CAP-Items die eine Maßnahme dieser Art. Anders als das CM-003
-  // joint diese Ansicht aber nicht zu "1. … 2. …", sondern druckt eine echte Zeile
-  // je Maßnahme — dafür ist sie eine Tabelle und keine Formularzelle.
-  function actionRows(entry, group) {
-    const rows = (entry.capActions || [])
-      .filter(a => a.kind === group.kind)
-      .map(a => ({ ...a, description: (a.description || '').trim() }))
-      .filter(a => a.description);
-    if (rows.length > 0) return rows;
-    // Der Altbestand kennt Verantwortlichen und Zieldatum je Maßnahme nicht — die
-    // beiden hängen dort am CAP-Item und stehen bereits im Datenblock oben.
-    const legacy = (entry.cap[group.legacy] || '').trim();
-    return legacy ? [{ description: legacy }] : [];
-  }
-
-  function drawActionTable(label, rows) {
-    // Überschrift, Tabellenkopf und erste Zeile bleiben zusammen auf einer Seite.
-    if (y + 16 + actHeaderH + 14 > 740) { doc.addPage(); y = 50; }
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000').text(label, 50, y);
-    y += 16;
-
-    if (rows.length === 0) {
-      doc.fontSize(8).font('Helvetica').fillColor('#888888').text('Keine Maßnahmen', 50, y);
-      doc.fillColor('#000000');
-      y += 18 + 12;
-      return;
-    }
-
-    drawActionHeader();
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const cells = [
-        row.description,
-        row.responsible_person || '',
-        formatDateDE(row.target_date),
-        formatDateDE(row.completion_date),
-      ];
-      doc.font('Helvetica').fontSize(7);
-      const rowH = Math.max(14, ...cells.map((t, c) => doc.heightOfString(t, { width: actColW[c + 1] - 6 }) + 6));
-
-      if (y + rowH > 740) { doc.addPage(); y = 50; drawActionHeader(); }
-
-      if (i % 2 === 0) {
-        doc.rect(50, y, tableRight - 50, rowH).fill('#f8f9fa');
-        doc.fillColor('#000000');
-      }
-
-      doc.strokeColor('#d0d0d0').lineWidth(0.5);
-      doc.rect(50, y, tableRight - 50, rowH).stroke();
-      for (let c = 1; c < actColX.length; c++) {
-        doc.moveTo(actColX[c], y).lineTo(actColX[c], y + rowH).stroke();
-      }
-
-      // Die laufende Nummer einer Maßnahme ist der Zeilenindex ihrer Gruppe und wird
-      // nie gespeichert — sie darf sich beim Löschen einer Nachbarzeile schließen.
-      // Ausdrücklich anders als die Nr. des Findings darüber, auf die ein
-      // LBA-Schreiben verweist und die deshalb ihre Lücken behält.
-      doc.text(String(i + 1), actColX[0] + 3, y + 3, { width: actColW[0] - 6 });
-      cells.forEach((t, c) => doc.text(t, actColX[c + 1] + 3, y + 3, { width: actColW[c + 1] - 6 }));
-
-      y += rowH;
-    }
-    y += 12;
   }
 
   for (const item of checklistItems) {
@@ -697,8 +599,8 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     }
     y += 15;
 
-    // Ein Finding ohne Level hat kein cap_item und damit weder Ursachenanalyse noch
-    // Maßnahmen — ein Zustand, kein Fehler: die Seite bleibt der Datenblock.
+    // Ein Finding ohne Level hat kein cap_item und damit keine Ursachenanalyse —
+    // ein Zustand, kein Fehler: es schrumpft auf die eine Findingdatenseite.
     if (!cap) continue;
 
     // Das CM-002 beginnt auf einer eigenen Seite. Sein Seitenschnitt ist gesetzt —
@@ -715,16 +617,6 @@ function renderAuthorityFindingPages(doc, { line, checklistItems, caps, dept, co
     y = renderFiveWhyPdf(doc, {
       cap, fiveWhy: entry.fiveWhy || null, department: dept, company, logoRow, signer, startY: y,
     });
-
-    // Die Maßnahmen beginnen ihrerseits auf einer eigenen Seite. Direkt unter dem
-    // zurückgegebenen y klebten sie an der Zeile Name / Position / Datum der zweiten
-    // CM-002-Seite, und "Behebungsmaßnahmen" las sich wie eine weitere Rubrik des
-    // Unterzeichnerblocks — das Formular ist mit seiner Unterschrift zu Ende. Je
-    // Finding gilt damit die Folge Findingdaten | CM-002 S.1 | CM-002 S.2 | Maßnahmen.
-    doc.addPage();
-    y = 50;
-
-    for (const group of CAP_ACTION_GROUPS) drawActionTable(group.label, actionRows(entry, group));
   }
 
   return y;

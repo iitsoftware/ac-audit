@@ -163,12 +163,13 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('  → der Bogen läuft vollständig durch (%%EOF)',
     single.tail.includes('%%EOF'), single.tail.trim().slice(-12));
   // Die Findingseiten hängen an dem, was die Route lädt: ohne caps bliebe es beim
-  // einseitigen Deckblatt. Sechs Seiten = Deckblatt + die vier Seiten des Findings
-  // mit Level (Findingdaten | CM-002 Seite 1 | CM-002 Seite 2 | Maßnahmen) + der
-  // eine Datenblock des Findings ohne Level. Die Aufteilung selbst prüft
+  // einseitigen Deckblatt. Fünf Seiten = Deckblatt + die drei Seiten des Findings
+  // mit Level (Findingdaten | CM-002 Seite 1 | CM-002 Seite 2) + der eine
+  // Datenblock des Findings ohne Level. Die Maßnahmen sind hier keine Seite mehr —
+  // sie stehen im CM-003. Die Aufteilung selbst prüft
   // tasks/smoke-authority-finding-pages.js.
   check('  → die geladenen Daten erzeugen die Findingseiten',
-    single.pages === 6, `${single.pages} Seite(n)`);
+    single.pages === 5, `${single.pages} Seite(n)`);
 
   // ── 2. Interner Plan: keine einzige Zusatzangabe ──
   const internal = await pdf(`/api/audit-plan-lines/${intLine.id}/pdf`);
@@ -221,13 +222,11 @@ const AUTHORITY_KEYS = ['caps', 'deadlines', 'signer'];
   check('  → sein Unterzeichner bleibt leer, statt den Bogen zu sprengen',
     (noQm.calls[0] || {}).signer === undefined || !noQm.calls[0].signer,
     String((noQm.calls[0] || {}).signer));
-  // Deckblatt + die vier Seiten des einen Findings (Findingdaten | CM-002 Seite 1 |
-  // CM-002 Seite 2 | Maßnahmen). Ohne 5-Why-Satz bleibt es bei dessen leerem, von
-  // Hand ausfüllbarem Formular, und die Maßnahmenseite steht auch ohne eine einzige
-  // Maßnahme: sie trägt dann die beiden Überschriften samt "Keine Maßnahmen" — das
-  // Finding hat ein CAP-Item, wir haben darauf nur noch nicht geantwortet.
+  // Deckblatt + die drei Seiten des einen Findings (Findingdaten | CM-002 Seite 1 |
+  // CM-002 Seite 2). Ohne 5-Why-Satz bleibt es bei dessen leerem, von Hand
+  // ausfüllbarem Formular — es steht auch dann, wenn niemand es unterschreibt.
   check('  → die Findingseiten stehen trotzdem',
-    noQm.pages === 5, `${noQm.pages} Seite(n)`);
+    noQm.pages === 4, `${noQm.pages} Seite(n)`);
 
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
   console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
