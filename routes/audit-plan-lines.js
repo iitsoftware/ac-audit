@@ -65,7 +65,7 @@ router.post('/api/audit-plans/:auditPlanId/lines', (req, res) => {
     id, req.params.auditPlanId,
     b.sort_order || 0, b.subject || '', b.regulations || '', b.location || '', b.planned_window || '',
     auditNo, b.audit_subject || '', b.audit_title || '',
-    auditorTeam, authorityAuditor, auditee,
+    auditorTeam, authorityAuditor, b.authority_report_date || null, auditee,
     b.audit_start_date || null, b.audit_end_date || null, b.audit_location || '',
     b.document_ref || '', b.document_iss_rev || '', b.document_rev_date || null,
     b.recommendation || '', b.audit_status || 'OPEN'
@@ -259,9 +259,13 @@ router.put('/api/audit-plan-lines/:id', (req, res) => {
   // löschte das erste Speichern die Vorbelegung aus authorityLineDefaults(). Ein
   // ausdrücklich mitgeschickter Wert (auch der leere) schreibt dagegen durch.
   const authorityAuditor = b.authority_auditor ?? existing.authority_auditor ?? '';
+  // Das Berichtsdatum der Behörde steht heute nur auf dem Bogen und hat gar kein
+  // Eingabefeld — dieselbe Regel also, nur mit null statt '' als Default, weil
+  // die Spalte ein nullbares Datum ist wie audit_start_date daneben.
+  const authorityReportDate = b.authority_report_date ?? existing.authority_report_date ?? null;
   stmts.updateAuditPlanLine.run(
     b.sort_order || 0, b.subject || '', b.regulations || '', b.location || '', b.planned_window || '', b.signature || '',
-    b.auditor_team || '', authorityAuditor, b.auditee || '',
+    b.auditor_team || '', authorityAuditor, authorityReportDate, b.auditee || '',
     b.audit_start_date || null, b.audit_end_date || null, b.audit_location || '',
     b.document_ref || '', b.document_iss_rev || '', b.document_rev_date || null,
     b.recommendation || '',
@@ -403,6 +407,7 @@ router.post('/api/audit-plans/:id/import-audits', (req, res) => {
           line.signature || '',
           meta.auditor_team || line.auditor_team || '',
           line.authority_auditor || '',
+          line.authority_report_date || null,
           meta.auditee || line.auditee || '',
           meta.audit_start_date || line.audit_start_date || null,
           meta.audit_end_date || line.audit_end_date || null,
