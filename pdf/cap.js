@@ -132,7 +132,7 @@ function drawCapFormHead(doc, { line, plan, dept, logoRow, y }) {
   });
   drawHeadField(doc, {
     x: colX[1] + 6, y: y + 40, w: colW[1] - 12,
-    label: 'Audit Title:', value: line.audit_title,
+    label: 'Audit Title:', value: capTitleLine(line, plan, dept),
   });
 
   let ry = y + 8;
@@ -156,6 +156,24 @@ function capVisitLine(line, plan) {
   if (line.subject) return line.subject;
   const isAuthority = plan && (plan.plan_type || 'AUDIT') === 'AUTHORITY';
   return isAuthority ? authorityVisitLabel(line) : '';
+}
+
+// Die Audit-Title-Zelle desselben Kopfes. Ein importierter Titel gewinnt: `audit_title`
+// ist die Spalte, die der xlsx-Import unter genau diesem Namen füllt (imports/audit.js),
+// und was auf dem eingelesenen Blatt stand, ist die Angabe des Blattes selbst. Fehlt sie,
+// benennt ein Behördenbericht die Zelle mit dem Satz des Papierformulars —
+// "Beanstandungen durch die Behörde in der Abteilung CAMO" —, denn eine Oberfläche, die
+// den Titel eines Behördenbesuchs schriebe, gibt es nicht (dieselbe Lücke, die
+// capVisitLine() für `audit_subject` schließt). OHNE Abteilungsnamen bleibt die Zelle
+// leer, statt einen halben Satz zu drucken — dieselbe sprechende Leere wie
+// capAuditNoLine() ohne Datum. Ein interner Plan bekommt keinen Ersatzsatz: er hat keine
+// Beanstandungen der Behörde, die er benennen könnte.
+function capTitleLine(line, plan, dept) {
+  if (line.audit_title) return line.audit_title;
+  const isAuthority = plan && (plan.plan_type || 'AUDIT') === 'AUTHORITY';
+  if (!isAuthority) return '';
+  const deptName = (dept && dept.name ? dept.name : '').trim();
+  return deptName ? `Beanstandungen durch die Behörde in der Abteilung ${deptName}` : '';
 }
 
 // Die Audit-Nr.-Zelle desselben Kopfes. Im Papierformular der Behörde steht dort nicht
