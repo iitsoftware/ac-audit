@@ -1,0 +1,32 @@
+<%
+// Firmenkachelseite — der Einstieg der organisationsgeführten Navigation
+// (routes/pages.js: `/` redirectet hierher). Eine Kachel je Firma, ein Klick
+// darauf führt nach `/companies/:id` zu ihren Abteilungen.
+//
+// Keine Locals: die Ebene "alle Firmen" hat keine ID, also gibt es hier auch
+// kein Hidden-Field — anders als auf der Abteilungskachelseite darunter.
+//
+// Das Markup der Kacheln kommt aus public/companies-list.js; hier steht nur
+// der Rahmen samt Dialog-Partial, dessen Verdrahtung public/org-dialogs.js
+// mitbringt (initCompanyDialogs()).
+%>
+<div class="main-content-full">
+  <div class="pane-content-header">
+    <h2>Firmen</h2>
+    <button class="btn-icon" id="btn-add-company" title="Firma hinzuf&uuml;gen" aria-label="Firma hinzuf&uuml;gen">+</button>
+  </div>
+  <div class="org-tile-grid" id="company-tiles"></div>
+  <div class="empty-state-inline" id="companies-empty" style="display:none">Keine Firmen vorhanden</div>
+</div>
+
+<%- include('partials/company-dialog') %>
+<!--
+  Das Skript zum Partial lädt die Seite selbst und nicht layout.ejs: die
+  Dialoge gehören zu genau den Seiten, die sie inkludieren, und ein weiterer
+  `activePage`-Zweig im Layout (wie der für risk-matrix.js) wäre eine zweite
+  Stelle, die mit jeder neuen Seite gepflegt werden müsste. Die Reihenfolge
+  stimmt: layout.ejs hängt app.js und das Seitenskript hinter den Seitenrumpf,
+  hier wird also nur `window.initCompanyDialogs` definiert, aufgerufen wird es
+  später aus public/companies-list.js.
+-->
+<script src="/org-dialogs.js"></script>
