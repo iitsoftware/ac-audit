@@ -3,13 +3,14 @@ const { formatDateDE } = require('../services/audit-log');
 const { getQmForDepartment } = require('../services/email');
 const { createPdfDoc, addPdfFooter } = require('./common');
 
-// LBA-Formularreferenz + App-Hinweis in einem Label: addPdfFooter() ersetzt mit
-// `label` den Default 'Erstellt mit ac-audit', deshalb beides hier zusammengefasst.
-const FOOTER_LABEL = 'CM-025, SRB Meeting, Rev. 1, 28.08.2024  |  Erstellt mit ac-sms';
-const FOOTER_LABEL_SPI = 'CM-006, Ergebnisse SPI, Rev. 0, 28.08.2024  |  Erstellt mit ac-sms';
+// Nur die LBA-Formularreferenz: addPdfFooter() hängt den App-Hinweis (APP_FOOTER in
+// pdf/common.js) mit demselben '  |  ' selbst dahinter, das die Labels hier früher
+// ausschreiben mussten, als `label` den Default noch ersetzte.
+const FOOTER_LABEL = 'CM-025, SRB Meeting, Rev. 1, 28.08.2024';
+const FOOTER_LABEL_SPI = 'CM-006, Ergebnisse SPI, Rev. 0, 28.08.2024';
 // Die Zielkatalog-Tabelle stammt aus dem MOE-Anhang, nicht aus einem LBA-Formular —
 // deshalb steht hier der Dokumenttitel statt einer Formularreferenz.
-const FOOTER_LABEL_OBJECTIVES = 'Sicherheitsziele / Safety Objectives  |  Erstellt mit ac-sms';
+const FOOTER_LABEL_OBJECTIVES = 'Sicherheitsziele / Safety Objectives';
 const PROTOCOL_COLOR = '#1f4e79';
 const PAGE_BOTTOM = 740;
 

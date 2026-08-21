@@ -8,9 +8,23 @@ function createPdfDoc({ landscape = false, margin = 50 } = {}) {
   return new PDFDocument(opts);
 }
 
+// Der App-Hinweis der linken Fußzeile — die EINE Fundstelle des App-Namens. Er stand
+// bis dahin als Default in addPdfFooter() und ein zweites Mal am Ende jedes
+// zusammengesetzten Labels (pdf/safety.js, pdf/five-why.js, routes/risk-analysis.js),
+// weil `label` den Default ersetzte statt ihn zu ergänzen: wer eine Formularreferenz
+// setzte, tauschte den Hinweis versehentlich gegen sie ein, und dieselbe App hieß auf
+// den sechs Strings dreimal anders (ac-audit / ac-sms / ac-change).
+const APP_FOOTER = 'Erstellt mit ac-suite';
+// Der Trenner der zusammengesetzten Fußzeile — exakt der, den die Labels zuvor selbst
+// schrieben, damit sie nach dem Entfernen ihres Anhangs unverändert aussehen.
+const FOOTER_SEP = '  |  ';
+
 // Adds a footer to all buffered pages.
+// `label` ist seither ein PRÄFIX und kein Ersatz: der App-Hinweis steht immer rechts
+// davon, ein Renderer kann ihn also nicht mehr verlieren. Ohne `label` bleibt der
+// Hinweis allein — das ist der Fall der Batch-Route und jedes internen Auditplans.
 function addPdfFooter(doc, opts = {}) {
-  const label = opts.label || 'Erstellt mit ac-audit';
+  const label = opts.label ? `${opts.label}${FOOTER_SEP}${APP_FOOTER}` : APP_FOOTER;
   const pages = doc.bufferedPageRange();
   for (let p = pages.start; p < pages.start + pages.count; p++) {
     doc.switchToPage(p);
@@ -70,4 +84,4 @@ function departmentLeaderLabel(dept) {
   return 'Abteilungsleiter';
 }
 
-module.exports = { createPdfDoc, addPdfFooter, authorityEvalLabel, authorityVisitLabel, departmentLeaderLabel };
+module.exports = { createPdfDoc, addPdfFooter, APP_FOOTER, authorityEvalLabel, authorityVisitLabel, departmentLeaderLabel };

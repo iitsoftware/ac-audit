@@ -3,9 +3,9 @@ const { formatDateDE } = require('../services/audit-log');
 const { getQmForDepartment } = require('../services/email');
 const { createPdfDoc, addPdfFooter } = require('./common');
 
-// LBA-Formularreferenz + App-Hinweis in einem Label wie in pdf/safety.js: addPdfFooter()
-// ersetzt mit `label` den Default 'Erstellt mit ac-audit', also muss beides hier stehen.
-const FOOTER_LABEL = 'CM-002, Grundursachenanalyse, Rev. 0, 28.08.2024  |  Erstellt mit ac-audit';
+// Nur die LBA-Formularreferenz wie in pdf/safety.js: den App-Hinweis (APP_FOOTER in
+// pdf/common.js) hängt addPdfFooter() mit demselben '  |  ' selbst dahinter.
+const FOOTER_LABEL = 'CM-002, Grundursachenanalyse, Rev. 0, 28.08.2024';
 const BAND_COLOR = '#1f4e79';
 const PAGE_BOTTOM = 740;
 const CONTENT_W = 595.28 - 100;

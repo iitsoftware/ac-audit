@@ -231,7 +231,9 @@ router.get('/api/risk-analysis/:id/pdf', (req, res) => {
   res.set('Content-Disposition', `attachment; filename="Risikoanalyse_${cr ? cr.change_no : 'RA'}.pdf"`);
   doc.pipe(res);
   renderRiskAnalysisPdf(doc, { ra, cr, dept, company, logoRow, items, qm });
-  addPdfFooter(doc, { label: 'Erstellt mit ac-change' });
+  // Kein `label`: das hier war nie eine Formularreferenz, sondern der App-Hinweis
+  // selbst — und der ist seither APP_FOOTER in pdf/common.js.
+  addPdfFooter(doc);
   doc.end();
 });
 
@@ -257,7 +259,9 @@ router.post('/api/risk-analysis/:id/send-email', async (req, res) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
       renderRiskAnalysisPdf(doc, { ra, cr, dept, company, logoRow, items, qm });
-      addPdfFooter(doc, { label: 'Erstellt mit ac-change' });
+      // Kein `label`: das hier war nie eine Formularreferenz, sondern der App-Hinweis
+      // selbst — und der ist seither APP_FOOTER in pdf/common.js.
+      addPdfFooter(doc);
       doc.end();
     });
 

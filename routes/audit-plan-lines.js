@@ -160,7 +160,7 @@ function authorityPdfData(line, plan, dept, company, personsAll) {
 // wie CM-025 und CM-002 ihre Formularreferenz benennen. Zwei ausdrücklich in Kauf
 // genommene Folgen:
 //   - addPdfFooter() läuft über bufferedPageRange() und beschriftet ALLE Seiten
-//     gleich, die eingebetteten CM-002-Seiten tragen hier also diesen Text statt
+//     gleich, die eingebetteten CM-002-Seiten tragen hier also dieses Präfix statt
 //     'CM-002, Grundursachenanalyse, Rev. 0, 28.08.2024'. Das ist gewollt — hier
 //     sind sie Seiten eines Behördenberichts und keine eigenständigen Formulare;
 //     die Formularreferenz bleibt dem Einzeldownload
@@ -168,8 +168,11 @@ function authorityPdfData(line, plan, dept, company, personsAll) {
 //     je Seitenbereich wäre ein zweiter addPdfFooter()-Vertrag für diesen einen
 //     Bogen — mehr, als der Fall wert ist.
 //   - Nur die Einzelroute ruft das hier: eine Mehrfachauswahl hat keinen EINEN
-//     Besuch, dessen Behörde und Datum dort stehen könnten, die Batch-Route behält
-//     also den Default 'Erstellt mit ac-audit'.
+//     Besuch, dessen Behörde und Datum dort stehen könnten, die Batch-Route trägt
+//     also nur den App-Hinweis (APP_FOOTER in pdf/common.js).
+// Das Label ist ein PRÄFIX und kein Ersatz: addPdfFooter() hängt den App-Hinweis
+// hinter jedes gesetzte Label, die Zeile lautet also
+// 'Behördenaudit LBA am 21.07.2026  |  Erstellt mit ac-suite'.
 // Ohne Datum endet das Label bei der Behörde, statt ein leeres 'am ' zu drucken.
 // Interne Pläne liefern null und bleiben beim Default.
 function authorityFooterLabel(line, plan) {
