@@ -487,23 +487,96 @@ const stmts = {
     `INSERT INTO app_setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`
   ),
 
-  // Home stats
-  getOpenCapItems: db.prepare(
-    `SELECT id, checklist_item_id, deadline, responsible_person, source
-     FROM cap_item WHERE completion_date IS NULL OR completion_date = ''
-     ORDER BY deadline ASC`
+  // ── Dashboard-Aggregate EINER Abteilung ───────────────────
+  // Alle fünf Statements sind abteilungsbezogen und liefern fertige Zahlen,
+  // nicht die Zeilen dahinter: das Dashboard zeichnet Charts, es braucht keine
+  // Datensätze, die es erst im Node-Code zählen müsste. Die globalen Zähler des
+  // früheren Home-Dashboards sind hier ersatzlos entfallen — es gibt kein
+  // globales Dashboard mehr, nach dem Login kommen die Firmenkacheln.
+
+  // Findings nach Level. Die Abteilung hängt am Plan, nicht am Prüfpunkt, also
+  // der Weg checklist_item → line → plan. Gezählt wird der ROHE Wert
+  // ('O'/'L1'/'L2'/'L3') wie überall sonst — der Klartext ("Bemerkung") ist
+  // Beschriftungssache des Frontends (evalLabel()) und nie ein gespeicherter.
+  // 'C'/'NA' bleiben draußen: sie sind kein Finding, sondern dessen Gegenteil.
+  getDashboardFindingsByLevel: db.prepare(
+    `SELECT ci.evaluation AS level, COUNT(*) AS cnt
+     FROM audit_checklist_item ci
+     JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
+     JOIN audit_plan ap ON ap.id = pl.audit_plan_id
+     WHERE ap.department_id = ? AND ci.evaluation IN ('O', 'L1', 'L2', 'L3')
+     GROUP BY ci.evaluation`
   ),
-  getCapStatsOpen: db.prepare(
-    `SELECT COUNT(*) AS cnt FROM cap_item WHERE completion_date IS NULL OR completion_date = ''`
+  // CAP-Fristen der offenen CAP-Items, in drei sich ausschließende Töpfe:
+  // überfällig, fällig in <= 30 Tagen, sonst offen (ohne Frist oder später).
+  // Die drei summieren sich deshalb auf total. Gescoped über cap_item.department_id
+  // statt über die Audit-Kette — dieselbe Spalte, die getCapItemsByDepartment
+  // liest, und die einzige, die auch die quellenfremden CAPs (Change, manuell)
+  // mitnimmt; für Audit-CAPs füllt sie die Migration aus derselben Kette.
+  // "Offen" ist wie überall aus completion_date abgeleitet, nicht aus status.
+  getDashboardCapDeadlines: db.prepare(
+    `SELECT COUNT(*) AS total,
+            COALESCE(SUM(CASE WHEN deadline IS NOT NULL AND deadline != ''
+                               AND deadline < date('now')
+                              THEN 1 ELSE 0 END), 0) AS overdue,
+            COALESCE(SUM(CASE WHEN deadline IS NOT NULL AND deadline != ''
+                               AND deadline >= date('now')
+                               AND deadline <= date('now', '+30 days')
+                              THEN 1 ELSE 0 END), 0) AS due_soon,
+            COALESCE(SUM(CASE WHEN deadline IS NULL OR deadline = ''
+                               OR deadline > date('now', '+30 days')
+                              THEN 1 ELSE 0 END), 0) AS later
+     FROM cap_item
+     WHERE department_id = ? AND (completion_date IS NULL OR completion_date = '')`
   ),
-  getCapStatsOverdue: db.prepare(
-    `SELECT COUNT(*) AS cnt FROM cap_item
-     WHERE (completion_date IS NULL OR completion_date = '')
-       AND deadline IS NOT NULL AND deadline != ''
-       AND deadline < date('now')`
+  // Audits des laufenden Jahres: geplant = jede Zeile der Pläne dieses Jahres,
+  // durchgeführt = die mit einem Datum. Gelesen wird COALESCE(performed_date,
+  // audit_end_date) in genau dieser Reihenfolge, weil ein internes Audit sein
+  // performed_date über PATCH .../performed setzt, ein Behördenbericht dagegen
+  // nur sein audit_end_date — dieselbe Rangfolge, mit der authority_date die
+  // Kachel datiert. NULLIF, weil beide Spalten auch leer statt NULL sein können.
+  getDashboardAuditsByYear: db.prepare(
+    `SELECT COUNT(*) AS planned,
+            COALESCE(SUM(CASE WHEN COALESCE(NULLIF(pl.performed_date, ''),
+                                            NULLIF(pl.audit_end_date, '')) IS NOT NULL
+                              THEN 1 ELSE 0 END), 0) AS performed
+     FROM audit_plan_line pl
+     JOIN audit_plan ap ON ap.id = pl.audit_plan_id
+     WHERE ap.department_id = ? AND ap.year = ?`
   ),
-  getTotalAudits: db.prepare(
-    `SELECT COUNT(*) AS cnt FROM audit_plan_line`
+  // Sicherheitsziele des Jahres. Der Katalog hängt am Sicherheitsjahr, also der
+  // Weg über safety_year statt über das denormalisierte department_id — sonst
+  // zählte die Abfrage die Ziele ALLER Jahre der Abteilung zusammen.
+  // Die "letzte" Bewertung wird mit demselben Unterabfrage-Schlüssel bestimmt
+  // wie in getSafetyObjectivesByYear, damit Katalogtabelle und Chart nicht
+  // auseinanderlaufen. erfüllt/nicht erfüllt ist deren rating (von Hand gesetzt,
+  // nie abgeleitet), fällig ist die "fällig"-Regel der Katalogtabelle: nie
+  // bewertet oder letzte Bewertung länger als interval_months her. Stillgelegte
+  // Ziele (active = 0) stehen bewusst außerhalb des Turnus und zählen nirgends
+  // mit. fulfilled/missed und due überschneiden sich dabei — ein Ziel kann
+  // positiv bewertet UND wieder fällig sein; das sind zwei Aussagen über
+  // dieselbe Zeile und keine Töpfe wie bei den CAP-Fristen.
+  getDashboardSafetyObjectives: db.prepare(
+    `SELECT COUNT(*) AS total,
+            COALESCE(SUM(CASE WHEN e.rating = 'POSITIV' THEN 1 ELSE 0 END), 0) AS fulfilled,
+            COALESCE(SUM(CASE WHEN e.rating = 'NEGATIV' THEN 1 ELSE 0 END), 0) AS missed,
+            COALESCE(SUM(CASE WHEN e.eval_date IS NULL OR e.eval_date = ''
+                               OR date(e.eval_date, '+' || COALESCE(o.interval_months, 12) || ' months') < date('now')
+                              THEN 1 ELSE 0 END), 0) AS due
+     FROM safety_objective o
+     JOIN safety_year y ON y.id = o.safety_year_id
+     LEFT JOIN spi_evaluation e ON e.id = (
+       SELECT x.id FROM spi_evaluation x WHERE x.safety_objective_id = o.id
+       ORDER BY COALESCE(x.eval_date, x.created_at) DESC, x.created_at DESC LIMIT 1)
+     WHERE y.department_id = ? AND y.year = ? AND o.active = 1`
+  ),
+  // Change Requests nach Status. Kein fester Statusschlüssel im SQL: die Werte
+  // sind Freitext-Spalte mit Default 'DRAFT', und ein hier hart verdrahteter
+  // Satz wäre die Stelle, an der ein neuer Status still unter den Tisch fiele.
+  getDashboardChangeRequestsByStatus: db.prepare(
+    `SELECT status, COUNT(*) AS cnt
+     FROM change_request WHERE department_id = ?
+     GROUP BY status ORDER BY status`
   ),
 
   // Audit Log
@@ -550,14 +623,6 @@ const stmts = {
   ),
   deleteChangeRequest: db.prepare(
     'DELETE FROM change_request WHERE id = ?'
-  ),
-
-  // Change stats for home
-  getOpenChangeRequests: db.prepare(
-    `SELECT COUNT(*) AS cnt FROM change_request WHERE status NOT IN ('CLOSED', 'REJECTED')`
-  ),
-  getTotalChangeRequests: db.prepare(
-    `SELECT COUNT(*) AS cnt FROM change_request`
   ),
 
   // Change Tasks
