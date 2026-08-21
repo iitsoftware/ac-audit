@@ -1,0 +1,36 @@
+<%
+// Abteilungskachelseite — die zweite Ebene der organisationsgeführten
+// Navigation (routes/pages.js: `/companies/:companyId`). Eine Kachel je
+// Abteilung, ein Klick darauf führt nach `/departments/:id` aufs Dashboard.
+//
+// Anders als die Firmenkachelseite darüber hat diese Ebene eine ID: die Firma,
+// deren Abteilungen hier stehen. Sie kommt als EJS-Local aus der Route und geht
+// über das Hidden-Field ins Frontend — dasselbe Muster wie
+// #page-company-id in views/companies.ejs und #srb-default-topics in
+// views/safety.ejs. `locals.` statt der nackten Variablen, weil EJS eine nicht
+// gesetzte Local als ReferenceError wirft.
+//
+// Das Markup der Kacheln kommt aus public/departments-list.js; hier steht nur
+// der Rahmen samt Dialog-Partial, dessen Verdrahtung public/org-dialogs.js
+// mitbringt (initDeptDialogs()).
+%>
+<input type="hidden" id="page-company-id" value="<%= locals.companyId || '' %>">
+
+<div class="main-content-full">
+  <div class="pane-content-header">
+    <h2>Abteilungen</h2>
+    <button class="btn-icon" id="btn-add-dept" title="Abteilung hinzuf&uuml;gen" aria-label="Abteilung hinzuf&uuml;gen">+</button>
+  </div>
+  <div class="org-tile-grid" id="department-tiles"></div>
+  <div class="empty-state-inline" id="departments-empty" style="display:none">Keine Abteilungen vorhanden</div>
+</div>
+
+<%- include('partials/dept-dialog') %>
+<!--
+  Das Skript zum Partial lädt die Seite selbst und nicht layout.ejs — die
+  Begründung steht in views/companies-list.ejs. Die Reihenfolge stimmt:
+  layout.ejs hängt app.js und das Seitenskript hinter den Seitenrumpf, hier wird
+  also nur `window.initDeptDialogs` definiert, aufgerufen wird es später aus
+  public/departments-list.js.
+-->
+<script src="/org-dialogs.js"></script>
