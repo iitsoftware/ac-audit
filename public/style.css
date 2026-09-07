@@ -999,7 +999,8 @@ dialog.dialog-wide {
   text-align: right;
 }
 
-.lines-table tbody tr:hover .line-actions {
+.lines-table tbody tr:hover .line-actions,
+.lines-table tbody tr:focus-within .line-actions {
   opacity: 1;
 }
 
@@ -1569,7 +1570,8 @@ dialog.dialog-wide {
   transition: opacity var(--transition);
 }
 
-.plan-tile:hover .plan-tile-actions { opacity: 1; }
+.plan-tile:hover .plan-tile-actions,
+.plan-tile:focus-within .plan-tile-actions { opacity: 1; }
 
 /* ── Audit Plan Progress Bar ───────────────────────────────── */
 .plan-progress {
@@ -3577,4 +3579,3 @@ dialog.dialog-lg { max-width: 600px; }
     padding: 14px 10px 10px;
   }
 }
-
