@@ -1,13 +1,12 @@
-# Task 987: Expose hidden row and tile actions on keyboard focus
+# Task 996: Add accessible names to Trash row actions
 
-- [x] Inspect existing CSS for hover-only action controls.
-- [x] Update row actions to show when the table row contains focus.
-- [x] Update audit plan tile actions to show when the tile contains focus.
-- [x] Verify the stylesheet selectors.
+- [x] Inspect the generated trash table action buttons.
+- [x] Add explicit accessible names for restore and permanent delete actions.
+- [x] Verify the JavaScript parses and the diff is clean.
 
 ## Review
 
 Verification:
-- `node -e` check confirmed both `:focus-within` selectors are present.
+- `node --check public/trash.js` passed.
 - `git diff --check` passed.
-- `package.json` has no lint/build script beyond `start` and `dev`.
+- Confirmed `views/layout.ejs` loads `/app.js` before `/trash.js`, so `escapeAttr()` is available.
