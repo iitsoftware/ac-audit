@@ -1,13 +1,12 @@
-# Task 987: Expose hidden row and tile actions on keyboard focus
+# Task 993: Add accessible names to Companies icon-only controls
 
-- [x] Inspect existing CSS for hover-only action controls.
-- [x] Update row actions to show when the table row contains focus.
-- [x] Update audit plan tile actions to show when the tile contains focus.
-- [x] Verify the stylesheet selectors.
+- [x] Inspect generated icon-only buttons in `public/companies.js`.
+- [x] Add explicit `aria-label` values to Companies/AC-Audit icon-only controls, including checklist/CAP share controls.
+- [x] Verify the changed file for missing icon-only accessible names and syntax issues.
 
 ## Review
 
 Verification:
-- `node -e` check confirmed both `:focus-within` selectors are present.
+- `node --check public/companies.js` passed.
 - `git diff --check` passed.
-- `package.json` has no lint/build script beyond `start` and `dev`.
+- Static scan confirmed generated `btn-icon`, `pane-action-btn`, `icon-btn`, and `select-share-btn` buttons all carry `aria-label`.

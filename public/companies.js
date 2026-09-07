@@ -168,8 +168,8 @@
     headerEl.innerHTML = `
       <h2>Auditpl&auml;ne</h2>
       <div style="display:flex;gap:0.25rem">
-        <button class="btn-icon" id="btn-import-plan" title="Auditplan aus .docx importieren">${ICON_IMPORT}</button>
-        <button class="btn-icon" id="btn-add-plan" title="Auditplan hinzuf&uuml;gen">+</button>
+        <button class="btn-icon" id="btn-import-plan" title="Auditplan aus .docx importieren" aria-label="Auditplan aus .docx importieren">${ICON_IMPORT}</button>
+        <button class="btn-icon" id="btn-add-plan" title="Auditplan hinzuf&uuml;gen" aria-label="Auditplan hinzuf&uuml;gen">+</button>
       </div>
     `;
     document.getElementById('btn-add-plan').addEventListener('click', () => openNewPlanDialog());
@@ -284,8 +284,8 @@
         <div class="plan-tile-status">${st.label}</div>
         ${progressHtml}
         <div class="plan-tile-actions">
-          ${isAuthority ? '' : `<button class="pane-action-btn" data-action="edit-plan" data-id="${p.id}" title="Bearbeiten">&#9998;</button>`}
-          <button class="pane-action-btn danger" data-action="delete-plan" data-id="${p.id}" title="L\u00f6schen">&#128465;</button>
+          ${isAuthority ? '' : `<button class="pane-action-btn" data-action="edit-plan" data-id="${p.id}" title="Bearbeiten" aria-label="Auditplan bearbeiten">&#9998;</button>`}
+          <button class="pane-action-btn danger" data-action="delete-plan" data-id="${p.id}" title="L\u00f6schen" aria-label="Auditplan l\u00f6schen">&#128465;</button>
         </div>
       </div>`;
     }
@@ -657,9 +657,9 @@
     html += `<div class="plan-lines-header">
       <h3>${linesTitle}</h3>
       <div style="display:flex;gap:0.25rem">
-        ${isAuthority ? '' : `<button class="btn-icon" id="btn-pdf-export" title="PDF exportieren">${ICON_SHARE}</button>`}
-        <button class="btn-icon" id="btn-import-audits" title="Audit-Checklisten importieren (.xlsx)">${ICON_IMPORT}</button>
-        ${showAddLine ? `<button class="btn-icon" id="btn-add-line" title="${addLineTitle}">+</button>` : ''}
+        ${isAuthority ? '' : `<button class="btn-icon" id="btn-pdf-export" title="PDF exportieren" aria-label="PDF exportieren">${ICON_SHARE}</button>`}
+        <button class="btn-icon" id="btn-import-audits" title="Audit-Checklisten importieren (.xlsx)" aria-label="Audit-Checklisten importieren (.xlsx)">${ICON_IMPORT}</button>
+        ${showAddLine ? `<button class="btn-icon" id="btn-add-line" title="${addLineTitle}" aria-label="${addLineTitle}">+</button>` : ''}
       </div>
     </div>`;
 
@@ -708,7 +708,7 @@
           <td class="regulations-cell">${escapeHtml(line.regulations || '').replace(/\n/g, '<br>')}</td>
           <td>${escapeHtml(line.location || '')}</td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-line" data-id="${line.id}" title="L\u00f6schen">&#128465;</button>
+            <button class="pane-action-btn danger" data-action="delete-line" data-id="${line.id}" title="L\u00f6schen" aria-label="Beanstandungsbericht l\u00f6schen">&#128465;</button>
           </td>
         </tr>`;
       });
@@ -751,7 +751,7 @@
           <td>${escapeHtml(endDateDisplay)}</td>
           <td class="col-select"><input type="checkbox" class="line-select-cb" data-line-id="${line.id}"></td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-line" data-id="${line.id}" title="L\u00f6schen">&#128465;</button>
+            <button class="pane-action-btn danger" data-action="delete-line" data-id="${line.id}" title="L\u00f6schen" aria-label="Themenbereich l\u00f6schen">&#128465;</button>
           </td>
         </tr>`;
       });
@@ -1081,7 +1081,7 @@
 
     headerEl.innerHTML = `
       <h2>${escapeHtml(lineTitle)}</h2>
-      <button class="btn-icon" title="Audit Checklist PDF" onclick="window.open('/api/audit-plan-lines/${currentLine.id}/pdf')">${ICON_SHARE}</button>
+      <button class="btn-icon" title="Audit Checklist PDF" aria-label="Audit Checklist PDF exportieren" onclick="window.open('/api/audit-plan-lines/${currentLine.id}/pdf')">${ICON_SHARE}</button>
     `;
 
     const monthOptions = ['', 'Januar', 'Februar', 'M\u00e4rz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember', 'Nach Bedarf', 'Unangek\u00fcndigt'];
@@ -1180,7 +1180,7 @@
         html += `<div class="audit-section">
           <div class="audit-section-header">
             <h3>${sec.label}</h3>
-            <button class="btn-icon btn-add-section-ci" data-section="${sec.key}" title="Eintrag hinzuf\u00fcgen">+</button>
+            <button class="btn-icon btn-add-section-ci" data-section="${sec.key}" title="Eintrag hinzuf\u00fcgen" aria-label="Eintrag hinzuf\u00fcgen">+</button>
           </div>`;
 
         if (items.length === 0) {
@@ -1205,7 +1205,7 @@
               <td class="wrap-cell">${escapeHtml(item.document_ref)}</td>
               <td class="wrap-cell">${escapeHtml(item.auditor_comment)}</td>
               <td class="line-actions">
-                <button class="pane-action-btn danger" data-action="delete-ci" data-id="${item.id}" title="L\u00f6schen">&#128465;</button>
+                <button class="pane-action-btn danger" data-action="delete-ci" data-id="${item.id}" title="L\u00f6schen" aria-label="Eintrag l\u00f6schen">&#128465;</button>
               </td>
             </tr>`;
           });
@@ -1397,7 +1397,7 @@
           <div class="cap-progress-bar"><div class="cap-progress-fill" style="width:${pct}%"></div></div>
           <span class="cap-progress-label">${closed}/${total}</span>
         </div>
-        <button class="btn-icon" id="btn-add-finding" title="Finding hinzuf\u00fcgen">+</button>
+        <button class="btn-icon" id="btn-add-finding" title="Finding hinzuf\u00fcgen" aria-label="Finding hinzuf\u00fcgen">+</button>
       </div>
     </div>`;
 
@@ -1446,7 +1446,7 @@
           <td>${cap ? `<span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span>` : ''}</td>
           <td class="col-select">${cap ? `<input type="checkbox" class="finding-select-cb" data-cap-id="${escapeAttr(cap.id)}">` : ''}</td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-ci" data-id="${escapeAttr(item.id)}" title="L\u00f6schen">&#128465;</button>
+            <button class="pane-action-btn danger" data-action="delete-ci" data-id="${escapeAttr(item.id)}" title="L\u00f6schen" aria-label="Finding l\u00f6schen">&#128465;</button>
           </td>
         </tr>`;
       });
@@ -1974,7 +1974,7 @@
       html += `<div class="cap-action-group">
         <div class="audit-section-header">
           <h4>${g.label}</h4>
-          <button type="button" class="btn-icon" id="fa-add-${g.kind}" title="${g.single} hinzufügen">+</button>
+          <button type="button" class="btn-icon" id="fa-add-${g.kind}" title="${g.single} hinzufügen" aria-label="${g.single} hinzufügen">+</button>
         </div>
         <div id="fa-list-${g.kind}">${capActionListHtml(g.kind)}</div>
       </div>`;
@@ -2020,7 +2020,7 @@
         <td><input class="inline-input cap-action-field cap-action-responsible" value="${escapeAttr(a.responsible_person || '')}" aria-label="${who} — Verantwortlicher"></td>
         <td><input class="inline-input cap-action-field cap-action-date cap-action-target" value="${escapeAttr(formatDateDE(a.target_date))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ" aria-label="${who} — Zieldatum"></td>
         <td><input class="inline-input cap-action-field cap-action-date cap-action-completion" value="${escapeAttr(formatDateDE(a.completion_date))}" placeholder="TT.MM.JJJJ" pattern="\\d{2}\\.\\d{2}\\.\\d{4}" inputmode="numeric" title="TT.MM.JJJJ" aria-label="${who} — Erledigt am"></td>
-        <td class="cap-action-remove"><button type="button" class="pane-action-btn danger" data-cap-action-delete="${a.id}" title="Löschen">&#128465;</button></td>
+        <td class="cap-action-remove"><button type="button" class="pane-action-btn danger" data-cap-action-delete="${a.id}" title="Löschen" aria-label="${who} löschen">&#128465;</button></td>
       </tr>`;
     });
     return html + '</tbody></table></div>';
@@ -2800,7 +2800,7 @@
     }
 
     headerEl.innerHTML = `<h2>Corrective Action</h2>
-      <button class="btn-icon" id="btn-cap-detail-export" title="CAP exportieren">${ICON_SHARE}</button>`;
+      <button class="btn-icon" id="btn-cap-detail-export" title="CAP exportieren" aria-label="CAP exportieren">${ICON_SHARE}</button>`;
     document.getElementById('btn-cap-detail-export').addEventListener('click', () => {
       openCapExportDialog([capItemId]);
     });
