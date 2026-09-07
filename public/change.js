@@ -420,21 +420,21 @@
     html += '<div class="detail-section">';
     html += '<div class="detail-section-header"><h3 class="detail-section-title">Allgemein</h3></div>';
     html += '<div class="inline-form-grid">';
-    html += `<label>Titel</label><input class="inline-input cr-field" id="cr-title" value="${escapeHtml(currentCR.title || '')}">`;
-    html += `<label>Beschreibung</label><textarea class="inline-input inline-textarea cr-field" id="cr-description" rows="2">${escapeHtml(currentCR.description || '')}</textarea>`;
-    html += `<label>Änderungsart</label><input class="inline-input cr-field" id="cr-change-type" value="${escapeHtml(currentCR.change_type || '')}">`;
-    html += `<label>Kategorie</label><select class="inline-input cr-field" id="cr-category">
+    html += `<label for="cr-title">Titel</label><input class="inline-input cr-field" id="cr-title" value="${escapeHtml(currentCR.title || '')}">`;
+    html += `<label for="cr-description">Beschreibung</label><textarea class="inline-input inline-textarea cr-field" id="cr-description" rows="2">${escapeHtml(currentCR.description || '')}</textarea>`;
+    html += `<label for="cr-change-type">Änderungsart</label><input class="inline-input cr-field" id="cr-change-type" value="${escapeHtml(currentCR.change_type || '')}">`;
+    html += `<label for="cr-category">Kategorie</label><select class="inline-input cr-field" id="cr-category">
       <option value="OFFEN"${currentCR.category === 'OFFEN' ? ' selected' : ''}>Offen</option>
       <option value="NON_PRIOR"${currentCR.category === 'NON_PRIOR' ? ' selected' : ''}>Non-Prior Approval</option>
       <option value="PRIOR"${currentCR.category === 'PRIOR' ? ' selected' : ''}>Prior Approval</option>
     </select>`;
-    html += `<label>Priorität</label><select class="inline-input cr-field" id="cr-priority">
+    html += `<label for="cr-priority">Priorität</label><select class="inline-input cr-field" id="cr-priority">
       <option value="LOW"${currentCR.priority === 'LOW' ? ' selected' : ''}>Niedrig</option>
       <option value="MEDIUM"${currentCR.priority === 'MEDIUM' ? ' selected' : ''}>Mittel</option>
       <option value="HIGH"${currentCR.priority === 'HIGH' ? ' selected' : ''}>Hoch</option>
       <option value="CRITICAL"${currentCR.priority === 'CRITICAL' ? ' selected' : ''}>Kritisch</option>
     </select>`;
-    html += `<label>Status</label><select class="inline-input cr-status-field" id="cr-status">
+    html += `<label for="cr-status">Status</label><select class="inline-input cr-status-field" id="cr-status">
       <option value="DRAFT"${currentCR.status === 'DRAFT' ? ' selected' : ''}>Entwurf</option>
       <option value="IN_REVIEW"${currentCR.status === 'IN_REVIEW' ? ' selected' : ''}>In Prüfung</option>
       <option value="APPROVED"${currentCR.status === 'APPROVED' ? ' selected' : ''}>Genehmigt</option>
@@ -442,9 +442,9 @@
       <option value="CLOSED"${currentCR.status === 'CLOSED' ? ' selected' : ''}>Abgeschlossen</option>
       <option value="REJECTED"${currentCR.status === 'REJECTED' ? ' selected' : ''}>Abgelehnt</option>
     </select>`;
-    html += `<label>Beantragt von</label><input class="inline-input cr-field" id="cr-requested-by" value="${escapeHtml(currentCR.requested_by || '')}">`;
-    html += `<label>Antragsdatum</label><input class="inline-input cr-field cr-date" id="cr-requested-date" value="${formatDateDE(currentCR.requested_date)}" placeholder="TT.MM.JJJJ">`;
-    html += `<label>Zieldatum</label><input class="inline-input cr-field cr-date" id="cr-target-date" value="${formatDateDE(currentCR.target_date)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="cr-requested-by">Beantragt von</label><input class="inline-input cr-field" id="cr-requested-by" value="${escapeHtml(currentCR.requested_by || '')}">`;
+    html += `<label for="cr-requested-date">Antragsdatum</label><input class="inline-input cr-field cr-date" id="cr-requested-date" value="${formatDateDE(currentCR.requested_date)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="cr-target-date">Zieldatum</label><input class="inline-input cr-field cr-date" id="cr-target-date" value="${formatDateDE(currentCR.target_date)}" placeholder="TT.MM.JJJJ">`;
     html += '</div></div>';
 
     // ── Section 2: Aufgabenliste ──
@@ -989,15 +989,15 @@
     html += '<div class="detail-section">';
     html += '<div class="detail-section-header"><h3 class="detail-section-title">Allgemein</h3></div>';
     html += '<div class="inline-form-grid">';
-    html += `<label>Titel</label><input class="inline-input ra-field" id="ra-title" value="${escapeHtml(ra.title || '')}">`;
-    html += `<label>Erstellt</label><input class="inline-input ra-field ra-date" id="ra-version-date" value="${formatDateDE(ra.version_date)}" placeholder="TT.MM.JJJJ">`;
-    html += `<label>Freigabe</label><input class="inline-input ra-field ra-date" id="ra-signed-at" value="${formatDateDE(ra.signed_at)}" placeholder="TT.MM.JJJJ">`;
-    html += `<label>Safety Manager</label><input class="inline-input ra-field" id="ra-safety-manager" value="${escapeHtml(ra.safety_manager || '')}">`;
+    html += `<label for="ra-title">Titel</label><input class="inline-input ra-field" id="ra-title" value="${escapeHtml(ra.title || '')}">`;
+    html += `<label for="ra-version-date">Erstellt</label><input class="inline-input ra-field ra-date" id="ra-version-date" value="${formatDateDE(ra.version_date)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="ra-signed-at">Freigabe</label><input class="inline-input ra-field ra-date" id="ra-signed-at" value="${formatDateDE(ra.signed_at)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="ra-safety-manager">Safety Manager</label><input class="inline-input ra-field" id="ra-safety-manager" value="${escapeHtml(ra.safety_manager || '')}">`;
     // Computed overall risk from items
     const overallInitial = computeOverallRisk(riskItems, 'initial_score', 'initial_level');
     const overallResidual = computeOverallRisk(riskItems, 'residual_score', 'residual_level');
-    html += `<label>Gesamt-Anfangsrisiko</label><div style="display:flex;align-items:center;gap:6px">${riskLevelIndicator(overallInitial)}</div>`;
-    html += `<label>Gesamt-Restrisiko</label><div style="display:flex;align-items:center;gap:6px">${riskLevelIndicator(overallResidual)}</div>`;
+    html += `<span class="inline-form-label">Gesamt-Anfangsrisiko</span><div style="display:flex;align-items:center;gap:6px">${riskLevelIndicator(overallInitial)}</div>`;
+    html += `<span class="inline-form-label">Gesamt-Restrisiko</span><div style="display:flex;align-items:center;gap:6px">${riskLevelIndicator(overallResidual)}</div>`;
     html += '</div></div>';
 
     // Risk items
@@ -1234,14 +1234,14 @@
 
     let html = '<div class="detail-section">';
     html += '<div class="inline-form-grid">';
-    html += `<label>Risikotyp</label><input class="inline-input ri-field" id="ri-risk-type" value="${escapeHtml(item.risk_type || '')}">`;
-    html += `<label>Beschreibung</label><textarea class="inline-input inline-textarea ri-field" id="ri-description" rows="2">${escapeHtml(item.description || '')}</textarea>`;
-    html += `<label>Auswirkung</label><textarea class="inline-input inline-textarea ri-field" id="ri-consequence" rows="2">${escapeHtml(item.consequence || '')}</textarea>`;
-    html += `<label>Verantwortlich</label><input class="inline-input ri-field" id="ri-responsible" value="${escapeHtml(item.responsible_person || '')}">`;
-    html += `<label>Maßnahme</label><textarea class="inline-input inline-textarea ri-field" id="ri-mitigation" rows="2">${escapeHtml(item.mitigation_topic || '')}</textarea>`;
-    html += `<label>Behandlung</label><textarea class="inline-input inline-textarea ri-field" id="ri-treatment" rows="2">${escapeHtml(item.treatment || '')}</textarea>`;
-    html += `<label>Umsetzungstermin</label><input class="inline-input ri-field ri-date" id="ri-impl-date" value="${formatDateDE(item.implementation_date)}" placeholder="TT.MM.JJJJ">`;
-    html += `<label>Nächster Schritt</label><textarea class="inline-input inline-textarea ri-field" id="ri-next-step" rows="2">${escapeHtml(item.next_step || '')}</textarea>`;
+    html += `<label for="ri-risk-type">Risikotyp</label><input class="inline-input ri-field" id="ri-risk-type" value="${escapeHtml(item.risk_type || '')}">`;
+    html += `<label for="ri-description">Beschreibung</label><textarea class="inline-input inline-textarea ri-field" id="ri-description" rows="2">${escapeHtml(item.description || '')}</textarea>`;
+    html += `<label for="ri-consequence">Auswirkung</label><textarea class="inline-input inline-textarea ri-field" id="ri-consequence" rows="2">${escapeHtml(item.consequence || '')}</textarea>`;
+    html += `<label for="ri-responsible">Verantwortlich</label><input class="inline-input ri-field" id="ri-responsible" value="${escapeHtml(item.responsible_person || '')}">`;
+    html += `<label for="ri-mitigation">Maßnahme</label><textarea class="inline-input inline-textarea ri-field" id="ri-mitigation" rows="2">${escapeHtml(item.mitigation_topic || '')}</textarea>`;
+    html += `<label for="ri-treatment">Behandlung</label><textarea class="inline-input inline-textarea ri-field" id="ri-treatment" rows="2">${escapeHtml(item.treatment || '')}</textarea>`;
+    html += `<label for="ri-impl-date">Umsetzungstermin</label><input class="inline-input ri-field ri-date" id="ri-impl-date" value="${formatDateDE(item.implementation_date)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="ri-next-step">Nächster Schritt</label><textarea class="inline-input inline-textarea ri-field" id="ri-next-step" rows="2">${escapeHtml(item.next_step || '')}</textarea>`;
     html += '</div></div>';
 
     // Risk matrices side by side with divider

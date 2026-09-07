@@ -1,13 +1,14 @@
-# Task 987: Expose hidden row and tile actions on keyboard focus
+# Task 989: Associate AC-Change Inline Labels With Fields
 
-- [x] Inspect existing CSS for hover-only action controls.
-- [x] Update row actions to show when the table row contains focus.
-- [x] Update audit plan tile actions to show when the tile contains focus.
-- [x] Verify the stylesheet selectors.
+- [x] Inspect generated AC-Change detail grids in `public/change.js`.
+- [x] Add `for` attributes to change request inline field labels.
+- [x] Add `for` attributes to risk analysis inline field labels.
+- [x] Add `for` attributes to risk item inline field labels.
+- [x] Verify JavaScript syntax and diff cleanliness.
 
 ## Review
 
 Verification:
-- `node -e` check confirmed both `:focus-within` selectors are present.
-- `git diff --check` passed.
-- `package.json` has no lint/build script beyond `start` and `dev`.
+- `node --check public/change.js`
+- `git diff --check`
+- Static label scan: 21 generated `<label>` elements all have `for` and match the following control id.
