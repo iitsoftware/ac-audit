@@ -64,6 +64,15 @@
     </div>`;
   }
 
+  async function withButtonSpinner(btn, label, fn) {
+    if (!btn) { await fn(); return; }
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" aria-hidden="true"></span>${label}`;
+    try { await fn(); }
+    finally { btn.disabled = false; btn.innerHTML = original; }
+  }
+
   // ── Persons ──────────────────────────────────────────────
   async function loadPersons() {
     if (!companyId) { persons = []; return; }
@@ -146,7 +155,7 @@
     currentDeptId = deptId;
     headerEl.innerHTML = `
       <h2>Change Requests</h2>
-      <button class="btn-icon" id="btn-add-change" title="Change Request hinzuf\u00fcgen">+</button>
+      <button type="button" class="btn-icon" id="btn-add-change" title="Change Request hinzuf\u00fcgen" aria-label="Change Request hinzuf\u00fcgen">+</button>
     `;
     document.getElementById('btn-add-change').addEventListener('click', () => openChangeDialog(null));
     await loadChangeRequests();
@@ -170,16 +179,17 @@
     changeRequests.forEach(cr => { if (catCounts[cr.category] != null) catCounts[cr.category]++; });
 
     html += '<div class="audit-filter-bar">';
-    html += `<button class="audit-filter-btn audit-tag tag-open${statusFilter === null ? ' active' : ''}" data-status-filter="ALL">ALLE (${changeRequests.length})</button>`;
+    html += `<button class="audit-filter-btn audit-tag tag-open${statusFilter === null ? ' active' : ''}" data-status-filter="ALL" aria-pressed="${statusFilter === null ? 'true' : 'false'}">ALLE (${changeRequests.length})</button>`;
     Object.keys(STATUS_LABELS).forEach(s => {
       if (statusCounts[s] === 0) return;
-      html += `<button class="audit-filter-btn audit-tag ${STATUS_TAG_MAP[s] || 'tag-open'}${statusFilter === s ? ' active' : ''}" data-status-filter="${s}">${escapeHtml(STATUS_LABELS[s])} (${statusCounts[s]})</button>`;
+      const active = statusFilter === s;
+      html += `<button class="audit-filter-btn audit-tag ${STATUS_TAG_MAP[s] || 'tag-open'}${active ? ' active' : ''}" data-status-filter="${s}" aria-pressed="${active ? 'true' : 'false'}">${escapeHtml(STATUS_LABELS[s])} (${statusCounts[s]})</button>`;
     });
     html += '<span style="flex:1"></span>';
-    html += `<button class="audit-filter-btn audit-tag tag-open${categoryFilter === null ? ' active' : ''}" data-cat-filter="ALL">Alle Kat.</button>`;
-    if (catCounts.OFFEN > 0) html += `<button class="audit-filter-btn audit-tag tag-open${categoryFilter === 'OFFEN' ? ' active' : ''}" data-cat-filter="OFFEN">Offen (${catCounts.OFFEN})</button>`;
-    if (catCounts.PRIOR > 0) html += `<button class="audit-filter-btn audit-tag tag-finding${categoryFilter === 'PRIOR' ? ' active' : ''}" data-cat-filter="PRIOR">Prior (${catCounts.PRIOR})</button>`;
-    if (catCounts.NON_PRIOR > 0) html += `<button class="audit-filter-btn audit-tag tag-planned${categoryFilter === 'NON_PRIOR' ? ' active' : ''}" data-cat-filter="NON_PRIOR">Non-Prior (${catCounts.NON_PRIOR})</button>`;
+    html += `<button class="audit-filter-btn audit-tag tag-open${categoryFilter === null ? ' active' : ''}" data-cat-filter="ALL" aria-pressed="${categoryFilter === null ? 'true' : 'false'}">Alle Kat.</button>`;
+    if (catCounts.OFFEN > 0) html += `<button class="audit-filter-btn audit-tag tag-open${categoryFilter === 'OFFEN' ? ' active' : ''}" data-cat-filter="OFFEN" aria-pressed="${categoryFilter === 'OFFEN' ? 'true' : 'false'}">Offen (${catCounts.OFFEN})</button>`;
+    if (catCounts.PRIOR > 0) html += `<button class="audit-filter-btn audit-tag tag-finding${categoryFilter === 'PRIOR' ? ' active' : ''}" data-cat-filter="PRIOR" aria-pressed="${categoryFilter === 'PRIOR' ? 'true' : 'false'}">Prior (${catCounts.PRIOR})</button>`;
+    if (catCounts.NON_PRIOR > 0) html += `<button class="audit-filter-btn audit-tag tag-planned${categoryFilter === 'NON_PRIOR' ? ' active' : ''}" data-cat-filter="NON_PRIOR" aria-pressed="${categoryFilter === 'NON_PRIOR' ? 'true' : 'false'}">Non-Prior (${catCounts.NON_PRIOR})</button>`;
     html += '</div>';
 
     let filtered = changeRequests;
@@ -193,6 +203,8 @@
       html += '<th>Nr.</th><th>Titel</th><th>Kategorie</th><th>Fortschritt</th><th>Status</th><th>Zieldatum</th><th></th>';
       html += '</tr></thead><tbody>';
       filtered.forEach(cr => {
+        const changeName = cr.change_no || cr.title || '';
+        const deleteLabel = changeName ? `Change Request ${changeName} l\u00f6schen` : 'Change Request l\u00f6schen';
         html += `<tr class="line-row-clickable change-row" data-id="${cr.id}">
           <td>${escapeHtml(cr.change_no || '')}</td>
           <td style="white-space:normal;min-width:180px">${escapeHtml(cr.title || '')}</td>
@@ -201,7 +213,7 @@
           <td>${statusBadgeHtml(cr.status)}</td>
           <td>${formatDateDE(cr.target_date)}</td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-change" data-id="${cr.id}" title="L\u00f6schen">&#128465;</button>
+            <button type="button" class="pane-action-btn danger" data-action="delete-change" data-id="${cr.id}" title="L\u00f6schen" aria-label="${escapeAttr(deleteLabel)}">&#128465;</button>
           </td>
         </tr>`;
       });
@@ -413,28 +425,28 @@
     if (hasForm2) {
       html += `<button class="btn btn-secondary btn-sm" id="btn-cr-form2">Form 2</button>`;
     }
-    html += `<button class="btn-icon" id="btn-import-risk" title="Risikoanalyse importieren (.xlsx)">${ICON_IMPORT}</button>`;
+    html += `<button type="button" class="btn-icon" id="btn-import-risk" title="Risikoanalyse importieren (.xlsx)" aria-label="Risikoanalyse importieren (.xlsx)">${ICON_IMPORT}</button>`;
     html += '</div>';
 
     // ── Section 1: Allgemein (inline-editable, auto-save) ──
     html += '<div class="detail-section">';
     html += '<div class="detail-section-header"><h3 class="detail-section-title">Allgemein</h3></div>';
     html += '<div class="inline-form-grid">';
-    html += `<label>Titel</label><input class="inline-input cr-field" id="cr-title" value="${escapeHtml(currentCR.title || '')}">`;
-    html += `<label>Beschreibung</label><textarea class="inline-input inline-textarea cr-field" id="cr-description" rows="2">${escapeHtml(currentCR.description || '')}</textarea>`;
-    html += `<label>Änderungsart</label><input class="inline-input cr-field" id="cr-change-type" value="${escapeHtml(currentCR.change_type || '')}">`;
-    html += `<label>Kategorie</label><select class="inline-input cr-field" id="cr-category">
+    html += `<label for="cr-title">Titel</label><input class="inline-input cr-field" id="cr-title" value="${escapeHtml(currentCR.title || '')}">`;
+    html += `<label for="cr-description">Beschreibung</label><textarea class="inline-input inline-textarea cr-field" id="cr-description" rows="2">${escapeHtml(currentCR.description || '')}</textarea>`;
+    html += `<label for="cr-change-type">Änderungsart</label><input class="inline-input cr-field" id="cr-change-type" value="${escapeHtml(currentCR.change_type || '')}">`;
+    html += `<label for="cr-category">Kategorie</label><select class="inline-input cr-field" id="cr-category">
       <option value="OFFEN"${currentCR.category === 'OFFEN' ? ' selected' : ''}>Offen</option>
       <option value="NON_PRIOR"${currentCR.category === 'NON_PRIOR' ? ' selected' : ''}>Non-Prior Approval</option>
       <option value="PRIOR"${currentCR.category === 'PRIOR' ? ' selected' : ''}>Prior Approval</option>
     </select>`;
-    html += `<label>Priorität</label><select class="inline-input cr-field" id="cr-priority">
+    html += `<label for="cr-priority">Priorität</label><select class="inline-input cr-field" id="cr-priority">
       <option value="LOW"${currentCR.priority === 'LOW' ? ' selected' : ''}>Niedrig</option>
       <option value="MEDIUM"${currentCR.priority === 'MEDIUM' ? ' selected' : ''}>Mittel</option>
       <option value="HIGH"${currentCR.priority === 'HIGH' ? ' selected' : ''}>Hoch</option>
       <option value="CRITICAL"${currentCR.priority === 'CRITICAL' ? ' selected' : ''}>Kritisch</option>
     </select>`;
-    html += `<label>Status</label><select class="inline-input cr-status-field" id="cr-status">
+    html += `<label for="cr-status">Status</label><select class="inline-input cr-status-field" id="cr-status">
       <option value="DRAFT"${currentCR.status === 'DRAFT' ? ' selected' : ''}>Entwurf</option>
       <option value="IN_REVIEW"${currentCR.status === 'IN_REVIEW' ? ' selected' : ''}>In Prüfung</option>
       <option value="APPROVED"${currentCR.status === 'APPROVED' ? ' selected' : ''}>Genehmigt</option>
@@ -442,9 +454,9 @@
       <option value="CLOSED"${currentCR.status === 'CLOSED' ? ' selected' : ''}>Abgeschlossen</option>
       <option value="REJECTED"${currentCR.status === 'REJECTED' ? ' selected' : ''}>Abgelehnt</option>
     </select>`;
-    html += `<label>Beantragt von</label><input class="inline-input cr-field" id="cr-requested-by" value="${escapeHtml(currentCR.requested_by || '')}">`;
-    html += `<label>Antragsdatum</label><input class="inline-input cr-field cr-date" id="cr-requested-date" value="${formatDateDE(currentCR.requested_date)}" placeholder="TT.MM.JJJJ">`;
-    html += `<label>Zieldatum</label><input class="inline-input cr-field cr-date" id="cr-target-date" value="${formatDateDE(currentCR.target_date)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="cr-requested-by">Beantragt von</label><input class="inline-input cr-field" id="cr-requested-by" value="${escapeHtml(currentCR.requested_by || '')}">`;
+    html += `<label for="cr-requested-date">Antragsdatum</label><input class="inline-input cr-field cr-date" id="cr-requested-date" value="${formatDateDE(currentCR.requested_date)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="cr-target-date">Zieldatum</label><input class="inline-input cr-field cr-date" id="cr-target-date" value="${formatDateDE(currentCR.target_date)}" placeholder="TT.MM.JJJJ">`;
     html += '</div></div>';
 
     // ── Section 2: Aufgabenliste ──
@@ -452,8 +464,8 @@
     html += '<div class="detail-section-header">';
     html += '<h3 class="detail-section-title">Aufgabenliste</h3>';
     html += '<div style="display:flex;gap:0.25rem">';
-    html += `<button class="btn-icon" id="btn-import-tasks" title="Aufgaben importieren (.xlsx)">${ICON_IMPORT}</button>`;
-    html += '<button class="btn-icon" id="btn-add-task" title="Aufgabe hinzuf\u00fcgen">+</button>';
+    html += `<button type="button" class="btn-icon" id="btn-import-tasks" title="Aufgaben importieren (.xlsx)" aria-label="Aufgaben importieren (.xlsx)">${ICON_IMPORT}</button>`;
+    html += '<button type="button" class="btn-icon" id="btn-add-task" title="Aufgabe hinzuf\u00fcgen" aria-label="Aufgabe hinzuf\u00fcgen">+</button>';
     html += '</div></div>';
 
     // Task filter tags (like audit tags with counts)
@@ -465,8 +477,8 @@
     html += '<div class="audit-filter-bar" id="task-filter-bar">';
     for (const def of TASK_TAG_DEFS) {
       if (taskCounts[def.key] === 0) continue;
-      const active = taskFilter === def.key ? ' active' : '';
-      html += `<button class="audit-filter-btn audit-tag ${def.css}${active}" data-task-filter="${def.key}">${def.label} (${taskCounts[def.key]})</button>`;
+      const active = taskFilter === def.key;
+      html += `<button class="audit-filter-btn audit-tag ${def.css}${active ? ' active' : ''}" data-task-filter="${def.key}" aria-pressed="${active ? 'true' : 'false'}">${def.label} (${taskCounts[def.key]})</button>`;
     }
     // Progress right-aligned
     const done = currentTasks.filter(t => t.completion_date).length;
@@ -503,6 +515,7 @@
         const statusTag = isDone
           ? `<span class="audit-tag tag-done">Erledigt</span>`
           : `<span class="audit-tag tag-open">Offen</span>`;
+        const deleteLabel = `Aufgabe ${nr} l\u00f6schen`;
         html += `<tr class="line-row-clickable task-row${isDone ? ' task-done' : ''}" data-task-id="${t.id}"${!isVisible ? ' style="display:none"' : ''}>
           <td style="text-align:right;white-space:nowrap">${nr}</td>
           <td style="white-space:normal;min-width:160px">${escapeHtml(t.process || '')}</td>
@@ -511,7 +524,7 @@
           <td>${statusTag}</td>
           <td style="white-space:normal;max-width:200px">${escapeHtml(t.measures || '')}</td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-task" data-task-id="${t.id}" title="L\u00f6schen">&#128465;</button>
+            <button type="button" class="pane-action-btn danger" data-action="delete-task" data-task-id="${t.id}" title="L\u00f6schen" aria-label="${escapeAttr(deleteLabel)}">&#128465;</button>
           </td>
         </tr>`;
       });
@@ -756,15 +769,18 @@
     const fileInput = document.getElementById('import-risk-file');
     if (!fileInput.files.length) { toast('Datei auswählen', 'error'); return; }
     const file = fileInput.files[0];
+    const btn = document.getElementById('import-risk-confirm');
     try {
-      const base64 = await fileToBase64(file);
-      const result = await fetchJSON(`/api/change-requests/${currentCR.id}/import-risk-analysis`, {
-        method: 'POST', body: { file: base64 }
+      await withButtonSpinner(btn, 'Importiere...', async () => {
+        const base64 = await fileToBase64(file);
+        const result = await fetchJSON(`/api/change-requests/${currentCR.id}/import-risk-analysis`, {
+          method: 'POST', body: { file: base64 }
+        });
+        toast(`${result.imported} Risiken importiert`);
+        closeDialog('import-risk-dialog');
+        await loadRiskAnalysisSummary();
+        renderDetailContent();
       });
-      toast(`${result.imported} Risiken importiert`);
-      closeDialog('import-risk-dialog');
-      await loadRiskAnalysisSummary();
-      renderDetailContent();
     } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   });
 
@@ -898,13 +914,16 @@
     e.preventDefault();
     const to = document.getElementById('change-email-to').value.trim();
     if (!to) { toast('E-Mail-Adresse erforderlich', 'error'); return; }
+    const btn = e.submitter || document.querySelector('#change-email-form button[type="submit"]');
     try {
-      await fetchJSON(`/api/change-requests/${currentCR.id}/send-email`, {
-        method: 'POST',
-        body: { to, type: 'form2', formData: getForm2Params() }
+      await withButtonSpinner(btn, 'Sende...', async () => {
+        await fetchJSON(`/api/change-requests/${currentCR.id}/send-email`, {
+          method: 'POST',
+          body: { to, type: 'form2', formData: getForm2Params() }
+        });
+        toast('E-Mail gesendet');
+        closeDialog('change-email-dialog');
       });
-      toast('E-Mail gesendet');
-      closeDialog('change-email-dialog');
     } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   });
 
@@ -982,29 +1001,29 @@
     // Share button bar
     html += '<div class="audit-filter-bar" style="margin-bottom:12px">';
     html += '<span style="flex:1"></span>';
-    html += `<button class="btn-icon" id="btn-ra-share" title="Exportieren / Senden">${ICON_SHARE}</button>`;
+    html += `<button type="button" class="btn-icon" id="btn-ra-share" title="Exportieren / Senden" aria-label="Risikoanalyse exportieren oder senden">${ICON_SHARE}</button>`;
     html += '</div>';
 
     // Metadata — inline editable
     html += '<div class="detail-section">';
     html += '<div class="detail-section-header"><h3 class="detail-section-title">Allgemein</h3></div>';
     html += '<div class="inline-form-grid">';
-    html += `<label>Titel</label><input class="inline-input ra-field" id="ra-title" value="${escapeHtml(ra.title || '')}">`;
-    html += `<label>Erstellt</label><input class="inline-input ra-field ra-date" id="ra-version-date" value="${formatDateDE(ra.version_date)}" placeholder="TT.MM.JJJJ">`;
-    html += `<label>Freigabe</label><input class="inline-input ra-field ra-date" id="ra-signed-at" value="${formatDateDE(ra.signed_at)}" placeholder="TT.MM.JJJJ">`;
-    html += `<label>Safety Manager</label><input class="inline-input ra-field" id="ra-safety-manager" value="${escapeHtml(ra.safety_manager || '')}">`;
+    html += `<label for="ra-title">Titel</label><input class="inline-input ra-field" id="ra-title" value="${escapeHtml(ra.title || '')}">`;
+    html += `<label for="ra-version-date">Erstellt</label><input class="inline-input ra-field ra-date" id="ra-version-date" value="${formatDateDE(ra.version_date)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="ra-signed-at">Freigabe</label><input class="inline-input ra-field ra-date" id="ra-signed-at" value="${formatDateDE(ra.signed_at)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="ra-safety-manager">Safety Manager</label><input class="inline-input ra-field" id="ra-safety-manager" value="${escapeHtml(ra.safety_manager || '')}">`;
     // Computed overall risk from items
     const overallInitial = computeOverallRisk(riskItems, 'initial_score', 'initial_level');
     const overallResidual = computeOverallRisk(riskItems, 'residual_score', 'residual_level');
-    html += `<label>Gesamt-Anfangsrisiko</label><div style="display:flex;align-items:center;gap:6px">${riskLevelIndicator(overallInitial)}</div>`;
-    html += `<label>Gesamt-Restrisiko</label><div style="display:flex;align-items:center;gap:6px">${riskLevelIndicator(overallResidual)}</div>`;
+    html += `<span class="inline-form-label">Gesamt-Anfangsrisiko</span><div style="display:flex;align-items:center;gap:6px">${riskLevelIndicator(overallInitial)}</div>`;
+    html += `<span class="inline-form-label">Gesamt-Restrisiko</span><div style="display:flex;align-items:center;gap:6px">${riskLevelIndicator(overallResidual)}</div>`;
     html += '</div></div>';
 
     // Risk items
     html += '<div class="detail-section">';
     html += '<div class="detail-section-header">';
     html += '<h3 class="detail-section-title">Risiken</h3>';
-    html += `<button class="btn-icon" id="btn-add-risk-item" title="Risiko hinzuf\u00fcgen">+</button>`;
+    html += `<button type="button" class="btn-icon" id="btn-add-risk-item" title="Risiko hinzuf\u00fcgen" aria-label="Risiko hinzuf\u00fcgen">+</button>`;
     html += '</div>';
 
     if (riskItems.length === 0) {
@@ -1020,6 +1039,7 @@
         <th style="padding:2px 4px">W</th><th style="padding:2px 4px">S</th><th style="padding:2px 4px"></th></tr>`;
       html += '</thead><tbody>';
       riskItems.forEach((item, idx) => {
+        const deleteLabel = `Risiko ${idx + 1} l\u00f6schen`;
         html += `<tr class="line-row-clickable risk-item-row" data-risk-id="${item.id}">
           <td>${idx + 1}</td>
           <td style="max-width:80px">${escapeHtml(item.risk_type || '')}</td>
@@ -1036,7 +1056,7 @@
           <td>${riskColorBox(item.residual_score, item.residual_level)}</td>
           <td style="max-width:140px">${escapeHtml(item.next_step || '')}</td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-risk-item" data-risk-id="${item.id}" title="L\u00f6schen">&#128465;</button>
+            <button type="button" class="pane-action-btn danger" data-action="delete-risk-item" data-risk-id="${item.id}" title="L\u00f6schen" aria-label="${escapeAttr(deleteLabel)}">&#128465;</button>
           </td>
         </tr>`;
       });
@@ -1234,14 +1254,14 @@
 
     let html = '<div class="detail-section">';
     html += '<div class="inline-form-grid">';
-    html += `<label>Risikotyp</label><input class="inline-input ri-field" id="ri-risk-type" value="${escapeHtml(item.risk_type || '')}">`;
-    html += `<label>Beschreibung</label><textarea class="inline-input inline-textarea ri-field" id="ri-description" rows="2">${escapeHtml(item.description || '')}</textarea>`;
-    html += `<label>Auswirkung</label><textarea class="inline-input inline-textarea ri-field" id="ri-consequence" rows="2">${escapeHtml(item.consequence || '')}</textarea>`;
-    html += `<label>Verantwortlich</label><input class="inline-input ri-field" id="ri-responsible" value="${escapeHtml(item.responsible_person || '')}">`;
-    html += `<label>Maßnahme</label><textarea class="inline-input inline-textarea ri-field" id="ri-mitigation" rows="2">${escapeHtml(item.mitigation_topic || '')}</textarea>`;
-    html += `<label>Behandlung</label><textarea class="inline-input inline-textarea ri-field" id="ri-treatment" rows="2">${escapeHtml(item.treatment || '')}</textarea>`;
-    html += `<label>Umsetzungstermin</label><input class="inline-input ri-field ri-date" id="ri-impl-date" value="${formatDateDE(item.implementation_date)}" placeholder="TT.MM.JJJJ">`;
-    html += `<label>Nächster Schritt</label><textarea class="inline-input inline-textarea ri-field" id="ri-next-step" rows="2">${escapeHtml(item.next_step || '')}</textarea>`;
+    html += `<label for="ri-risk-type">Risikotyp</label><input class="inline-input ri-field" id="ri-risk-type" value="${escapeHtml(item.risk_type || '')}">`;
+    html += `<label for="ri-description">Beschreibung</label><textarea class="inline-input inline-textarea ri-field" id="ri-description" rows="2">${escapeHtml(item.description || '')}</textarea>`;
+    html += `<label for="ri-consequence">Auswirkung</label><textarea class="inline-input inline-textarea ri-field" id="ri-consequence" rows="2">${escapeHtml(item.consequence || '')}</textarea>`;
+    html += `<label for="ri-responsible">Verantwortlich</label><input class="inline-input ri-field" id="ri-responsible" value="${escapeHtml(item.responsible_person || '')}">`;
+    html += `<label for="ri-mitigation">Maßnahme</label><textarea class="inline-input inline-textarea ri-field" id="ri-mitigation" rows="2">${escapeHtml(item.mitigation_topic || '')}</textarea>`;
+    html += `<label for="ri-treatment">Behandlung</label><textarea class="inline-input inline-textarea ri-field" id="ri-treatment" rows="2">${escapeHtml(item.treatment || '')}</textarea>`;
+    html += `<label for="ri-impl-date">Umsetzungstermin</label><input class="inline-input ri-field ri-date" id="ri-impl-date" value="${formatDateDE(item.implementation_date)}" placeholder="TT.MM.JJJJ">`;
+    html += `<label for="ri-next-step">Nächster Schritt</label><textarea class="inline-input inline-textarea ri-field" id="ri-next-step" rows="2">${escapeHtml(item.next_step || '')}</textarea>`;
     html += '</div></div>';
 
     // Risk matrices side by side with divider
