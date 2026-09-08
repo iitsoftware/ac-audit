@@ -63,6 +63,12 @@
   --mod-safety: #22c55e;
   --mod-change: #8b5cf6;
 
+  --status-wip-text: #b45309;
+  --status-planned-text: #2563eb;
+  --status-done-text: #15803d;
+  --status-authority-text: #7c3aed;
+  --status-soon-text: #b45309;
+
   /* Eine Chart-Palette steht hier bewusst NICHT: public/charts.js führt sie als
      CHART_COLORS im Widget und teilt sich die Töne mit public/risk-matrix.js,
      damit die zwei handgeschriebenen Widgets der App nicht zwei Paletten
@@ -94,6 +100,11 @@
     --mod-audit: #3b82f6;
     --mod-safety: #22c55e;
     --mod-change: #a78bfa;
+    --status-wip-text: #f59e0b;
+    --status-planned-text: #3b82f6;
+    --status-done-text: #22c55e;
+    --status-authority-text: #8b5cf6;
+    --status-soon-text: #f59e0b;
   }
 }
 
@@ -1543,10 +1554,10 @@ dialog.dialog-wide {
   margin-top: 8px;
 }
 
-.plan-tile-wip .plan-tile-status       { color: #f59e0b; }
-.plan-tile-planned .plan-tile-status   { color: #3b82f6; }
-.plan-tile-done .plan-tile-status      { color: #22c55e; }
-.plan-tile-authority .plan-tile-status { color: #8b5cf6; }
+.plan-tile-wip .plan-tile-status       { color: var(--status-wip-text); }
+.plan-tile-planned .plan-tile-status   { color: var(--status-planned-text); }
+.plan-tile-done .plan-tile-status      { color: var(--status-done-text); }
+.plan-tile-authority .plan-tile-status { color: var(--status-authority-text); }
 
 .plan-group-label {
   font-size: 12px;
@@ -2506,7 +2517,7 @@ dialog.dialog-wide {
 }
 
 .home-cap-deadline--soon {
-  color: #f59e0b;
+  color: var(--status-soon-text);
   font-weight: 600;
 }
 
