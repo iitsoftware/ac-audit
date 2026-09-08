@@ -170,16 +170,17 @@
     changeRequests.forEach(cr => { if (catCounts[cr.category] != null) catCounts[cr.category]++; });
 
     html += '<div class="audit-filter-bar">';
-    html += `<button class="audit-filter-btn audit-tag tag-open${statusFilter === null ? ' active' : ''}" data-status-filter="ALL">ALLE (${changeRequests.length})</button>`;
+    html += `<button class="audit-filter-btn audit-tag tag-open${statusFilter === null ? ' active' : ''}" data-status-filter="ALL" aria-pressed="${statusFilter === null ? 'true' : 'false'}">ALLE (${changeRequests.length})</button>`;
     Object.keys(STATUS_LABELS).forEach(s => {
       if (statusCounts[s] === 0) return;
-      html += `<button class="audit-filter-btn audit-tag ${STATUS_TAG_MAP[s] || 'tag-open'}${statusFilter === s ? ' active' : ''}" data-status-filter="${s}">${escapeHtml(STATUS_LABELS[s])} (${statusCounts[s]})</button>`;
+      const active = statusFilter === s;
+      html += `<button class="audit-filter-btn audit-tag ${STATUS_TAG_MAP[s] || 'tag-open'}${active ? ' active' : ''}" data-status-filter="${s}" aria-pressed="${active ? 'true' : 'false'}">${escapeHtml(STATUS_LABELS[s])} (${statusCounts[s]})</button>`;
     });
     html += '<span style="flex:1"></span>';
-    html += `<button class="audit-filter-btn audit-tag tag-open${categoryFilter === null ? ' active' : ''}" data-cat-filter="ALL">Alle Kat.</button>`;
-    if (catCounts.OFFEN > 0) html += `<button class="audit-filter-btn audit-tag tag-open${categoryFilter === 'OFFEN' ? ' active' : ''}" data-cat-filter="OFFEN">Offen (${catCounts.OFFEN})</button>`;
-    if (catCounts.PRIOR > 0) html += `<button class="audit-filter-btn audit-tag tag-finding${categoryFilter === 'PRIOR' ? ' active' : ''}" data-cat-filter="PRIOR">Prior (${catCounts.PRIOR})</button>`;
-    if (catCounts.NON_PRIOR > 0) html += `<button class="audit-filter-btn audit-tag tag-planned${categoryFilter === 'NON_PRIOR' ? ' active' : ''}" data-cat-filter="NON_PRIOR">Non-Prior (${catCounts.NON_PRIOR})</button>`;
+    html += `<button class="audit-filter-btn audit-tag tag-open${categoryFilter === null ? ' active' : ''}" data-cat-filter="ALL" aria-pressed="${categoryFilter === null ? 'true' : 'false'}">Alle Kat.</button>`;
+    if (catCounts.OFFEN > 0) html += `<button class="audit-filter-btn audit-tag tag-open${categoryFilter === 'OFFEN' ? ' active' : ''}" data-cat-filter="OFFEN" aria-pressed="${categoryFilter === 'OFFEN' ? 'true' : 'false'}">Offen (${catCounts.OFFEN})</button>`;
+    if (catCounts.PRIOR > 0) html += `<button class="audit-filter-btn audit-tag tag-finding${categoryFilter === 'PRIOR' ? ' active' : ''}" data-cat-filter="PRIOR" aria-pressed="${categoryFilter === 'PRIOR' ? 'true' : 'false'}">Prior (${catCounts.PRIOR})</button>`;
+    if (catCounts.NON_PRIOR > 0) html += `<button class="audit-filter-btn audit-tag tag-planned${categoryFilter === 'NON_PRIOR' ? ' active' : ''}" data-cat-filter="NON_PRIOR" aria-pressed="${categoryFilter === 'NON_PRIOR' ? 'true' : 'false'}">Non-Prior (${catCounts.NON_PRIOR})</button>`;
     html += '</div>';
 
     let filtered = changeRequests;
@@ -467,8 +468,8 @@
     html += '<div class="audit-filter-bar" id="task-filter-bar">';
     for (const def of TASK_TAG_DEFS) {
       if (taskCounts[def.key] === 0) continue;
-      const active = taskFilter === def.key ? ' active' : '';
-      html += `<button class="audit-filter-btn audit-tag ${def.css}${active}" data-task-filter="${def.key}">${def.label} (${taskCounts[def.key]})</button>`;
+      const active = taskFilter === def.key;
+      html += `<button class="audit-filter-btn audit-tag ${def.css}${active ? ' active' : ''}" data-task-filter="${def.key}" aria-pressed="${active ? 'true' : 'false'}">${def.label} (${taskCounts[def.key]})</button>`;
     }
     // Progress right-aligned
     const done = currentTasks.filter(t => t.completion_date).length;
