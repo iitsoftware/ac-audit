@@ -146,7 +146,7 @@
     currentDeptId = deptId;
     headerEl.innerHTML = `
       <h2>Change Requests</h2>
-      <button class="btn-icon" id="btn-add-change" title="Change Request hinzuf\u00fcgen">+</button>
+      <button type="button" class="btn-icon" id="btn-add-change" title="Change Request hinzuf\u00fcgen" aria-label="Change Request hinzuf\u00fcgen">+</button>
     `;
     document.getElementById('btn-add-change').addEventListener('click', () => openChangeDialog(null));
     await loadChangeRequests();
@@ -193,6 +193,8 @@
       html += '<th>Nr.</th><th>Titel</th><th>Kategorie</th><th>Fortschritt</th><th>Status</th><th>Zieldatum</th><th></th>';
       html += '</tr></thead><tbody>';
       filtered.forEach(cr => {
+        const changeName = cr.change_no || cr.title || '';
+        const deleteLabel = changeName ? `Change Request ${changeName} l\u00f6schen` : 'Change Request l\u00f6schen';
         html += `<tr class="line-row-clickable change-row" data-id="${cr.id}">
           <td>${escapeHtml(cr.change_no || '')}</td>
           <td style="white-space:normal;min-width:180px">${escapeHtml(cr.title || '')}</td>
@@ -201,7 +203,7 @@
           <td>${statusBadgeHtml(cr.status)}</td>
           <td>${formatDateDE(cr.target_date)}</td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-change" data-id="${cr.id}" title="L\u00f6schen">&#128465;</button>
+            <button type="button" class="pane-action-btn danger" data-action="delete-change" data-id="${cr.id}" title="L\u00f6schen" aria-label="${escapeAttr(deleteLabel)}">&#128465;</button>
           </td>
         </tr>`;
       });
@@ -413,7 +415,7 @@
     if (hasForm2) {
       html += `<button class="btn btn-secondary btn-sm" id="btn-cr-form2">Form 2</button>`;
     }
-    html += `<button class="btn-icon" id="btn-import-risk" title="Risikoanalyse importieren (.xlsx)">${ICON_IMPORT}</button>`;
+    html += `<button type="button" class="btn-icon" id="btn-import-risk" title="Risikoanalyse importieren (.xlsx)" aria-label="Risikoanalyse importieren (.xlsx)">${ICON_IMPORT}</button>`;
     html += '</div>';
 
     // ── Section 1: Allgemein (inline-editable, auto-save) ──
@@ -452,8 +454,8 @@
     html += '<div class="detail-section-header">';
     html += '<h3 class="detail-section-title">Aufgabenliste</h3>';
     html += '<div style="display:flex;gap:0.25rem">';
-    html += `<button class="btn-icon" id="btn-import-tasks" title="Aufgaben importieren (.xlsx)">${ICON_IMPORT}</button>`;
-    html += '<button class="btn-icon" id="btn-add-task" title="Aufgabe hinzuf\u00fcgen">+</button>';
+    html += `<button type="button" class="btn-icon" id="btn-import-tasks" title="Aufgaben importieren (.xlsx)" aria-label="Aufgaben importieren (.xlsx)">${ICON_IMPORT}</button>`;
+    html += '<button type="button" class="btn-icon" id="btn-add-task" title="Aufgabe hinzuf\u00fcgen" aria-label="Aufgabe hinzuf\u00fcgen">+</button>';
     html += '</div></div>';
 
     // Task filter tags (like audit tags with counts)
@@ -503,6 +505,7 @@
         const statusTag = isDone
           ? `<span class="audit-tag tag-done">Erledigt</span>`
           : `<span class="audit-tag tag-open">Offen</span>`;
+        const deleteLabel = `Aufgabe ${nr} l\u00f6schen`;
         html += `<tr class="line-row-clickable task-row${isDone ? ' task-done' : ''}" data-task-id="${t.id}"${!isVisible ? ' style="display:none"' : ''}>
           <td style="text-align:right;white-space:nowrap">${nr}</td>
           <td style="white-space:normal;min-width:160px">${escapeHtml(t.process || '')}</td>
@@ -511,7 +514,7 @@
           <td>${statusTag}</td>
           <td style="white-space:normal;max-width:200px">${escapeHtml(t.measures || '')}</td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-task" data-task-id="${t.id}" title="L\u00f6schen">&#128465;</button>
+            <button type="button" class="pane-action-btn danger" data-action="delete-task" data-task-id="${t.id}" title="L\u00f6schen" aria-label="${escapeAttr(deleteLabel)}">&#128465;</button>
           </td>
         </tr>`;
       });
@@ -982,7 +985,7 @@
     // Share button bar
     html += '<div class="audit-filter-bar" style="margin-bottom:12px">';
     html += '<span style="flex:1"></span>';
-    html += `<button class="btn-icon" id="btn-ra-share" title="Exportieren / Senden">${ICON_SHARE}</button>`;
+    html += `<button type="button" class="btn-icon" id="btn-ra-share" title="Exportieren / Senden" aria-label="Risikoanalyse exportieren oder senden">${ICON_SHARE}</button>`;
     html += '</div>';
 
     // Metadata — inline editable
@@ -1004,7 +1007,7 @@
     html += '<div class="detail-section">';
     html += '<div class="detail-section-header">';
     html += '<h3 class="detail-section-title">Risiken</h3>';
-    html += `<button class="btn-icon" id="btn-add-risk-item" title="Risiko hinzuf\u00fcgen">+</button>`;
+    html += `<button type="button" class="btn-icon" id="btn-add-risk-item" title="Risiko hinzuf\u00fcgen" aria-label="Risiko hinzuf\u00fcgen">+</button>`;
     html += '</div>';
 
     if (riskItems.length === 0) {
@@ -1020,6 +1023,7 @@
         <th style="padding:2px 4px">W</th><th style="padding:2px 4px">S</th><th style="padding:2px 4px"></th></tr>`;
       html += '</thead><tbody>';
       riskItems.forEach((item, idx) => {
+        const deleteLabel = `Risiko ${idx + 1} l\u00f6schen`;
         html += `<tr class="line-row-clickable risk-item-row" data-risk-id="${item.id}">
           <td>${idx + 1}</td>
           <td style="max-width:80px">${escapeHtml(item.risk_type || '')}</td>
@@ -1036,7 +1040,7 @@
           <td>${riskColorBox(item.residual_score, item.residual_level)}</td>
           <td style="max-width:140px">${escapeHtml(item.next_step || '')}</td>
           <td class="line-actions">
-            <button class="pane-action-btn danger" data-action="delete-risk-item" data-risk-id="${item.id}" title="L\u00f6schen">&#128465;</button>
+            <button type="button" class="pane-action-btn danger" data-action="delete-risk-item" data-risk-id="${item.id}" title="L\u00f6schen" aria-label="${escapeAttr(deleteLabel)}">&#128465;</button>
           </td>
         </tr>`;
       });
