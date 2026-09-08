@@ -24,6 +24,9 @@
       const tr = document.createElement('tr');
       const d = new Date(item.deleted_at + 'Z');
       const dateStr = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const actionTarget = [typeLabels[item.entity_type] || item.entity_type, item.entity_name].filter(Boolean).join(' ') || 'Papierkorb-Eintrag';
+      const restoreLabel = escapeAttr(`${actionTarget} wiederherstellen`);
+      const deleteLabel = escapeAttr(`${actionTarget} endgültig löschen`);
       tr.innerHTML = `
         <td><span class="trash-type-badge trash-type-${item.entity_type}">${escapeHtml(typeLabels[item.entity_type] || item.entity_type)}</span></td>
         <td>${escapeHtml(item.entity_name || '-')}</td>
@@ -31,8 +34,8 @@
         <td>${escapeHtml(item.department_name || '')}</td>
         <td>${dateStr}</td>
         <td style="text-align:right;white-space:nowrap">
-          <button class="btn-icon" data-restore="${item.id}" title="Wiederherstellen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
-          <button class="btn-icon btn-icon-danger" data-delete="${item.id}" title="Endgültig löschen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <button type="button" class="btn-icon" data-restore="${item.id}" title="Wiederherstellen" aria-label="${restoreLabel}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+          <button type="button" class="btn-icon btn-icon-danger" data-delete="${item.id}" title="Endgültig löschen" aria-label="${deleteLabel}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </td>`;
       tbody.appendChild(tr);
     }
