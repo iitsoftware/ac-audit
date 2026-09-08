@@ -1402,9 +1402,9 @@
     </div>`;
 
     html += `<div class="cap-filter-bar">
-      <button class="cap-filter-btn ${capFilter === null ? 'active' : ''}" data-cap-filter="ALL">ALLE</button>
-      <button class="cap-filter-btn ${capFilter === 'OPEN' ? 'active' : ''}" data-cap-filter="OPEN">OPEN</button>
-      <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED">CLOSED</button>
+      <button class="cap-filter-btn ${capFilter === null ? 'active' : ''}" data-cap-filter="ALL" aria-pressed="${capFilter === null ? 'true' : 'false'}">ALLE</button>
+      <button class="cap-filter-btn ${capFilter === 'OPEN' ? 'active' : ''}" data-cap-filter="OPEN" aria-pressed="${capFilter === 'OPEN' ? 'true' : 'false'}">OPEN</button>
+      <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED" aria-pressed="${capFilter === 'CLOSED' ? 'true' : 'false'}">CLOSED</button>
     </div>`;
 
     // Ein Finding ohne Stufe hat keinen Status und fällt deshalb aus jeder der
@@ -2631,9 +2631,9 @@
 
     // Filter bar
     html += `<div class="cap-filter-bar">
-      <button class="cap-filter-btn ${capFilter === null ? 'active' : ''}" data-cap-filter="ALL">ALLE</button>
-      <button class="cap-filter-btn ${capFilter === 'OPEN' ? 'active' : ''}" data-cap-filter="OPEN">OPEN</button>
-      <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED">CLOSED</button>
+      <button class="cap-filter-btn ${capFilter === null ? 'active' : ''}" data-cap-filter="ALL" aria-pressed="${capFilter === null ? 'true' : 'false'}">ALLE</button>
+      <button class="cap-filter-btn ${capFilter === 'OPEN' ? 'active' : ''}" data-cap-filter="OPEN" aria-pressed="${capFilter === 'OPEN' ? 'true' : 'false'}">OPEN</button>
+      <button class="cap-filter-btn ${capFilter === 'CLOSED' ? 'active' : ''}" data-cap-filter="CLOSED" aria-pressed="${capFilter === 'CLOSED' ? 'true' : 'false'}">CLOSED</button>
     </div>`;
 
     const filtered = capFilter ? capItems.filter(c => capStatus(c) === capFilter) : capItems;
