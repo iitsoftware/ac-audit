@@ -64,6 +64,15 @@
     </div>`;
   }
 
+  async function withButtonSpinner(btn, label, fn) {
+    if (!btn) { await fn(); return; }
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" aria-hidden="true"></span>${label}`;
+    try { await fn(); }
+    finally { btn.disabled = false; btn.innerHTML = original; }
+  }
+
   // ── Persons ──────────────────────────────────────────────
   async function loadPersons() {
     if (!companyId) { persons = []; return; }
@@ -760,15 +769,18 @@
     const fileInput = document.getElementById('import-risk-file');
     if (!fileInput.files.length) { toast('Datei auswählen', 'error'); return; }
     const file = fileInput.files[0];
+    const btn = document.getElementById('import-risk-confirm');
     try {
-      const base64 = await fileToBase64(file);
-      const result = await fetchJSON(`/api/change-requests/${currentCR.id}/import-risk-analysis`, {
-        method: 'POST', body: { file: base64 }
+      await withButtonSpinner(btn, 'Importiere...', async () => {
+        const base64 = await fileToBase64(file);
+        const result = await fetchJSON(`/api/change-requests/${currentCR.id}/import-risk-analysis`, {
+          method: 'POST', body: { file: base64 }
+        });
+        toast(`${result.imported} Risiken importiert`);
+        closeDialog('import-risk-dialog');
+        await loadRiskAnalysisSummary();
+        renderDetailContent();
       });
-      toast(`${result.imported} Risiken importiert`);
-      closeDialog('import-risk-dialog');
-      await loadRiskAnalysisSummary();
-      renderDetailContent();
     } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   });
 
@@ -902,13 +914,16 @@
     e.preventDefault();
     const to = document.getElementById('change-email-to').value.trim();
     if (!to) { toast('E-Mail-Adresse erforderlich', 'error'); return; }
+    const btn = e.submitter || document.querySelector('#change-email-form button[type="submit"]');
     try {
-      await fetchJSON(`/api/change-requests/${currentCR.id}/send-email`, {
-        method: 'POST',
-        body: { to, type: 'form2', formData: getForm2Params() }
+      await withButtonSpinner(btn, 'Sende...', async () => {
+        await fetchJSON(`/api/change-requests/${currentCR.id}/send-email`, {
+          method: 'POST',
+          body: { to, type: 'form2', formData: getForm2Params() }
+        });
+        toast('E-Mail gesendet');
+        closeDialog('change-email-dialog');
       });
-      toast('E-Mail gesendet');
-      closeDialog('change-email-dialog');
     } catch (err) { toast(err?.message || 'Vorgang fehlgeschlagen', 'error'); }
   });
 
