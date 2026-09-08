@@ -2978,6 +2978,8 @@
     btn.type = 'button';
     btn.className = 'cap-evidence-remove';
     btn.textContent = '\u00D7';
+    btn.title = 'Nachweis l\u00f6schen';
+    btn.setAttribute('aria-label', `Nachweis ${file.filename || 'Datei'} l\u00f6schen`);
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       try {
