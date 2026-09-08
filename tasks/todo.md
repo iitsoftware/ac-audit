@@ -1,15 +1,13 @@
-# Task 993: Add accessible names to Companies icon-only controls
+# Task 994: Label CAP and Finding Row Selection Checkboxes
 
-- [x] Resolve `origin/main` merge conflict in `tasks/todo.md`.
-- [x] Inspect generated icon-only buttons in `public/companies.js`.
-- [x] Add explicit `aria-label` values to Companies/AC-Audit icon-only controls, including checklist/CAP share controls.
-- [x] Re-scan generated DOM-created icon-only controls after merge/rework.
-- [x] Add explicit accessible names to evidence thumbnail remove controls.
-- [x] Verify the changed file for missing icon-only accessible names and syntax issues.
+- [x] Inspect CAP and Finding row checkbox rendering in `public/companies.js`.
+- [x] Add row-specific accessible names to per-row Finding selection checkboxes.
+- [x] Add row-specific accessible names to per-row CAP selection checkboxes.
+- [x] Verify syntax and changed checkbox markup.
 
 ## Review
 
 Verification:
 - `node --check public/companies.js` passed.
 - `git diff --check` passed.
-- Static scan confirmed generated `btn-icon`, `pane-action-btn`, `icon-btn`, `select-share-btn`, and DOM-created evidence remove buttons carry `aria-label`.
+- Static scan found no `.finding-select-cb` or `.cap-select-cb` checkbox without `aria-label`.

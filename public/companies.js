@@ -1436,6 +1436,7 @@
         // Der Beweis-Clip hängt an der Beschreibung statt in einer eigenen Spalte —
         // die Spaltenfolge der Findingliste gibt die Behörde vor.
         const clipIcon = item.evidence_count > 0 ? ` <span class="ci-clip" title="${item.evidence_count} Beweise">&#128206;</span>` : '';
+        const selectLabel = findingSelectLabel(item);
         html += `<tr class="ci-row-clickable" data-id="${escapeAttr(item.id)}">
           <td>${item.sort_order ?? 0}</td>
           <td class="wrap-cell">${escapeHtml(item.compliance_check)}${clipIcon}</td>
@@ -1444,7 +1445,7 @@
           <td>${item.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(evalLabel(item.evaluation, true))}</span>` : ''}</td>
           <td>${escapeHtml(formatDateDE(item.cap_deadline))}</td>
           <td>${cap ? `<span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span>` : ''}</td>
-          <td class="col-select">${cap ? `<input type="checkbox" class="finding-select-cb" data-cap-id="${escapeAttr(cap.id)}">` : ''}</td>
+          <td class="col-select">${cap ? `<input type="checkbox" class="finding-select-cb" data-cap-id="${escapeAttr(cap.id)}" aria-label="${escapeAttr(selectLabel)}">` : ''}</td>
           <td class="line-actions">
             <button class="pane-action-btn danger" data-action="delete-ci" data-id="${escapeAttr(item.id)}" title="L\u00f6schen" aria-label="Finding l\u00f6schen">&#128465;</button>
           </td>
@@ -1926,6 +1927,25 @@
 
   // Der Status ist aus completion_date abgeleitet und nirgends gespeichert.
   function capStatus(cap) { return cap.completion_date ? 'CLOSED' : 'OPEN'; }
+
+  function compactLabelText(value) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  function findingSelectLabel(item) {
+    const no = item.sort_order ?? 0;
+    const description = compactLabelText(item.compliance_check);
+    const fallback = compactLabelText(item.document_ref);
+    const detail = description || (fallback ? `Findingbericht Nr. ${fallback}` : 'ohne Beschreibung');
+    return `Finding Nr. ${no} auswählen: ${detail}`;
+  }
+
+  function capSelectLabel(cap, index) {
+    const auditNo = compactLabelText(cap.audit_no);
+    const description = compactLabelText(cap.compliance_check);
+    const prefix = auditNo ? `CAP zu Audit-Nr. ${auditNo}` : `CAP ${index + 1}`;
+    return description ? `${prefix} auswählen: ${description}` : `${prefix} auswählen`;
+  }
 
   // Eine Beanstandung trägt mehrere durchnummerierte Maßnahmen je Art — das ist
   // die Mehrzahl, für die cap_action angelegt wurde. Die zwei Gruppen stehen hier
@@ -2629,6 +2649,7 @@
       filtered.forEach((cap, idx) => {
         const evalClass = cap.evaluation ? `eval-${cap.evaluation}` : '';
         const deadlineDisplay = formatDateDE(cap.deadline);
+        const selectLabel = capSelectLabel(cap, idx);
         html += `<tr class="cap-row-clickable" data-cap-id="${cap.id}">
           <td>${idx + 1}</td>
           <td>${escapeHtml(cap.audit_no || '')}</td>
@@ -2637,7 +2658,7 @@
           <td>${cap.evaluation ? `<span class="eval-badge ${evalClass}">${escapeHtml(cap.evaluation)}</span>` : ''}</td>
           <td>${escapeHtml(deadlineDisplay)}</td>
           <td><span class="cap-status-${capStatus(cap)}">${capStatus(cap)}</span></td>
-          <td class="col-select"><input type="checkbox" class="cap-select-cb" data-cap-id="${cap.id}"></td>
+          <td class="col-select"><input type="checkbox" class="cap-select-cb" data-cap-id="${cap.id}" aria-label="${escapeAttr(selectLabel)}"></td>
         </tr>`;
       });
       html += '</tbody></table></div>';
