@@ -447,12 +447,19 @@ const stmts = {
      WHERE pl.audit_plan_id = ?`
   ),
 
-  // CAP items by department (all sources)
+  // CAP items by department (all sources). LEFT JOIN the checklist chain so the
+  // Finding-Beschreibung (ci.compliance_check), its Level (ci.evaluation) and the
+  // Audit-Nr. (pl.audit_no) ride along — LEFT because manual standalone CAPs have
+  // no checklist chain and must still be listed.
   getCapItemsByDepartment: db.prepare(
     `SELECT c.id, c.checklist_item_id, c.deadline, c.responsible_person, c.root_cause,
             c.corrective_action, c.preventive_action, c.status, c.completion_date, c.evidence,
-            c.source, c.source_ref_id, c.department_id, c.created_at, c.updated_at
-     FROM cap_item c WHERE c.department_id = ?
+            c.source, c.source_ref_id, c.department_id, c.created_at, c.updated_at,
+            ci.compliance_check, ci.evaluation, pl.audit_no
+     FROM cap_item c
+     LEFT JOIN audit_checklist_item ci ON ci.id = c.checklist_item_id
+     LEFT JOIN audit_plan_line pl ON pl.id = ci.audit_plan_line_id
+     WHERE c.department_id = ?
      ORDER BY c.deadline ASC`
   ),
 

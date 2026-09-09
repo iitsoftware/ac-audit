@@ -391,7 +391,7 @@
       <thead><tr>
         <th>Fälligkeit</th>
         <th>Verantwortlich</th>
-        <th class="home-cap-desc">Maßnahme</th>
+        <th class="home-cap-desc">Finding</th>
         <th>Status</th>
       </tr></thead><tbody>`;
 
@@ -405,11 +405,10 @@
         else if (cap.deadline < soon) deadlineClass = ' home-cap-deadline--soon';
       }
 
-      // Die Abteilungs-Route liefert keine compliance_check (Beschreibung des
-      // Findings), also trägt die Spalte, was der Rohdatensatz an sprechendem Text
-      // hat: die Korrekturmaßnahme, ersatzweise die Ursache oder die
-      // Präventivmaßnahme.
-      const descRaw = cap.corrective_action || cap.root_cause || cap.preventive_action || '';
+      // Die Beschreibung des Findings (compliance_check) reicht der
+      // Abteilungs-Endpunkt über die LEFT-JOIN-Kette mit; ein manuelles
+      // Standalone-CAP ohne Checklist-Kette hat keine und bleibt hier leer.
+      const descRaw = cap.compliance_check || '';
       const desc = descRaw.length > 80 ? escapeHtml(descRaw.slice(0, 80)) + '…' : escapeHtml(descRaw);
 
       const statusBadge = overdue
