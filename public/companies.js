@@ -230,8 +230,13 @@
   }
 
   function renderAuditPlans() {
+    // Ein Container f\u00fcr die "Offene CAPs"-Sektion h\u00e4ngt unter den Kacheln \u2014 auch
+    // bei einer Abteilung ganz ohne Auditpl\u00e4ne, da ein manuell angelegtes CAP dort
+    // trotzdem stehen kann.
+    const capSectionHtml = '<section id="dept-cap-section" class="dept-cap-section" aria-label="Offene CAPs"></section>';
     if (auditPlans.length === 0) {
-      contentEl.innerHTML = '<div class="empty-state-inline">Keine Auditpl\u00e4ne vorhanden</div>';
+      contentEl.innerHTML = '<div class="empty-state-inline">Keine Auditpl\u00e4ne vorhanden</div>' + capSectionHtml;
+      renderDeptOpenCaps(currentDeptId);
       return;
     }
     // Sort by year desc, then revision desc
@@ -301,7 +306,8 @@
       if (auditSorted.length > 0) gridHtml += '<div class="plan-group-label">Beh\u00f6rdenaudits</div>';
       gridHtml += '<div class="plan-tile-grid">' + authoritySorted.map(renderTile).join('') + '</div>';
     }
-    contentEl.innerHTML = gridHtml;
+    contentEl.innerHTML = gridHtml + capSectionHtml;
+    renderDeptOpenCaps(currentDeptId);
 
     contentEl.querySelectorAll('.plan-tile').forEach(card => {
       card.addEventListener('click', (e) => {
@@ -331,6 +337,95 @@
         if (!plan) return;
         if (btn.dataset.action === 'edit-plan') openPlanDialog(plan);
         else if (btn.dataset.action === 'delete-plan') confirmDeletePlan(plan);
+      });
+    });
+  }
+
+  // ── Offene CAPs der Abteilung ──────────────────────────────
+  // Unter den Plankacheln steht die Liste der offenen CAPs der Abteilung — dieselbe
+  // Tabelle, die früher das globale /home-Dashboard trug, weshalb sie dessen
+  // .home-cap-*-Stile weiterverwendet. Datenquelle ist der vorhandene Endpunkt
+  // GET /api/departments/:departmentId/cap-items (Rohzeilen des cap_item), gefiltert
+  // wird clientseitig auf offene CAPs — completion_date leer, dieselbe Grenze wie
+  // capStatus(). Ein Klick springt über die self-loading CAP-Ebene
+  // (renderCapDetailLevel liest GET /api/cap-items/:id selbst) in das jeweilige CAP
+  // bzw. — bei einem Behördenaudit — dessen Finding-Ansicht; sie braucht keine
+  // Vorfahren im Nav-Pfad.
+  async function renderDeptOpenCaps(deptId) {
+    const section = document.getElementById('dept-cap-section');
+    if (!section || !deptId) return;
+
+    let caps;
+    try {
+      caps = await fetchJSON(`/api/departments/${deptId}/cap-items`);
+    } catch (e) {
+      // Ein später Fehler nach einem Abteilungswechsel gehört nicht mehr hierher.
+      if (section.isConnected) section.innerHTML = `<h3 class="home-cap-section__title">Offene CAPs</h3><p class="home-cap-empty">Fehler beim Laden: ${escapeHtml(e?.message || '')}</p>`;
+      return;
+    }
+    // Der Container kann in der Zwischenzeit durch einen Wechsel ersetzt worden sein:
+    // dieselbe Wache wie in initCapEvidence(), damit eine verspätete Antwort nicht in
+    // eine fremde Abteilung schreibt.
+    if (!section.isConnected) return;
+
+    // Offene CAPs: completion_date leer — die Grenze von capStatus().
+    const open = caps.filter(c => !c.completion_date);
+
+    let html = '<h3 class="home-cap-section__title">Offene CAPs</h3>';
+    if (open.length === 0) {
+      section.innerHTML = html + '<p class="home-cap-empty">Keine offenen CAPs</p>';
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const soon = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+
+    html += `<div class="home-cap-table-wrap"><table class="home-cap-table">
+      <thead><tr>
+        <th>Fälligkeit</th>
+        <th>Verantwortlich</th>
+        <th class="home-cap-desc">Maßnahme</th>
+        <th>Status</th>
+      </tr></thead><tbody>`;
+
+    for (const cap of open) {
+      const overdue = cap.deadline && cap.deadline < today;
+      const rowClass = overdue ? ' class="home-cap-row--overdue"' : '';
+
+      let deadlineClass = '';
+      if (cap.deadline) {
+        if (cap.deadline < today) deadlineClass = ' home-cap-deadline--overdue';
+        else if (cap.deadline < soon) deadlineClass = ' home-cap-deadline--soon';
+      }
+
+      // Die Abteilungs-Route liefert keine compliance_check (Beschreibung des
+      // Findings), also trägt die Spalte, was der Rohdatensatz an sprechendem Text
+      // hat: die Korrekturmaßnahme, ersatzweise die Ursache oder die
+      // Präventivmaßnahme.
+      const descRaw = cap.corrective_action || cap.root_cause || cap.preventive_action || '';
+      const desc = descRaw.length > 80 ? escapeHtml(descRaw.slice(0, 80)) + '…' : escapeHtml(descRaw);
+
+      const statusBadge = overdue
+        ? '<span class="home-cap-badge home-cap-badge--overdue">Überfällig</span>'
+        : '<span class="home-cap-badge home-cap-badge--open">Offen</span>';
+
+      html += `<tr${rowClass} data-cap-id="${cap.id}" style="cursor:pointer">
+        <td class="home-cap-deadline${deadlineClass}">${escapeHtml(formatDateDE(cap.deadline))}</td>
+        <td>${escapeHtml(cap.responsible_person || '')}</td>
+        <td class="home-cap-desc">${desc}</td>
+        <td>${statusBadge}</td>
+      </tr>`;
+    }
+
+    html += '</tbody></table></div>';
+    section.innerHTML = html;
+
+    // Zeilenklick → Drill-down auf das CAP bzw. (beim Behördenaudit) dessen Finding.
+    // renderCapDetailLevel lädt sich aus GET /api/cap-items/:id selbst, das Segment
+    // braucht daher keine Plan-/Line-Vorfahren.
+    section.querySelectorAll('tr[data-cap-id]').forEach(row => {
+      makeRowClickable(row, () => {
+        pushNavSegment({ type: 'cap-item', id: row.dataset.capId, name: 'CAP' });
       });
     });
   }

@@ -2460,6 +2460,22 @@ dialog.dialog-wide {
   margin-bottom: 12px;
 }
 
+/* Die "Offene CAPs"-Sektion unter den Plankacheln (renderDeptOpenCaps in
+   public/companies.js) trägt die .home-cap-*-Tabelle des entfallenen /home-
+   Dashboards; sie braucht nur den Abstand und die Trennlinie zu den Kacheln
+   darüber. */
+.dept-cap-section {
+  display: block;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.dept-cap-section:empty {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
 .home-cap-empty {
   font-size: 14px;
   color: var(--text-muted);
