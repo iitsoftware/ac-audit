@@ -108,7 +108,10 @@
 
     const segments = bcSegments.map(seg => ({ label: seg.name, navIdx: navPath.indexOf(seg) }));
     renderBreadcrumb(segments, breadcrumbEl, (seg) => navigateTo(seg.navIdx), {
-      backButton: { title: 'Zur\u00fcck zum Abteilungs-Dashboard', onClick: () => { window.location.href = `/departments/${departmentId}`; } }
+      // Eine Ebene im navPath hoch, ohne Reload: ein Reload restauriert den per
+      // saveNav() persistierten Pfad und lie\u00dfe den Anwender auf demselben Finding/CAP
+      // sitzen. navigateTo() klemmt bei negativem Index auf die Abteilungswurzel.
+      backButton: { title: 'Zur\u00fcck', onClick: () => navigateTo(navPath.length - 2) }
     });
   }
 
