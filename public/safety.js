@@ -61,69 +61,6 @@
     return saved && saved.departmentId === departmentId ? saved : null;
   }
 
-  // ── Browser-History-Integration ───────────────────────────
-  // Jede Ebene des Drill-downs (Jahre → Jahr → Meeting/SPI) bekommt einen
-  // eigenen History-Eintrag, damit der Browser-Zurück-Button eine Ebene
-  // hochführt statt die Seite zu verlassen. Der State trägt die Abteilung (ein
-  // Eintrag einer anderen ist fremder Zustand), die Ebene und die IDs, mit denen
-  // sich die Ansicht ohne erneutes pushState wiederherstellen lässt. Der Marker
-  // `acSafetyNav` grenzt eigene Einträge gegen fremde (andere Seite, alter
-  // null-State) ab.
-  function histState(level, extra) {
-    return { acSafetyNav: true, departmentId, level, yearId: currentYearId, ...(extra || {}) };
-  }
-  function pushHistory(level, extra) {
-    try { history.pushState(histState(level, extra), ''); } catch { /* History nicht verfügbar */ }
-  }
-  function replaceHistory(level, extra) {
-    try { history.replaceState(histState(level, extra), ''); } catch { /* History nicht verfügbar */ }
-  }
-
-  // Nur meeting/spi verdecken das Jahr; sie ohne History-Push wegräumen, wenn ein
-  // popstate auf die Jahresebene zurückführt und das Jahr schon offen ist.
-  function showYearPanel() {
-    meetingDetailEl.style.display = 'none';
-    spiDetailEl.style.display = 'none';
-    yearDetailEl.style.display = 'block';
-  }
-
-  // Browser-Zurück/Vorwärts: die Ansicht aus dem History-State wiederherstellen,
-  // ohne dabei erneut zu pushen (deshalb `push=false` an jede open/close-Funktion).
-  // Der persistierte localStorage-Stand folgt mit, weil open*/close* selbst
-  // saveNav() rufen — ein per Back verlassenes Jahr wird so nicht wieder
-  // aufgezwungen. Ein fremder State lässt den Browser einfach stehen.
-  async function restoreHistory(st) {
-    if (!st || !st.acSafetyNav || st.departmentId !== departmentId) return;
-
-    if (st.level === 'years' || !st.yearId) {
-      await closeYear(false);
-      return;
-    }
-
-    // Ab hier hängt alles am Jahr: erst öffnen, wenn ein anderes (oder keins) offen
-    // ist. Ein zwischenzeitlich gelöschtes Jahr fällt auf die Jahresübersicht zurück.
-    if (currentYearId !== st.yearId) {
-      const targetYear = years.find(y => y.id === st.yearId);
-      if (!targetYear) { await closeYear(false); return; }
-      await openYear(targetYear, false);
-    } else if (st.level === 'year') {
-      showYearPanel();
-    }
-
-    if (st.level === 'meeting') {
-      const meeting = st.meetingId ? meetings.find(m => m.id === st.meetingId) : null;
-      openMeetingDetail(meeting || null, false);
-    } else if (st.level === 'spi') {
-      // Der Katalog wird lazy geladen — für die Wiederherstellung einer Bewertung
-      // muss er da sein.
-      if (!objectivesLoaded) await loadObjectives();
-      const objective = st.objectiveId ? objectives.find(o => o.id === st.objectiveId) : null;
-      if (objective) await openLatestEvaluation(objective, false);
-    }
-  }
-
-  window.addEventListener('popstate', (e) => { restoreHistory(e.state); });
-
   function currentYear() {
     return years.find(y => y.id === currentYearId) || null;
   }
@@ -144,15 +81,8 @@
     await loadYears();
     if (restoreYearId) {
       const year = years.find(y => y.id === restoreYearId);
-      // push=false: der wiederhergestellte Reload-Stand ist der Baseline-Eintrag,
-      // kein neuer Drill-down.
-      if (year) await openYear(year, false);
+      if (year) await openYear(year);
     }
-    // Baseline-Eintrag der History: der wiederhergestellte Stand (offenes Jahr
-    // oder Jahresübersicht) ist der Ausgangspunkt, von dem aus Zurück die Seite
-    // verlässt — er trägt den Marker, damit ein späterer popstate ihn nicht als
-    // fremd verwirft.
-    replaceHistory(currentYearId ? 'year' : 'years');
   }
 
   // ── Level 1: Jahre ───────────────────────────────────────
@@ -206,10 +136,9 @@
     });
   }
 
-  async function openYear(year, push = true) {
+  async function openYear(year) {
     currentYearId = year.id;
     saveNav();
-    if (push) pushHistory('year');
     // Der Titel benennt das Jahr, die Tabs darunter Meetings bzw. Zielkatalog
     document.getElementById('year-detail-title').textContent = `Safety Year ${year.year}`;
     yearsEl.style.display = 'none';
@@ -221,11 +150,10 @@
     await loadMeetings();
   }
 
-  async function closeYear(push = true) {
+  async function closeYear() {
     currentYearId = null;
     meetings = [];
     saveNav();
-    if (push) pushHistory('years');
     yearDetailEl.style.display = 'none';
     meetingDetailEl.style.display = 'none';
     spiDetailEl.style.display = 'none';
@@ -234,7 +162,7 @@
     await loadYears(); // meeting counts on the tiles may have changed
   }
 
-  document.getElementById('year-detail-back').addEventListener('click', () => closeYear());
+  document.getElementById('year-detail-back').addEventListener('click', closeYear);
 
   // ── Jahr Dialog (Add / Edit) ─────────────────────────────
   function openYearDialog(year) {
@@ -345,10 +273,9 @@
   }
 
   // ── Level 3: Meeting Detail (CM-025) ─────────────────────
-  function openMeetingDetail(meeting, push = true) {
+  function openMeetingDetail(meeting) {
     const isEdit = !!meeting;
     const year = currentYear();
-    if (push) pushHistory('meeting', { meetingId: isEdit ? meeting.id : '' });
     document.getElementById('meeting-detail-title').textContent = isEdit ? 'Meeting bearbeiten' : 'Meeting hinzufügen';
     document.getElementById('meeting-form-id').value = isEdit ? meeting.id : '';
     document.getElementById('meeting-form-date').value = isEdit ? (formatDateDE(meeting.meeting_date) || '') : '';
@@ -377,15 +304,14 @@
     meetingDetailEl.style.display = 'block';
   }
 
-  function closeMeetingDetail(push = true) {
-    if (push) pushHistory('year');
+  function closeMeetingDetail() {
     meetingDetailEl.style.display = 'none';
     yearDetailEl.style.display = 'block';
   }
 
   document.getElementById('btn-add-meeting').addEventListener('click', () => openMeetingDetail(null));
-  document.getElementById('meeting-detail-back').addEventListener('click', () => closeMeetingDetail());
-  document.getElementById('meeting-btn-cancel').addEventListener('click', () => closeMeetingDetail());
+  document.getElementById('meeting-detail-back').addEventListener('click', closeMeetingDetail);
+  document.getElementById('meeting-btn-cancel').addEventListener('click', closeMeetingDetail);
   document.getElementById('meeting-detail-pdf').addEventListener('click', () => {
     const id = document.getElementById('meeting-form-id').value;
     if (id) window.open(`/api/sms-meetings/${id}/pdf`);
@@ -729,7 +655,7 @@
   // ── Level 3: SPI-Bewertung (CM-006 Formular) ─────────────
   // Zeilenklick öffnet die jüngste Bewertung des Ziels; hat es noch keine, wird
   // ein leeres Formular für die erste angelegt.
-  async function openLatestEvaluation(objective, push = true) {
+  async function openLatestEvaluation(objective) {
     let evaluations = [];
     try {
       evaluations = await fetchJSON(`/api/safety-objectives/${objective.id}/spi-evaluations`);
@@ -738,7 +664,7 @@
       return;
     }
     // Die Liste ist chronologisch aufsteigend sortiert — die letzte ist die jüngste.
-    openSpiDetail(objective, evaluations.length ? evaluations[evaluations.length - 1] : null, push);
+    openSpiDetail(objective, evaluations.length ? evaluations[evaluations.length - 1] : null);
   }
 
   // Effektive Werte wie getSpiEvaluation sie als eff_* liefert: ?? bildet die
@@ -757,9 +683,8 @@
     return `<div class="cap-info-row"><span class="cap-info-label">${label}</span><span>${escapeHtml(value || '')}</span></div>`;
   }
 
-  function openSpiDetail(objective, evaluation, push = true) {
+  function openSpiDetail(objective, evaluation) {
     currentObjective = objective;
-    if (push) pushHistory('spi', { objectiveId: objective.id });
     const eff = effectiveContext(objective, evaluation);
     const signed = !!(evaluation && evaluation.decided_at);
     document.getElementById('spi-detail-title').textContent = evaluation ? 'Bewertung bearbeiten' : 'Neue Bewertung';
@@ -795,8 +720,7 @@
     spiDetailEl.style.display = 'block';
   }
 
-  function closeSpiDetail(push = true) {
-    if (push) pushHistory('year');
+  function closeSpiDetail() {
     currentObjective = null;
     spiDetailEl.style.display = 'none';
     yearDetailEl.style.display = 'block';
@@ -833,8 +757,8 @@
   }
 
   document.getElementById('spi-form-spi-value').addEventListener('input', updateRatingHint);
-  document.getElementById('spi-detail-back').addEventListener('click', () => closeSpiDetail());
-  document.getElementById('spi-btn-cancel').addEventListener('click', () => closeSpiDetail());
+  document.getElementById('spi-detail-back').addEventListener('click', closeSpiDetail);
+  document.getElementById('spi-btn-cancel').addEventListener('click', closeSpiDetail);
   document.getElementById('spi-detail-pdf').addEventListener('click', () => {
     const id = document.getElementById('spi-form-id').value;
     if (id) window.open(`/api/spi-evaluations/${id}/pdf`);

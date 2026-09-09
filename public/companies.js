@@ -82,27 +82,10 @@
     return company;
   }
 
-  // ── Browser-History-Integration ─────────────────────────────
-  // Jede navPath-Änderung spiegelt sich in die Browser-History, damit der
-  // Zurück-Button eine Ebene hochführt statt die Seite zu verlassen. Der State
-  // ist der serialisierte navPath (strukturkloniert — reine {type,id,name}-
-  // Objekte); der Marker `acAuditNav` grenzt eigene Einträge gegen fremde ab
-  // (andere Seite, alter null-State). 'push' legt einen neuen Eintrag an (ein
-  // Drill-down oder ein Breadcrumb-Sprung), 'replace' überschreibt den aktuellen
-  // (Erststand, In-Place-Umbenennung eines Segments) ohne neuen Eintrag.
-  function syncHistory(mode) {
-    const state = { acAuditNav: true, departmentId, navPath };
-    try {
-      if (mode === 'replace') history.replaceState(state, '');
-      else history.pushState(state, '');
-    } catch { /* History nicht verfügbar (z. B. Sandbox) */ }
-  }
-
   // Eine Ebene tiefer springen: Segment anhängen und neu rendern. renderCurrentLevel()
   // schreibt den Nav-Pfad selbst weg, deshalb bleibt hier nur der Push.
   function pushNavSegment(segment) {
     navPath.push(segment);
-    syncHistory('push');
     return renderCurrentLevel();
   }
 
@@ -110,7 +93,6 @@
   // wohin ein `index < 0` zurückführen könnte.
   async function navigateTo(index) {
     navPath = navPath.slice(0, Math.max(index, 0) + 1);
-    syncHistory('push');
     saveNav();
     await renderCurrentLevel();
   }
@@ -158,20 +140,6 @@
       await renderCapDetailLevel(lastSegment.id);
     }
   }
-
-  // Browser-Zurück/Vorwärts: den navPath aus dem History-State übernehmen und
-  // rendern — ohne erneutes pushState, sonst entstünde eine Schleife. Der
-  // persistierte localStorage-Stand folgt dabei dem History-State
-  // (renderCurrentLevel() ruft saveNav()), damit ein per Back verlassener Stand
-  // nicht wieder aufgezwungen wird. Fremde Einträge (andere Abteilung, kein
-  // Marker) werden ignoriert — der Browser bleibt dann einfach stehen.
-  window.addEventListener('popstate', (e) => {
-    const state = e.state;
-    if (!state || !state.acAuditNav || state.departmentId !== departmentId) return;
-    if (!Array.isArray(state.navPath) || state.navPath.length === 0) return;
-    navPath = state.navPath;
-    renderCurrentLevel();
-  });
 
   // ── Department Level ──────────────────────────────────────
   // Die Abteilungen der Firma werden weiter als Liste geladen: die Seite braucht
@@ -694,7 +662,6 @@
         const info = authorityInfoFromLines(planLines);
         seg.name = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? authorityName(info.date, info.team) : `Auditplan ${currentPlan.year} Rev. ${currentPlan.revision || 0}`;
         saveNav();
-        syncHistory('replace');
       }
     } catch (e) {
       toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
@@ -1127,7 +1094,6 @@
       if (seg && seg.name !== segName) {
         seg.name = segName;
         saveNav();
-        syncHistory('replace');
         paintBreadcrumb();
       }
     } catch (e) {
@@ -1430,7 +1396,6 @@
         if (lastSeg && lastSeg.type === 'audit-plan-line') {
           lastSeg.name = data.subject || (isAuthorityLine ? 'Beanstandungsbericht' : 'Themenbereich');
           saveNav();
-          syncHistory('replace');
           paintBreadcrumb();
         }
         // Update header
@@ -1883,7 +1848,6 @@
     if (seg.name === name) return;
     seg.name = name;
     saveNav();
-    syncHistory('replace');
     paintBreadcrumb();
   }
 
@@ -3197,11 +3161,6 @@
       auditLineFilters = new Set(Array.isArray(saved.auditLineFilters) ? saved.auditLineFilters : []);
     }
 
-    // Baseline-Eintrag der History: der wiederhergestellte Pfad (Abteilungswurzel
-    // oder ein tieferer Reload-Stand) ist der Ausgangspunkt, von dem aus Zurück
-    // die Seite verlässt — er trägt den Marker, damit ein späterer popstate ihn
-    // nicht als fremd verwirft.
-    syncHistory('replace');
     await renderCurrentLevel();
   }
 
