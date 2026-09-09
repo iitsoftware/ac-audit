@@ -506,6 +506,16 @@ body {
 .btn-icon:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-icon-danger:hover { background: var(--danger); color: #fff; }
 
+/* Kopfleiste der Plankachel-Ebene: der Import-Icon-Button neben den zwei
+   beschrifteten Buttons 'Auditplan anlegen' / 'Behördenaudit anlegen'. Auf
+   schmalen Schirmen umbrechen statt über den Rand zu laufen. */
+.plan-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 /* ── Modal / Dialog ──────────────────────────────────────── */
 dialog {
   border: none;

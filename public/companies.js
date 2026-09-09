@@ -165,14 +165,21 @@
 
   async function renderAuditPlanLevel(departmentId) {
     currentDeptId = departmentId;
+    // Zwei beschriftete Buttons statt des früheren unbeschrifteten '+' und seines
+    // Plantyp-Zwischendialogs: der Weg zum Behördenaudit hat wieder einen Namen und
+    // spart einen Klick. 'Auditplan anlegen' öffnet den bestehenden Anlage-Dialog
+    // interner Pläne, 'Behördenaudit anlegen' legt den Behördenplan direkt an und
+    // springt in seinen frischen Beanstandungsbericht (createAuthorityPlan()).
     headerEl.innerHTML = `
       <h2>Auditpl&auml;ne</h2>
-      <div style="display:flex;gap:0.25rem">
+      <div class="plan-header-actions">
         <button class="btn-icon" id="btn-import-plan" title="Auditplan aus .docx importieren" aria-label="Auditplan aus .docx importieren">${ICON_IMPORT}</button>
-        <button class="btn-icon" id="btn-add-plan" title="Auditplan hinzuf&uuml;gen" aria-label="Auditplan hinzuf&uuml;gen">+</button>
+        <button class="btn btn-secondary" id="btn-add-plan">Auditplan anlegen</button>
+        <button class="btn btn-primary" id="btn-add-authority">Beh&ouml;rdenaudit anlegen</button>
       </div>
     `;
-    document.getElementById('btn-add-plan').addEventListener('click', () => openNewPlanDialog());
+    document.getElementById('btn-add-plan').addEventListener('click', () => openNewAuditPlanDialog());
+    document.getElementById('btn-add-authority').addEventListener('click', () => createAuthorityPlan());
     document.getElementById('btn-import-plan').addEventListener('click', () => {
       document.getElementById('import-file-input').click();
     });
@@ -497,17 +504,14 @@
     } finally { btn.disabled = false; }
   });
 
-  // ── Plan Type Dialog ───────────────────────────────────────
-  const planTypeDialog = document.getElementById('plan-type-dialog');
-  document.getElementById('plan-type-cancel').addEventListener('click', () => planTypeDialog.close());
-
-  document.getElementById('plan-type-audit').addEventListener('click', () => {
-    planTypeDialog.close();
-    openNewAuditPlanDialog();
-  });
-
-  document.getElementById('plan-type-authority').addEventListener('click', async () => {
-    planTypeDialog.close();
+  // Legt einen Behördenaudit an und springt direkt in seinen frischen
+  // Beanstandungsbericht — der Plan bringt seinen Bericht mit, statt den Anwender
+  // auf die Kachel zu schicken, die genau dorthin führt. Der frische Bericht trägt
+  // noch kein Datum, das Segment heißt deshalb "ohne Datum" und wird von
+  // loadLineData() aus dem geladenen Bericht nachgezogen, sobald dieser einen
+  // Betreff hat. Aufgerufen vom beschrifteten Kopf-Button (siehe
+  // renderAuditPlanLevel()); der frühere Umweg über den Plantyp-Dialog entfällt.
+  async function createAuthorityPlan() {
     try {
       const plan = await fetchJSON(`/api/departments/${currentDeptId}/audit-plans`, {
         method: 'POST',
@@ -515,24 +519,15 @@
       });
       toast('Behördenaudit erstellt');
       await loadAuditPlans();
-      // Der Plan bringt seinen Beanstandungsbericht mit — direkt hinein springen,
-      // statt den Anwender auf die Kachel zu schicken, die genau dorthin führt.
-      // Der frische Bericht trägt noch kein Datum, das Segment heißt deshalb
-      // "ohne Datum" und wird von loadLineData() aus dem geladenen Bericht
-      // nachgezogen, sobald dieser einen Betreff hat.
       if (plan && plan.authority_line_id) {
         pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: authorityName(plan.authority_date, plan.authority_auditor_team) });
       }
     } catch (err) {
       toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
     }
-  });
-
-  // ── New Plan Dialog (3 options) ──────────────────────────────
-  async function openNewPlanDialog() {
-    planTypeDialog.showModal();
   }
 
+  // ── New Plan Dialog ──────────────────────────────────────────
   async function openNewAuditPlanDialog() {
     const regularPlans = auditPlans.filter(p => (p.plan_type || 'AUDIT') !== 'AUTHORITY');
     if (regularPlans.length === 0) {
