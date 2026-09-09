@@ -122,6 +122,15 @@ function parseDateDE(val) {
 // Abteilung, für die er gespeichert hat, mit in den Datensatz und stellt nur
 // wieder her, wenn sie zu der aus der URL passt; sonst zeigte ein Reload auf
 // Abteilung B den Pfad von Abteilung A.
+//
+// Dieser Speicher ist ausschließlich für den *Reload*-Fall da. Die eigentliche
+// Vor-/Zurück-Navigation läuft seit der Browser-History-Integration über
+// history.pushState/popstate in companies.js bzw. safety.js: jede
+// Drill-down-Änderung schreibt den Stand zusätzlich in die History, und der
+// Browser-Zurück-Button führt darüber eine Ebene hoch. Der localStorage-Stand
+// hat dabei KEINEN Vorrang — nach einem popstate schreibt der Aufrufer den
+// wiederhergestellten Stand hier neu weg (über saveNavState), damit ein per Back
+// verlassener Pfad nicht beim nächsten Reload wieder aufgezwungen wird.
 function saveNavState(key, data) {
   try { localStorage.setItem(key, JSON.stringify(data)); }
   catch { /* quota exceeded or private mode */ }
