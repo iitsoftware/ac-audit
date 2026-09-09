@@ -43,11 +43,11 @@ router.get('/companies/:companyId', (req, res) => {
   });
 });
 
-// Das Dashboard und die drei Moduldeeplinks hängen an einer Abteilung. Deren
-// `companyId` steht **nicht** in der URL — die Abteilung ist eindeutig, und die
-// Firma daraus ein Lookup: einmal hier statt einmal je Seite. Eine unbekannte
-// Abteilung ist 404 und keine Seite, die eine erfundene ID in ihr Hidden-Field
-// schreibt und danach leer nachlädt.
+// Die drei Moduldeeplinks hängen an einer Abteilung. Deren `companyId` steht
+// **nicht** in der URL — die Abteilung ist eindeutig, und die Firma daraus ein
+// Lookup: einmal hier statt einmal je Seite. Eine unbekannte Abteilung ist 404
+// und keine Seite, die eine erfundene ID in ihr Hidden-Field schreibt und danach
+// leer nachlädt.
 function renderDepartmentPage(res, view, departmentId, opts = {}) {
   const dept = stmts.getDepartment.get(departmentId);
   if (!dept) return res.status(404).send('Abteilung nicht gefunden');
@@ -58,10 +58,13 @@ function renderDepartmentPage(res, view, departmentId, opts = {}) {
   });
 }
 
+// Der Abteilungsklick führt unmittelbar auf die Auditpläne: `/departments/:id`
+// rendert dieselbe Plankachel-Ebene wie `/departments/:id/audit`. Das frühere
+// Abteilungs-Dashboard ist ersatzlos entfallen.
 router.get('/departments/:departmentId', (req, res) => {
-  renderDepartmentPage(res, 'dashboard', req.params.departmentId, {
-    activePage: 'dashboard',
-    pageScript: 'dashboard.js',
+  renderDepartmentPage(res, 'companies', req.params.departmentId, {
+    activePage: 'audit',
+    pageScript: 'companies.js',
   });
 });
 

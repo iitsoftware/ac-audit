@@ -30,7 +30,6 @@ app.use(authMiddleware);
 app.use(require('./routes/pages'));
 
 // API routes
-app.use(require('./routes/home'));
 app.use(require('./routes/settings'));
 app.use(require('./routes/backup'));
 app.use(require('./routes/companies'));

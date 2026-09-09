@@ -26,7 +26,6 @@
         <a href="/companies/<%= navCompanyId %>" class="<%= page === 'departments-list' ? 'active' : '' %>">Abteilungen</a>
       <% } %>
       <% if (navDepartmentId) { %>
-        <a href="/departments/<%= navDepartmentId %>" class="<%= page === 'dashboard' ? 'active' : '' %>">Übersicht</a>
         <a href="/departments/<%= navDepartmentId %>/audit" class="<%= page === 'audit' ? 'active' : '' %>">AC-Audit</a>
         <a href="/departments/<%= navDepartmentId %>/change" class="<%= page === 'change' ? 'active' : '' %>">AC-Change</a>
         <a href="/departments/<%= navDepartmentId %>/safety" class="<%= page === 'safety' ? 'active' : '' %>">AC-SMS</a>
