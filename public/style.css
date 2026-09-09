@@ -1550,6 +1550,14 @@ dialog.dialog-wide {
   line-height: 1;
 }
 
+/* Behördenaudit-Kachel: der Titel ist ein zweizeiliger Satz ("Behördenaudit
+   (ohne Datum)"), keine vierstellige Jahreszahl — in Fließtext-Größe statt der
+   28px, die auf ein Jahr geschnitten sind. Interne Plankacheln bleiben bei 28px. */
+.plan-tile-authority .plan-tile-year {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
 .plan-tile-rev {
   font-size: 13px;
   color: var(--text-muted);
