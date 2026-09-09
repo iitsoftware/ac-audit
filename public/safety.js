@@ -33,7 +33,6 @@
   let objectivesLoaded = false;
   let currentObjective = null; // Ziel, dessen Bewertung gerade im CM-006-Formular steht
 
-  const NAV_STORAGE_KEY = 'ac-safety-nav-state';
   const ICON_SHARE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 3 12 15"/><polyline points="8 7 12 3 16 7"/></svg>';
 
   const emptyEl = document.getElementById('empty-state');
@@ -49,27 +48,14 @@
   const objectivesSelectAll = document.getElementById('objectives-select-all');
 
   // ── Helpers ──────────────────────────────────────────────
-  // Gespeichert wird allein das offene Jahr — Firma und Abteilung stehen in der
-  // URL. Die Abteilung reist trotzdem mit: der Speicher gehört genau ihr, und
-  // auf einer anderen wäre ein Jahr fremder Zustand.
-  function saveNav() {
-    saveNavState(NAV_STORAGE_KEY, { departmentId, currentYearId });
-  }
-
-  function loadNav() {
-    const saved = loadNavState(NAV_STORAGE_KEY);
-    return saved && saved.departmentId === departmentId ? saved : null;
-  }
-
   function currentYear() {
     return years.find(y => y.id === currentYearId) || null;
   }
 
   // ── Abteilung der URL öffnen ─────────────────────────────
-  async function openDepartment(restoreYearId) {
+  async function openDepartment() {
     currentDeptId = departmentId;
     currentYearId = null;
-    saveNav();
     emptyEl.style.display = 'none';
     contentEl.style.display = 'block';
     deptEmptyEl.style.display = 'none';
@@ -79,10 +65,6 @@
     resetObjectives();
     yearsEl.style.display = 'block';
     await loadYears();
-    if (restoreYearId) {
-      const year = years.find(y => y.id === restoreYearId);
-      if (year) await openYear(year);
-    }
   }
 
   // ── Level 1: Jahre ───────────────────────────────────────
@@ -138,7 +120,6 @@
 
   async function openYear(year) {
     currentYearId = year.id;
-    saveNav();
     // Der Titel benennt das Jahr, die Tabs darunter Meetings bzw. Zielkatalog
     document.getElementById('year-detail-title').textContent = `Safety Year ${year.year}`;
     yearsEl.style.display = 'none';
@@ -153,7 +134,6 @@
   async function closeYear() {
     currentYearId = null;
     meetings = [];
-    saveNav();
     yearDetailEl.style.display = 'none';
     meetingDetailEl.style.display = 'none';
     spiDetailEl.style.display = 'none';
@@ -182,7 +162,6 @@
         await fetchJSON(`/api/safety-years/${year.id}`, { method: 'DELETE' });
         toast('Jahr gelöscht');
         if (currentYearId === year.id) currentYearId = null;
-        saveNav();
         await loadYears();
       },
     });
@@ -812,8 +791,9 @@
       contentEl.style.display = 'none';
       return;
     }
-    const saved = loadNav();
-    await openDepartment(saved?.currentYearId);
+    // Ein Reload landet immer auf der Jahr-Kachelebene, nicht auf einem zuletzt
+    // geöffneten Jahr.
+    await openDepartment();
   }
 
   init();

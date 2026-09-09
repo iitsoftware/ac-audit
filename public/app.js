@@ -113,28 +113,6 @@ function parseDateDE(val) {
   return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
 }
 
-// Generic nav state persistence (localStorage)
-// Der Organisationskontext gehört ausdrücklich NICHT mehr hierher: Firma und
-// Abteilung stehen seit der organisationsgeführten Navigation in der URL und
-// kommen über #page-company-id / #page-department-id ins Frontend. Was hier
-// bleibt, ist allein der Zustand *unterhalb* der Abteilung — der Drill-down-Pfad
-// einer Modulseite, ihre Filter, das offene Jahr. Jeder Aufrufer legt die
-// Abteilung, für die er gespeichert hat, mit in den Datensatz und stellt nur
-// wieder her, wenn sie zu der aus der URL passt; sonst zeigte ein Reload auf
-// Abteilung B den Pfad von Abteilung A.
-function saveNavState(key, data) {
-  try { localStorage.setItem(key, JSON.stringify(data)); }
-  catch { /* quota exceeded or private mode */ }
-}
-
-function loadNavState(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch { return null; }
-}
-
 // Make a row keyboard-accessible (Enter/Space activates handler)
 function makeRowClickable(row, handler) {
   if (!row) return;

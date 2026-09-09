@@ -22,26 +22,6 @@
   const ICON_SHARE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 3 12 15"/><polyline points="8 7 12 3 16 7"/></svg>';
   const ICON_IMPORT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 15 12 3"/><polyline points="8 11 12 15 16 11"/></svg>';
 
-  // ── LocalStorage Persistence ────────────────────────────────
-  const NAV_STORAGE_KEY = 'ac-audit-nav-state';
-
-  function saveNav() {
-    saveNavState(NAV_STORAGE_KEY, {
-      departmentId,
-      navPath,
-      capFilter,
-      auditLineFilters: [...auditLineFilters],
-    });
-  }
-
-  // Der gespeicherte Stand gehört genau einer Abteilung. Auf einer anderen ist
-  // er fremder Zustand und wird verworfen, statt deren Pfad zu überschreiben —
-  // die Abteilung kommt aus der URL, der Speicher trägt nur, was darunter liegt.
-  function loadNav() {
-    const saved = loadNavState(NAV_STORAGE_KEY);
-    return saved && saved.departmentId === departmentId ? saved : null;
-  }
-
   const emptyEl = document.getElementById('empty-state');
   const rightPane = document.getElementById('right-pane-content');
   const breadcrumbEl = document.getElementById('breadcrumb');
@@ -93,7 +73,6 @@
   // wohin ein `index < 0` zurückführen könnte.
   async function navigateTo(index) {
     navPath = navPath.slice(0, Math.max(index, 0) + 1);
-    saveNav();
     await renderCurrentLevel();
   }
 
@@ -108,15 +87,13 @@
 
     const segments = bcSegments.map(seg => ({ label: seg.name, navIdx: navPath.indexOf(seg) }));
     renderBreadcrumb(segments, breadcrumbEl, (seg) => navigateTo(seg.navIdx), {
-      // Eine Ebene im navPath hoch, ohne Reload: ein Reload restauriert den per
-      // saveNav() persistierten Pfad und lie\u00dfe den Anwender auf demselben Finding/CAP
-      // sitzen. navigateTo() klemmt bei negativem Index auf die Abteilungswurzel.
+      // Eine Ebene im navPath hoch, ohne Reload. navigateTo() klemmt bei
+      // negativem Index auf die Abteilungswurzel.
       backButton: { title: 'Zur\u00fcck', onClick: () => navigateTo(navPath.length - 2) }
     });
   }
 
   async function renderCurrentLevel() {
-    saveNav();
     paintBreadcrumb();
 
     const lastSegment = navPath.length > 0 ? navPath[navPath.length - 1] : null;
@@ -661,7 +638,6 @@
       if (seg) {
         const info = authorityInfoFromLines(planLines);
         seg.name = (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? authorityName(info.date, info.team) : `Auditplan ${currentPlan.year} Rev. ${currentPlan.revision || 0}`;
-        saveNav();
       }
     } catch (e) {
       toast(e?.message || 'Vorgang fehlgeschlagen', 'error');
@@ -890,7 +866,6 @@
           auditLineFilters.add(key);
           btn.classList.add('active');
         }
-        saveNav();
         // Apply AND filter to table rows
         document.querySelectorAll('.lines-table tr[data-tags]').forEach(row => {
           const rowTags = row.dataset.tags.split(' ');
@@ -1093,7 +1068,6 @@
       const segName = currentLine.subject || ((currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? 'Beanstandungsbericht' : 'Themenbereich');
       if (seg && seg.name !== segName) {
         seg.name = segName;
-        saveNav();
         paintBreadcrumb();
       }
     } catch (e) {
@@ -1395,7 +1369,6 @@
         const lastSeg = navPath[navPath.length - 1];
         if (lastSeg && lastSeg.type === 'audit-plan-line') {
           lastSeg.name = data.subject || (isAuthorityLine ? 'Beanstandungsbericht' : 'Themenbereich');
-          saveNav();
           paintBreadcrumb();
         }
         // Update header
@@ -1562,7 +1535,6 @@
       btn.addEventListener('click', () => {
         const val = btn.dataset.capFilter;
         capFilter = val === 'ALL' ? null : val;
-        saveNav();
         renderFindingsSection();
       });
     });
@@ -1847,7 +1819,6 @@
     const name = findingSegmentName(item);
     if (seg.name === name) return;
     seg.name = name;
-    saveNav();
     paintBreadcrumb();
   }
 
@@ -2763,7 +2734,6 @@
       btn.addEventListener('click', () => {
         const val = btn.dataset.capFilter;
         capFilter = val === 'ALL' ? null : val;
-        saveNav();
         renderCapSection();
       });
     });
@@ -3148,18 +3118,10 @@
     await loadCompany();
     await loadDepartments();
 
-    // Wurzel des Pfads ist die Abteilung aus der URL. Ein gespeicherter
-    // Drill-down darunter wird nur übernommen, wenn er zu genau dieser
-    // Abteilung gehört — loadNav() verwirft jeden anderen.
+    // Wurzel des Pfads ist die Abteilung aus der URL. Ein Reload landet immer
+    // hier, nicht auf einem zuletzt geöffneten Drill-down-Stand.
     const dept = departments.find(d => d.id === departmentId);
     navPath = [{ type: 'department', id: departmentId, name: dept ? dept.name : 'Abteilung' }];
-
-    const saved = loadNav();
-    if (saved) {
-      if (Array.isArray(saved.navPath) && saved.navPath.length > 0) navPath = saved.navPath;
-      capFilter = saved.capFilter || null;
-      auditLineFilters = new Set(Array.isArray(saved.auditLineFilters) ? saved.auditLineFilters : []);
-    }
 
     await renderCurrentLevel();
   }

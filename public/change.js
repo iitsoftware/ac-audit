@@ -17,21 +17,8 @@
   let statusFilter = null;
   let categoryFilter = null;
 
-  const NAV_STORAGE_KEY = 'ac-change-nav-state';
   const ICON_IMPORT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 15 12 3"/><polyline points="8 11 12 15 16 11"/></svg>';
   const ICON_SHARE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="12 3 12 15"/><polyline points="8 7 12 3 16 7"/></svg>';
-
-  function saveNav() {
-    saveNavState(NAV_STORAGE_KEY, { departmentId, navPath, statusFilter, categoryFilter });
-  }
-
-  // Der gespeicherte Stand gehört genau einer Abteilung. Auf einer anderen ist
-  // er fremder Zustand und wird verworfen — die Abteilung kommt aus der URL,
-  // der Speicher trägt nur, was darunter liegt.
-  function loadNav() {
-    const saved = loadNavState(NAV_STORAGE_KEY);
-    return saved && saved.departmentId === departmentId ? saved : null;
-  }
 
   const emptyEl = document.getElementById('empty-state');
   const rightPane = document.getElementById('right-pane-content');
@@ -106,19 +93,16 @@
   // ── Navigation ──────────────────────────────────────────
   function navigateTo(segment) {
     navPath.push(segment);
-    saveNav();
     renderCurrentLevel();
   }
 
   // Die Abteilung ist die Wurzel und bleibt stehen — unter ihr liegt nichts mehr.
   function navigateBack() {
     if (navPath.length > 1) navPath.pop();
-    saveNav();
     renderCurrentLevel();
   }
 
   async function renderCurrentLevel() {
-    saveNav();
     paintBreadcrumb();
     const lastSegment = navPath.length > 0 ? navPath[navPath.length - 1] : null;
     // Kann nicht eintreten, solange init() die Abteilung als Wurzel setzt \u2014 die
@@ -142,7 +126,6 @@
     const segments = navPath.map(seg => ({ label: seg.name }));
     renderBreadcrumb(segments, breadcrumbEl, (_seg, idx) => {
       navPath = navPath.slice(0, idx + 1);
-      saveNav();
       renderCurrentLevel();
     }, { separator: '/' });
   }
@@ -226,14 +209,12 @@
     contentEl.querySelectorAll('[data-status-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
         statusFilter = btn.dataset.statusFilter === 'ALL' ? null : btn.dataset.statusFilter;
-        saveNav();
         renderChangeList();
       });
     });
     contentEl.querySelectorAll('[data-cat-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
         categoryFilter = btn.dataset.catFilter === 'ALL' ? null : btn.dataset.catFilter;
-        saveNav();
         renderChangeList();
       });
     });
@@ -638,7 +619,6 @@
       const lastSeg = navPath[navPath.length - 1];
       if (lastSeg && lastSeg.type === 'change-detail') {
         lastSeg.name = currentCR.change_no || currentCR.title;
-        saveNav();
         paintBreadcrumb();
       }
       // Refresh header badges
@@ -1425,18 +1405,10 @@
     await loadDepartments();
     await loadPersons();
 
-    // Wurzel des Pfads ist die Abteilung aus der URL; ein gespeicherter
-    // Drill-down darunter wird nur übernommen, wenn er zu genau dieser
-    // Abteilung gehört — loadNav() verwirft jeden anderen.
+    // Wurzel des Pfads ist die Abteilung aus der URL. Ein Reload landet immer
+    // hier, nicht auf einem zuletzt geöffneten Drill-down-Stand.
     const dept = departments.find(d => d.id === departmentId);
     navPath = [{ type: 'department', id: departmentId, name: dept ? dept.name : 'Abteilung' }];
-
-    const saved = loadNav();
-    if (saved) {
-      if (Array.isArray(saved.navPath) && saved.navPath.length > 0) navPath = saved.navPath;
-      statusFilter = saved.statusFilter || null;
-      categoryFilter = saved.categoryFilter || null;
-    }
 
     await renderCurrentLevel();
   }
