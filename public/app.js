@@ -199,11 +199,14 @@ function confirmDelete(opts) {
 // segments: [{ label, ...anything }, ...]
 // onSegmentClick(segment, index)
 // options: { separator?, backButton?: { title, onClick } }
+// An empty segment list renders only the back button (no label, no separator)
+// when one is given, otherwise an empty breadcrumb.
 function renderBreadcrumb(segments, container, onSegmentClick, options) {
   const opts = options || {};
   const sep = opts.separator || '\u203a';
   if (!container) return;
-  if (!segments || segments.length === 0) {
+  segments = segments || [];
+  if (segments.length === 0 && !opts.backButton) {
     container.innerHTML = '';
     return;
   }
