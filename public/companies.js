@@ -226,6 +226,18 @@
     };
   }
 
+  // Name eines Berichts — <h2> der Berichtsebene und sein Nav-Segment, damit der
+  // Breadcrumb der Finding-Ebene als Elternsegment genau die Überschrift trägt.
+  // Ein Behördenbericht hat kein Feld für subject; Altbestand oder Importe können
+  // dort trotzdem einen Findingtext tragen, deshalb wird subject für ihn gar nicht
+  // gelesen (und in der Datenbank nicht angefasst). Interne Audits heißen nach
+  // ihrem Themenbereich.
+  function lineName(line, isAuthority) {
+    if (!isAuthority) return line.subject || 'Themenbereich';
+    const info = authorityInfoFromLines([line]);
+    return authorityName(info.date, info.team);
+  }
+
   function renderAuditPlans() {
     // Ein Container f\u00fcr die "Offene CAPs"-Sektion h\u00e4ngt unter den Kacheln \u2014 auch
     // bei einer Abteilung ganz ohne Auditpl\u00e4ne, da ein manuell angelegtes CAP dort
@@ -938,7 +950,7 @@
             method: 'POST',
             body: { subject: defaultSubject, location: defaultCity, sort_order: planLines.length + 1 }
           });
-          pushNavSegment({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich'), authority: isAuth });
+          pushNavSegment({ type: 'audit-plan-line', id: created.id, name: lineName(created, isAuth), authority: isAuth });
         } catch (err) {
           toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
         }
@@ -952,7 +964,7 @@
         const lineId = row.dataset.id;
         const line = planLines.find(l => l.id === lineId);
         if (!line) return;
-        pushNavSegment({ type: 'audit-plan-line', id: line.id, name: line.subject || 'Themenbereich', authority: isAuthority });
+        pushNavSegment({ type: 'audit-plan-line', id: line.id, name: lineName(line, isAuthority), authority: isAuthority });
       });
     });
 
@@ -1073,9 +1085,9 @@
         findingCaps = (caps.items || []).filter(c => c.audit_plan_line_id === currentLine.id);
       }
       // Breadcrumb-Label aus dem geladenen Bericht nachziehen — der Sprung von der
-      // Kachel kennt den Betreff noch nicht.
+      // Kachel kennt den Bericht noch nicht.
       const seg = navPath.find(s => s.type === 'audit-plan-line' && s.id === lineId);
-      const segName = currentLine.subject || ((currentPlan.plan_type || 'AUDIT') === 'AUTHORITY' ? 'Beanstandungsbericht' : 'Themenbereich');
+      const segName = lineName(currentLine, (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY');
       if (seg && seg.name !== segName) {
         seg.name = segName;
         paintBreadcrumb();
@@ -1151,9 +1163,7 @@
     // authority_date der Plan-Liste — eine Zeile ist genau ein Besuch.
     const isAuthorityLine = currentPlan && (currentPlan.plan_type || 'AUDIT') === 'AUTHORITY';
     const authorityInfo = isAuthorityLine ? authorityInfoFromLines([currentLine]) : null;
-    const lineTitle = isAuthorityLine
-      ? authorityName(authorityInfo.date, authorityInfo.team)
-      : (currentLine.subject || 'Themenbereich');
+    const lineTitle = lineName(currentLine, isAuthorityLine);
 
     headerEl.innerHTML = `
       <h2>${escapeHtml(lineTitle)}</h2>
@@ -1371,20 +1381,17 @@
         currentLine = await fetchJSON(`/api/audit-plan-lines/${currentLine.id}`, { method: 'PUT', body: data });
         // Der Screen wird nach dem Speichern gepatcht, nicht neu gezeichnet — ein
         // Re-Render auf blur verlöre den Fokus des gerade angesprungenen Feldes.
-        const info = isAuthorityLine ? authorityInfoFromLines([currentLine]) : null;
-        const title = isAuthorityLine
-          ? authorityName(info.date, info.team)
-          : (data.subject || 'Themenbereich');
-        // Update breadcrumb name — dieselbe Regel wie in loadLineData()
+        const title = lineName(currentLine, isAuthorityLine);
+        // Segment und Überschrift tragen denselben Namen — dieselbe Regel wie in loadLineData()
         const lastSeg = navPath[navPath.length - 1];
         if (lastSeg && lastSeg.type === 'audit-plan-line') {
-          lastSeg.name = data.subject || (isAuthorityLine ? 'Beanstandungsbericht' : 'Themenbereich');
+          lastSeg.name = title;
           paintBreadcrumb();
         }
         // Update header
         headerEl.querySelector('h2').textContent = title;
         const authorityHeading = document.getElementById('ld-authority-heading');
-        if (authorityHeading) authorityHeading.textContent = authorityName(info.date, '');
+        if (authorityHeading) authorityHeading.textContent = authorityName(authorityInfoFromLines([currentLine]).date, '');
       } catch (err) {
         toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
       }
