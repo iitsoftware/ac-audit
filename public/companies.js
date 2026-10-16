@@ -84,8 +84,18 @@
       breadcrumbEl.innerHTML = '';
       return;
     }
+    // Der Bericht eines Behördenaudits, direkt von der Kachel angesprungen, ist die
+    // einzige Ebene unter der Abteilung: der Breadcrumb trägt dann nur den
+    // Zurück-Pfeil. Ein Label wiederholte bloß die <h2> darunter — oder, solange das
+    // Segment aus `subject` umbenannt wird, einen fremden Findingtext. Erkannt wird
+    // der Fall am Segment selbst (`authority: true`), nicht an `currentPlan`: der
+    // Breadcrumb wird gemalt, bevor loadLineData() den Plan geladen hat.
+    const authorityReportOnly = bcSegments.length === 1
+      && bcSegments[0].type === 'audit-plan-line' && bcSegments[0].authority;
 
-    const segments = bcSegments.map(seg => ({ label: seg.name, navIdx: navPath.indexOf(seg) }));
+    const segments = authorityReportOnly
+      ? []
+      : bcSegments.map(seg => ({ label: seg.name, navIdx: navPath.indexOf(seg) }));
     renderBreadcrumb(segments, breadcrumbEl, (seg) => navigateTo(seg.navIdx), {
       // Eine Ebene im navPath hoch, ohne Reload. navigateTo() klemmt bei
       // negativem Index auf die Abteilungswurzel.
@@ -308,7 +318,7 @@
         // Line. Fehlt die Line-ID (Altbestand mit 0 oder mehreren Zeilen, dann liefert
         // das Statement NULL), bleibt es bei der Plan-Ebene.
         if (isAuthority && plan.authority_line_id) {
-          pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: authorityName(plan.authority_date, plan.authority_auditor_team) });
+          pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: authorityName(plan.authority_date, plan.authority_auditor_team), authority: true });
         } else {
           const pName = isAuthority ? authorityName(plan.authority_date, plan.authority_auditor_team) : `Auditplan ${plan.year} Rev. ${plan.revision || 0}`;
           pushNavSegment({ type: 'audit-plan', id: plan.id, name: pName });
@@ -499,7 +509,7 @@
       toast('Behördenaudit erstellt');
       await loadAuditPlans();
       if (plan && plan.authority_line_id) {
-        pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: authorityName(plan.authority_date, plan.authority_auditor_team) });
+        pushNavSegment({ type: 'audit-plan-line', id: plan.authority_line_id, name: authorityName(plan.authority_date, plan.authority_auditor_team), authority: true });
       }
     } catch (err) {
       toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
@@ -928,7 +938,7 @@
             method: 'POST',
             body: { subject: defaultSubject, location: defaultCity, sort_order: planLines.length + 1 }
           });
-          pushNavSegment({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich') });
+          pushNavSegment({ type: 'audit-plan-line', id: created.id, name: created.subject || (isAuth ? 'Finding' : 'Themenbereich'), authority: isAuth });
         } catch (err) {
           toast(err?.message || 'Vorgang fehlgeschlagen', 'error');
         }
@@ -942,7 +952,7 @@
         const lineId = row.dataset.id;
         const line = planLines.find(l => l.id === lineId);
         if (!line) return;
-        pushNavSegment({ type: 'audit-plan-line', id: line.id, name: line.subject || 'Themenbereich' });
+        pushNavSegment({ type: 'audit-plan-line', id: line.id, name: line.subject || 'Themenbereich', authority: isAuthority });
       });
     });
 
